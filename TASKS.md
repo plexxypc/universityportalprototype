@@ -39,7 +39,7 @@
 - [x] TASK-015 Docker: Dockerfile, nginx config, supervisor (php-fpm, queue worker, scheduler), entrypoint
 - [x] TASK-016 Health endpoints `/up` and `/health` (database, queue heartbeat, mail/payment config status)
 - [ ] TASK-017 **First deployment** to DigitalOcean App Platform with Aiven MySQL (health page only) to catch hosting problems early. The guide is written in `docs/DEPLOYMENT.md`. The deployment itself is pending.
-- [ ] TASK-018 Document the fallback deployment to Render and verify it boots with the same image
+- [x] TASK-018 Document the fallback deployment to Render and verify it boots with the same image. The guide is section 9 of `docs/DEPLOYMENT.md`, with `render.yaml` for the free Docker web service. A local boot with `PORT=10000` served `/up` and `/health`. The live Render service is still not created (TASK-007).
 
 ## Phase 2: Layout and shared UI
 

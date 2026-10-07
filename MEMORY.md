@@ -3,7 +3,7 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Wednesday, 07 October 2026 (local checks before the phase-1-setup commits)
+**Last updated:** Wednesday, 07 October 2026 (TASK-018 Render fallback guide)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
@@ -27,6 +27,8 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 - SYSTEM_OVERVIEW.md
 
 ## Current Task
+
+**TASK-018** is documented and the same image was checked locally. `docs/DEPLOYMENT.md` section 9 is the Render fallback: one Docker web service from this repository, free instance, the section 1 environment variables, and health check path `/up`. `render.yaml` uses plan `free` and marks secrets, the Aiven connection, `APP_KEY`, `APP_URL`, and `RUN_MIGRATIONS` as `sync: false`. It does not set `PORT`. A separate container of `university-portal:local` with `PORT=10000` listened with `listen 10000;`, returned HTTP 200 from `/up` on that port, refused port 8080, and returned `/health` with `"database": "ok"` and `"heartbeat": "ok"`. That container was removed afterwards. No Render account was used, so the live service is not created (TASK-007). The existing `university-portal` container on host port 8081 was left running.
 
 **TASK-017 (part 1)** is the deployment write-up in `docs/DEPLOYMENT.md`, plus a boot fix for flattened Aiven CA text. `docker/entrypoint.sh` rebuilds `DB_SSL_CA` when line breaks were removed, replaced with spaces, or stored as literal `\n`, writes a normal PEM, and refuses anything that is not a certificate without logging the value. `tests/Unit/MysqlCaEntrypointTest.php` covers that. The doc tells the first deploy to use `APP_URL=https://pending.example.com`, then the real hostname, and to check the instance price and set a spending alert first. The flattened-CA boot in the checks below is the local proof of the rebuild. The app has not been created in DigitalOcean or Aiven yet. TASK-017 stays open until that deploy is done.
 
@@ -93,7 +95,7 @@ Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, 
 ## Risks to Watch
 
 - Two days to Wednesday is tight for the full scope. Milestone A (core journey) is the priority; do not start Phase 11 until the Milestone A gate passes.
-- Aiven free MySQL has capped resources and may be powered off if unused; confirm it is running before the demo. App Platform credit offers and Render free behaviour (sleep, ephemeral disk) must be verified when accounts are created.
+- Aiven free MySQL has capped resources and may be powered off if unused; confirm it is running before the demo. App Platform credit offers still need a check when that account exists. Render’s free web service, as documented on 07 October 2026, sleeps after 15 minutes idle, takes about a minute to wake, and drops files on the container disk. The free instance is 512 MB, which is below the 1 GiB this container was sized for. Confirm those limits in the Render dashboard when the account exists.
 - Brevo free tier is 300 emails/day; bulk imports are sent in batches by the queue.
 - Remita/Interswitch live onboarding needs business verification and may take time; fee terms were not confirmed (sources conflict). Do not promise a live payment date for Wednesday.
 - The "1,000 students without hitch" promise should be stated as a measured result (load test) rather than an open-ended guarantee.
@@ -103,7 +105,7 @@ Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, 
 
 ## Next Step
 
-Continue on `phase-1-setup`. TASK-015 and TASK-016 passed the local checks in this file. The CI PHP and `shell-quote` fix is in the working tree and has not been pushed, so TASK-014 stays open until GitHub CI is green. TASK-017 stays open until the DigitalOcean and Aiven deploy. Phase 0 accounts can proceed in parallel.
+Continue on `phase-1-setup`. TASK-018’s Render guide and local `PORT=10000` boot check are done. The live Render service waits on a Render account (TASK-007). TASK-015 and TASK-016 passed the local checks in this file. The CI PHP and `shell-quote` fix is in the working tree and has not been pushed, so TASK-014 stays open until GitHub CI is green. TASK-017 stays open until the DigitalOcean and Aiven deploy. Phase 0 accounts can proceed in parallel.
 
 ## Session Log
 
@@ -128,3 +130,4 @@ Continue on `phase-1-setup`. TASK-015 and TASK-016 passed the local checks in th
 | 07 Oct 2026 | Housekeeping: project documents moved from `.cursor/rules/` to the repository root with `git mv`. `starter.md.txt` moved to `docs/`. `.cursor/rules` kept `backend.mdc` and `testing.mdc`. |
 | 07 Oct 2026 | Local checks before commit: `composer check` passed (32 tests, 189 assertions), `npm run build` finished, a fresh `university-portal:local` image served `/up` and `/health` (`database` ok, `heartbeat` ok) on port 8082 with no entrypoint errors, and a flattened throwaway CA logged `Database CA certificate written (1 block(s)).` |
 | 07 Oct 2026 | CI run 37623461522 failed on PHP 8.3 versus the Symfony 8.1 lockfile, and on critical `shell-quote` 1.9.0. CI and `composer.json` now require PHP 8.4. `package.json` overrides `shell-quote` to 1.12.0. Local `npm audit --audit-level=high` exited 0. `composer check` passed (32 tests). Not pushed. |
+| 07 Oct 2026 | TASK-018: Render fallback in `docs/DEPLOYMENT.md` section 9 and `render.yaml` (free Docker web service, secrets left for the dashboard, health check `/up`). Local image with `PORT=10000` served `/up` and `/health`. No application code changed. `composer check` passed (32 tests, 189 assertions). No Render account, so the live service was not created. |

@@ -2,6 +2,8 @@
 
 This is the demo deployment: one Docker image on DigitalOcean App Platform, and Aiven for MySQL on DigitalOcean. The first deploy only has to prove that the container boots, connects to MySQL over TLS, and answers `/up`. Use fictional data only. Free tiers are for this demo. They are not a production commitment (see `SECURITY.md` and `SYSTEM_OVERVIEW.md`).
 
+Section 9 is the Render fallback. It runs this same image, with the same variables, on Render’s free web service.
+
 No secret belongs in this file, in Git, or in a screenshot. Put secrets only in the provider dashboards.
 
 The image is `docker/Dockerfile`. It runs nginx, PHP-FPM, `queue:work`, and `schedule:work` under supervisord. The branch you deploy must already be on GitHub and must contain that Dockerfile. `.env` is excluded from the image, so the running app reads configuration only from environment variables.
@@ -58,7 +60,7 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `RUN_MIGRATIONS` | When `true`, the entrypoint runs `php artisan migrate --force` before the web server starts. `true` for the first successful deploy, then `false` | `true` | No |
 | `LOG_CHANNEL` | Log destination. The image default `stderr` is what App Platform can collect. Keep it | `stderr` | No |
 | `LOG_LEVEL` | Log verbosity. The image default is enough | `info` | No |
-| `PORT` | TCP port nginx listens on. The image default is `8080`. Set this only when the dashboard does not inject it, and keep it equal to the HTTP port in section 5 | `8080` | No |
+| `PORT` | TCP port nginx listens on. The image default is `8080`. On App Platform, set this only when the dashboard does not inject it, and keep it equal to the HTTP port in section 5. On Render, do not set it (section 9) | `8080` | No |
 | `APP_VERSION` | Optional label returned by `/health` | *(empty)* | No |
 
 `DB_SSL_CA` is a public CA certificate, so it is not a secret. Still paste it only into the dashboard. Do not commit `ca.pem`.
@@ -274,3 +276,105 @@ Keep `APP_DEBUG=false`. A 500 page in the browser is generic on purpose. The det
 - The log mentions a write error under `storage`. The entrypoint creates the storage directories on boot as `www-data`. A crash before that step is the boot check, not permissions. Read the `Refusing to boot` line.
 
 The load balancer is already trusted for forwarded HTTPS and client IP. You do not set a trusted-proxy variable for this host.
+
+## 9. Render fallback (same image)
+
+Use this when App Platform is not available. The service is still one container from `docker/Dockerfile`: nginx, PHP-FPM, `queue:work`, and `schedule:work`. The database stays the Aiven MySQL service from sections 3, 4, and 6. The queue worker and scheduler already run inside this container.
+
+No secret belongs in `render.yaml`, in Git, or in a screenshot. `sync: false` in the blueprint means Render asks for that value in the dashboard and does not store it in the file.
+
+Dashboard labels change. Any step below that names a button, field, region, or plan is marked **verify in the provider dashboard**.
+
+### Create the web service
+
+Create one web service from the GitHub repository. **Verify in the provider dashboard** the current create flow, including the GitHub authorization prompt. The branch must already be on GitHub and must contain `docker/Dockerfile`.
+
+Use these settings:
+
+| Setting | Value |
+|---|---|
+| Source | The GitHub repository, on the branch that contains `docker/Dockerfile` |
+| Runtime | Docker |
+| Dockerfile path | `docker/Dockerfile` |
+| Docker build context | The repository root (`.`) |
+| Start command | Empty, so the image entrypoint starts supervisord. If the form requires a command, use `/usr/bin/supervisord -c /etc/supervisor/supervisord.conf` |
+| Instance | Free (`free`: 0.1 CPU, 512 MB). See Free-tier behaviour below |
+| Instance count | `1` |
+| Health check path | `/up` |
+| Environment variables | Every row in section 1, with the Render differences in the next subsection |
+
+**Verify in the provider dashboard** the field names for Dockerfile path, Docker build context, health check path, and instance type. The build context has to be the repository root. `docker/Dockerfile` copies the application from that root. A context of `docker/` makes the build fail.
+
+Choose the region nearest the Aiven service. Render’s regions are Oregon, Ohio, Virginia, Frankfurt, and Singapore. **Verify in the provider dashboard** the current list. The region cannot be changed after the service is created. Aiven on DigitalOcean and Render are different clouds, so this fallback always crosses a network boundary. Pick the Render region closest to the Aiven region you already chose.
+
+`render.yaml` at the repository root is the same service. Applying that blueprint in the Render dashboard creates it and prompts for every `sync: false` variable. You can create the service by hand instead and ignore the file. Do not put secret values into the file either way.
+
+### Environment variables
+
+Set every variable in the section 1 table. Mark every Secret = Yes row as a secret. **Verify in the provider dashboard** what that control is called. Generate `APP_KEY` with section 2. Paste `DB_SSL_CA` as in section 3. The Aiven allow-list stays open for this demo (section 6), because Render’s outbound address can change too.
+
+These rows differ from App Platform:
+
+| Variable | On Render |
+|---|---|
+| `PORT` | Leave it unset. Render injects it (the default is `10000`). The image listens on that value. Setting `8080` here makes nginx listen on the wrong port |
+| `APP_URL` | `https://pending.example.com` for the first deploy, then `https://` plus the `onrender.com` hostname the dashboard shows, then redeploy |
+| `RUN_MIGRATIONS` | `true` for the first deploy that must create tables, then `false`, then redeploy |
+| `LOG_CHANNEL` | Keep `stderr` so the Render logs can collect it |
+
+Changing a variable requires a new deploy. The entrypoint caches config at startup.
+
+If the blueprint form requires a value for an unused secret (`BREVO_API_KEY`, the Remita and Interswitch secrets, the Spaces keys, `DEMO_SEED_PASSWORD`), enter a single hyphen. Those features stay on the demo settings in section 1, so the hyphen is not used. Leave the field empty when the form allows it.
+
+### Health check
+
+Set the health check path to `/up`. Render sends `GET /up` and expects a successful response. `/up` answers when PHP is up. `/health` can return HTTP 503 while MySQL is down, so a database blip would restart the instance. After deploy, open `/health` yourself.
+
+The first boot caches config, routes, and views, and may run migrations, before nginx listens. Render waits for the health check during the deploy (the platform limit is on the order of 15 minutes). **Verify in the provider dashboard** whether an initial-delay field is shown. If it is, set it to at least 60 seconds.
+
+The `HEALTHCHECK` instruction in the Dockerfile calls `http://127.0.0.1:${PORT}/up`. That check follows the same `PORT` value. It does not replace Render’s health check. Point the platform check at `/up`.
+
+### `PORT`
+
+Render sets `PORT` for the web service. The default is `10000`. The image’s own default is `8080`, and it applies only when `PORT` is unset. A value from the platform replaces that default.
+
+On startup, `docker/entrypoint.sh` reads `PORT`, rejects a value that is not a number from 1 to 65535, and writes it into the nginx `listen` directive in place of `__PORT__`. The template is `listen <port>;`, which nginx binds on all interfaces, so Render’s proxy can reach it. `EXPOSE 8080` in the Dockerfile does not choose the port.
+
+Do not add `PORT` to `render.yaml` and do not set it in the dashboard. Leave Render’s value. Confirm in the runtime log that the process stayed up, then open `https://<your-service>.onrender.com/up` and expect HTTP 200.
+
+A local run of this same image with `PORT=10000` served `/up` with HTTP 200 on port 10000. Connections to port 8080 were refused. The nginx config line was `listen 10000;`. `/health` on that run returned HTTP 200 with `"database": "ok"` and `"heartbeat": "ok"`.
+
+### Free-tier behaviour
+
+The free web service sleeps after 15 minutes without an inbound HTTP request or WebSocket message. The next request wakes it. Waking takes about a minute, and Render shows a loading page in the browser while that happens.
+
+Wake it before a demo. The day before, and again the morning of the demo, open `https://<your-service>.onrender.com/up` and wait until that address returns HTTP 200, so the service is already awake. Confirm the Aiven service is running at the same time (section 4). A database that is powered off still fails `/health` after the app wakes.
+
+The container disk is ephemeral. Files written inside the instance are lost when it sleeps, restarts, or redeploys. Uploads on `FILESYSTEM_DISK=local` do not survive. Rows in Aiven do survive, including sessions, cache, and queued jobs. The CA file is written again from `DB_SSL_CA` on every boot. The free plan cannot attach a persistent disk. Do not add one for this demo.
+
+The free instance is 0.1 CPU and 512 MB of RAM. Section 5 sizes this same container for at least 1 GiB on App Platform, because nginx, PHP-FPM, the queue worker, and the scheduler share one instance. On this fallback the process can be killed when it runs out of memory. **Verify in the provider dashboard** the current free-plan limits before you rely on it for a demo. One instance is the maximum on the free plan.
+
+The free plan also blocks outbound traffic on ports 25, 465, and 587. `MAIL_MAILER=log` does not use those ports.
+
+### Blueprint file
+
+`render.yaml` defines one Docker web service named `university-portal` on plan `free`, with `dockerfilePath: ./docker/Dockerfile`, `dockerContext: .`, `numInstances: 1`, and `healthCheckPath: /up`. Preview environments are off, so a pull request does not start a second copy of the stack.
+
+Stable demo settings (such as `APP_DEBUG=false`, `DB_CONNECTION=mysql`, and `PAYMENT_PROVIDER=demo`) are plain values in the file. Everything that is a secret, a password, the Aiven CA, the database host details, `APP_KEY`, `APP_URL`, or `RUN_MIGRATIONS` is `sync: false`. Render prompts for those during the first blueprint create. Later syncs leave `sync: false` values alone. Add any new secret in the dashboard. Do not switch those keys to hardcoded values.
+
+The file does not set `region`. Render’s default for a new service is Oregon. Before the first apply, add a `region` line if another region is closer to Aiven (`oregon`, `ohio`, `virginia`, `frankfurt`, or `singapore`). **Verify in the provider dashboard.** That value cannot be changed later.
+
+The file does not set `PORT`.
+
+### Render checklist
+
+- [ ] The GitHub branch contains `docker/Dockerfile` and `render.yaml`, and that commit is on GitHub.
+- [ ] The service is a Docker web service, free instance, one instance, Dockerfile `docker/Dockerfile`, build context the repository root.
+- [ ] The health check path is `/up`.
+- [ ] Every section 1 variable is set. `PORT` is not set. Secrets and `DB_SSL_CA` exist only in the dashboard.
+- [ ] Aiven is running, the allow-list allows all addresses for this demo (section 6), and `DB_SSL_CA` is the Aiven CA.
+- [ ] `APP_URL` is `https://pending.example.com` for the first deploy, then the real `https://…onrender.com` origin, with a redeploy after the change.
+- [ ] `RUN_MIGRATIONS=true` for the first deploy only, then `false`.
+- [ ] `https://<your-service>.onrender.com/up` returns HTTP 200, and `/health` returns HTTP 200 with `"database": "ok"` and `"heartbeat": "ok"`.
+- [ ] The service was opened at `/up` until it answered, before anyone treats it as awake.
+- [ ] No secret was committed.

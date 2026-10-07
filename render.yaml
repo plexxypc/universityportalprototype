@@ -1,0 +1,103 @@
+# Render fallback for the same image as DigitalOcean App Platform.
+# No secret values belong in this file. sync: false is filled in the dashboard.
+# Do not set PORT. Render injects it, and the image listens on that value.
+# Docs: docs/DEPLOYMENT.md section 9.
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+
+previews:
+  generation: off
+
+services:
+  - type: web
+    name: university-portal
+    runtime: docker
+    plan: free
+    numInstances: 1
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    healthCheckPath: /up
+    # Add region before the first apply if Oregon is not the closest to Aiven.
+    # Allowed: oregon, ohio, virginia, frankfurt, singapore. Cannot be changed later.
+    envVars:
+      - key: APP_NAME
+        value: University Portal
+      - key: APP_ENV
+        value: production
+      - key: APP_KEY
+        sync: false
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_URL
+        sync: false
+      - key: APP_TIMEZONE
+        value: Africa/Lagos
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSL_CA
+        sync: false
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: MAIL_MAILER
+        value: log
+      - key: MAIL_FROM_ADDRESS
+        value: hello@example.com
+      - key: MAIL_FROM_NAME
+        value: University Portal
+      - key: BREVO_API_KEY
+        sync: false
+      - key: PAYMENT_PROVIDER
+        value: demo
+      - key: REMITA_ENV
+        value: demo
+      - key: REMITA_MERCHANT_ID
+        sync: false
+      - key: REMITA_SERVICE_TYPE_ID
+        sync: false
+      - key: REMITA_API_KEY
+        sync: false
+      - key: INTERSWITCH_MODE
+        value: TEST
+      - key: INTERSWITCH_MERCHANT_CODE
+        sync: false
+      - key: INTERSWITCH_PAY_ITEM_ID
+        sync: false
+      - key: INTERSWITCH_CLIENT_ID
+        sync: false
+      - key: INTERSWITCH_SECRET
+        sync: false
+      - key: FILESYSTEM_DISK
+        value: local
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_DEFAULT_REGION
+        sync: false
+      - key: AWS_BUCKET
+        sync: false
+      - key: AWS_USE_PATH_STYLE_ENDPOINT
+        value: "false"
+      - key: DEMO_SEED_PASSWORD
+        sync: false
+      - key: RUN_MIGRATIONS
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+      - key: APP_VERSION
+        sync: false
