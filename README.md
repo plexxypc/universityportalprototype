@@ -14,6 +14,8 @@ php artisan serve
 
 Open http://127.0.0.1:8000.
 
+`php artisan serve` does not run the scheduler. `/health` reports the heartbeat as `stale` until you start `php artisan schedule:work` or run `php artisan portal:heartbeat` once. The production container runs that command at startup and every minute.
+
 MySQL is on `127.0.0.1:3306`. The app database is `university_portal`. The test database is `university_portal_testing` (created the first time the data volume is empty). User `portal`, password `portal`.
 
 Leave `DB_SSL_CA` empty on this machine. For Aiven, set it to the CA file path or paste the certificate text.

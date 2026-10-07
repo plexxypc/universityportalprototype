@@ -122,4 +122,8 @@ if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
 fi
 
 
+# One write at startup so /health is not stale before the first scheduled minute.
+# This shows the scheduler command ran. It does not show that the queue worker is consuming jobs.
+php artisan portal:heartbeat --no-interaction
+
 exec "$@"

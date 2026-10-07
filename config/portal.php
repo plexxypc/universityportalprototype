@@ -80,4 +80,30 @@ return [
         'db_password' => env('DB_PASSWORD'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Health check
+    |--------------------------------------------------------------------------
+    |
+    | Names only. Credentials stay in the mail and payment settings and are
+    | not read here. The heartbeat shows that the scheduler ran recently.
+    | It does not show that the queue worker is consuming jobs.
+    | The rate limiter uses the file store so a database problem cannot
+    | stop this endpoint from answering.
+    |
+    */
+
+    'payment_provider' => env('PAYMENT_PROVIDER', 'demo'),
+
+    'version' => env('APP_VERSION'),
+
+    'health' => [
+        'heartbeat_key' => 'health.scheduler_heartbeat',
+        'heartbeat_recent_seconds' => 120,
+        'heartbeat_store_seconds' => 600,
+        'database_timeout_seconds' => 3,
+        'rate_limit_per_minute' => 60,
+        'rate_limit_store' => env('HEALTH_RATE_LIMIT_STORE', 'file'),
+    ],
+
 ];
