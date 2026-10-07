@@ -12,7 +12,7 @@
 
 ## TEST_PLAN
 
-- [ ] Relevant items in `.cursor/rules/TEST_PLAN.md` are ticked
+- [ ] Relevant items in `TEST_PLAN.md` are ticked
 
 ## Security
 

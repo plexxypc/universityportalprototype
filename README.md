@@ -20,7 +20,7 @@ Leave `DB_SSL_CA` empty on this machine. For Aiven, set it to the CA file path o
 
 ## Contributing
 
-Commit messages follow [`.cursor/rules/RULES.md`](.cursor/rules/RULES.md): `type(scope): summary`, with the task id in the body (for example `TASK-013`).
+Commit messages follow [`RULES.md`](RULES.md): `type(scope): summary`, with the task id in the body (for example `TASK-013`).
 
 Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 
