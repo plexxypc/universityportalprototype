@@ -1,0 +1,176 @@
+# Required check names, once branch protection is available: Pint, Larastan,
+# Pest, Dependency audit, Frontend build.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A push to main must finish. Other refs replace their own in-progress run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  pint:
+    name: Pint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+      APP_URL: http://127.0.0.1:8000
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, xml, curl, zip, bcmath, intl, gd, pdo_mysql
+          coverage: none
+          tools: composer:2.10.3
+          cache: composer
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Check code style
+        run: composer lint
+
+  larastan:
+    name: Larastan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+      APP_URL: http://127.0.0.1:8000
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, xml, curl, zip, bcmath, intl, gd, pdo_mysql
+          coverage: none
+          tools: composer:2.10.3
+          cache: composer
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Run static analysis
+        run: composer analyse
+
+  pest:
+    name: Pest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=
+      APP_URL: http://127.0.0.1:8000
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_DATABASE: university_portal_testing
+      DB_USERNAME: portal
+      DB_PASSWORD: portal
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: portal
+          MYSQL_DATABASE: university_portal_testing
+          MYSQL_USER: portal
+          MYSQL_PASSWORD: portal
+        ports:
+          - 3306:3306
+        # GitHub does not start steps until this check passes inside the container.
+        # The password is the same throwaway value phpunit.xml forces.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uportal -pportal --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=18
+          --health-start-period=30s
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, xml, curl, zip, bcmath, intl, gd, pdo_mysql
+          coverage: none
+          tools: composer:2.10.3
+          cache: composer
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Wait for MySQL to accept connections
+        run: php .github/scripts/wait_for_mysql.php
+
+      - name: Run tests
+        run: composer test
+
+  dependency_audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: "8.4"
+          coverage: none
+          tools: composer:2.10.3
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      # Plain format loads full advisories, so severity is present.
+      # Low and medium are reported and ignored. High, critical, and any
+      # advisory with no severity stay active and make Composer exit 1.
+      # Abandoned packages are reported and do not fail the job.
+      - name: Audit Composer dependencies
+        run: composer audit --locked --format=plain --abandoned=report --ignore-severity=low --ignore-severity=medium
+
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=high
+
+  frontend_build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build

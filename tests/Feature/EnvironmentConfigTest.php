@@ -106,6 +106,18 @@ it('refuses a non-mysql connection outside local', function () {
         ->toThrow(RuntimeException::class, 'DB_CONNECTION must be mysql');
 });
 
+it('trusts the platform load balancer for https and the client address', function () {
+    $this->withServerVariables([
+        'REMOTE_ADDR' => '10.0.0.8',
+        'HTTP_X_FORWARDED_FOR' => '203.0.113.10',
+        'HTTP_X_FORWARDED_PROTO' => 'https',
+        'HTTP_X_FORWARDED_PORT' => '443',
+    ])->get('/up')->assertOk();
+
+    expect(request()->ip())->toBe('203.0.113.10')
+        ->and(request()->isSecure())->toBeTrue();
+});
+
 it('allows local to boot with debug on and empty settings', function () {
     $this->app['env'] = 'local';
 

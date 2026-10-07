@@ -3,12 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Wednesday, 07 October 2026 (TASK-013)
+**Last updated:** Wednesday, 07 October 2026 (local checks before the phase-1-setup commits)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
 
-Laravel 13 skeleton is in the working tree (PHP 8.5.10, Laravel 13.35.0). Tailwind 4 is configured with design tokens and a local-only `/design-preview` page. TASK-010 added Livewire 4.4, Filament 5.10 (staff panel at `/staff`), Pest 4.7, Larastan 3.12, Pint, Excel 4.0, and Dompdf 3.1. TASK-011 added the empty folder skeleton (services, enums, support helpers, route files). TASK-012 points local development at MySQL 8 (dev-only Compose), with database sessions, cache, and queue, optional TLS, and a non-local boot check. TASK-013 tightened repository hygiene (ignore rules, EditorConfig, pull-request checklist, commit style in the README). No university features yet. Setup through TASK-013 is the initial commit on `main`. Day-to-day work continues on `phase-1-setup`. Remote: `https://github.com/plexxypc/universityportalprototype.git`. Protecting `main` is still open.
+Laravel 13 skeleton is in the working tree (PHP 8.5.10, Laravel 13.35.0). Tailwind 4 is configured with design tokens and a local-only `/design-preview` page. TASK-010 added Livewire 4.4, Filament 5.10 (staff panel at `/staff`), Pest 4.7, Larastan 3.12, Pint, Excel 4.0, and Dompdf 3.1. TASK-011 added the empty folder skeleton (services, enums, support helpers, route files). TASK-012 points local development at MySQL 8 (dev-only Compose), with database sessions, cache, and queue, optional TLS, and a non-local boot check. TASK-013 tightened repository hygiene (ignore rules, EditorConfig, pull-request checklist, commit style in the README). TASK-014 adds `.github/workflows/ci.yml` (Pint, Larastan, Pest on MySQL 8.0, Composer and npm audit, frontend build) and a CI badge on `main`. TASK-015 adds the production image in `docker/` (nginx, php-fpm, queue worker, and scheduler). TASK-016 adds `/health` beside the built-in `/up` route. No university features yet. Setup through TASK-013 is the initial commit on `main`. Day-to-day work continues on `phase-1-setup`. Remote: `https://github.com/plexxypc/universityportalprototype.git`. Protecting `main` is still open.
 
 Two changes since the first Laravel rewrite: (1) **Paystack is out; payments use Remita and/or Interswitch (Quickteller)** behind a provider-neutral gateway with a Demo Gateway (ADR-023); (2) **capacity target: about 150 students now, up to 1,000 supported on launch infrastructure, expansion planned beyond about 2,000** (ADR-024).
 
@@ -27,6 +27,24 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 - SYSTEM_OVERVIEW.md
 
 ## Current Task
+
+**TASK-017 (part 1)** is the deployment write-up in `docs/DEPLOYMENT.md`, plus a boot fix for flattened Aiven CA text. `docker/entrypoint.sh` rebuilds `DB_SSL_CA` when line breaks were removed, replaced with spaces, or stored as literal `\n`, writes a normal PEM, and refuses anything that is not a certificate without logging the value. `tests/Unit/MysqlCaEntrypointTest.php` covers that. The doc tells the first deploy to use `APP_URL=https://pending.example.com`, then the real hostname, and to check the instance price and set a spending alert first. The flattened-CA boot in the checks below is the local proof of the rebuild. The app has not been created in DigitalOcean or Aiven yet. TASK-017 stays open until that deploy is done.
+
+Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, `DECISIONS.md`, `MEMORY.md`, `TEST_PLAN.md`, `SECURITY.md`, and `SYSTEM_OVERVIEW.md`. `docs/starter.md.txt` is the session starter. `.cursor/rules` has `backend.mdc`, `testing.mdc`, `general.mdc`, and `frontend.mdc`.
+
+**Checked on this machine, 07 October 2026:**
+
+- `composer check`: Pint passed, Larastan passed with 0 errors, Pest passed 32 tests and 189 assertions.
+- `npm run build`: the Vite production build finished in 25.47s.
+- `docker build -f docker/Dockerfile -t university-portal:local .` finished and tagged `university-portal:local`.
+- Container `university-portal-check` joined `universityportalprototype_default` with `DB_HOST=mysql` and was published on host port 8082. `http://127.0.0.1:8082/up` returned HTTP 200. `/health` returned HTTP 200 with `"database":"ok"` and `"heartbeat":"ok"`. Docker reported the container healthy. The entrypoint log showed the config, route, and view caches, `Scheduler heartbeat recorded.`, and supervisord starting php-fpm, nginx, the queue worker, and the scheduler. It had no error, refusal, or exception line.
+- A second boot used a one-day throwaway certificate whose line breaks had been replaced with spaces. The log line was `Database CA certificate written (1 block(s)).` The log did not contain the certificate. The private key and the certificate file were deleted. No real CA was used.
+
+**TASK-016** is implemented and awaiting review. `/up` stays Laravel's built-in health route. `/health` is registered outside the web middleware group, allows 60 requests per minute per forwarded client IP using the file cache (so a database failure cannot turn the probe into an error page), and returns coarse JSON with `Cache-Control: no-store, private`. The database probe opens its own PDO with a 3-second connect timeout and does not change the shared MySQL connection. `portal:heartbeat` stores the current time every minute, and the container entrypoint runs it once at startup. A database failure or a heartbeat older than 2 minutes returns HTTP 503 with status `degraded`. That heartbeat shows the scheduler ran recently. It does not show that the queue worker is consuming jobs. Phase 5 notes a queue-backlog check once the email outbox exists. `APP_VERSION` is optional. The checks in this section are the verification for this task.
+
+**TASK-015** is implemented and awaiting review. `docker/Dockerfile` is a three-stage image: Node builds Vite assets, Composer installs production dependencies with optimised autoloading, and the final stage runs nginx, php-fpm, `queue:work`, and `schedule:work` under supervisor as `www-data`. The container listens on `PORT` (default 8080). The entrypoint writes `DB_SSL_CA` certificate text to `storage/app/certs/mysql-ca.pem` when provided, caches config, routes, and views, links storage, and runs `php artisan migrate --force` only when `RUN_MIGRATIONS=true`. Outside `local` it refuses to start when `APP_DEBUG` is not `false` or `APP_KEY`, `APP_URL`, or the MySQL settings are missing. Upload limits are 8 MB in nginx and PHP. Opcache is on for php-fpm, version headers are hidden, and the load balancer is trusted for HTTPS and client IP. The image is PHP 8.4 because `composer.lock` (Symfony 8.1) requires PHP 8.4.1 or newer. The checks in this section are the verification for this image. Host port 8080 was already taken by another project's `cbt-preview-1`, so the new container was published on host port 8082.
+
+**TASK-014** is written and stays open until GitHub CI is green on `phase-1-setup`. The workflow name is CI. Job names for required checks are Pint, Larastan, Pest, Dependency audit, and Frontend build. Actions are pinned to `actions/checkout` v7.0.1 (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` v7.0.0 (`820762786026740c76f36085b0efc47a31fe5020`), and `shivammathur/setup-php` 2.37.2 (`f3e473d116dcccaddc5834248c87452386958240`). PHP 8.4 and Composer 2.10.3. Node 22. Pest uses throwaway MySQL user `portal` / password `portal` on `university_portal_testing`, matching `phpunit.xml`. No current Pest test renders a page that needs Vite: `tests/Feature/ExampleTest.php` hits `/`, and `welcome.blade.php` calls `@vite` only when `public/build/manifest.json` or `public/hot` exists (both gitignored). `tests/Feature/DesignPreviewTest.php` expects 404 because `/design-preview` is registered only when `APP_ENV=local`, so `layouts/app.blade.php` (unconditional `@vite`) is not rendered. `composer audit` on this lockfile exited 0. `npm audit --audit-level=high` exited 1.
 
 **TASK-013** hygiene is in the initial commit and awaiting review. `.gitignore` ignores env files (except `.env.example`), dependencies, build output, local storage and logs, IDE folders, and Docker data directories. The `.cursor` folder and documentation stay tracked. `.editorconfig` uses 4 spaces for PHP and 2 for JS, CSS, and YAML. `.github/pull_request_template.md` is the pull-request checklist. The README Contributing section points at `RULES.md` for `type(scope): summary` with the task id in the body. `.env` is ignored and holds the local `APP_KEY`; it is not in the index. Branch protection for `main` is not done. Work continues on `phase-1-setup`.
 
@@ -51,7 +69,7 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 
 | Item | Needed for | Status |
 |---|---|---|
-| GitHub repository | TASK-001 | Remote set: `plexxypc/universityportalprototype`. Privacy and branch protection still to confirm. |
+| GitHub repository | TASK-001 | Private repo `plexxypc/universityportalprototype`. `gh` 2.102.0 is logged in as `plexxypc`. Branch protection and secret scanning need GitHub Pro on a private repo. |
 | DigitalOcean account | TASK-002 | Pending |
 | Aiven account + free MySQL on DigitalOcean + CA certificate | TASK-003 | Pending |
 | Which payment provider the institution uses or requires (Remita or Interswitch) and sandbox/demo credentials | TASK-004 | **Open question for the bursary**; Demo Gateway works without it |
@@ -61,11 +79,16 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 | Render account (fallback host) | TASK-007 | Optional |
 | Confirm Aiven free tier region availability on DigitalOcean | TASK-003 | Check in Aiven console |
 
+## Known limitations
+
+- Branch protection is unavailable on this private repo without a paid GitHub plan; until then, merges to main happen only through pull requests with all five checks green.
+
 ## Known Issues
 
 - PHP 8.5.10 (winget `PHP.PHP.8.5`) is on the user `PATH`. `ext-intl`, `ext-gd`, and `ext-pdo_mysql` are enabled in that PHP's `php.ini`. `pdo_mysql` was commented out until TASK-012. Composer 2.10.3 is `%LOCALAPPDATA%\Composer\composer.bat`. A new terminal is required before `composer` is on `PATH`.
 - Docker Desktop's engine was stopped. TASK-012 started Docker Desktop so `compose.dev.yaml` could run. The engine must be running before `php artisan migrate` or `composer test`.
 - `.gitignore` no longer ignores `.cursor`. The whole folder, including the project documents, can be committed. `.env` stays ignored.
+- The first GitHub CI run on `phase-1-setup` (run 37623461522) failed because CI used PHP 8.3.35 while Symfony 8.1 in the lockfile requires PHP 8.4.1 or newer, and because `npm audit` reported critical GHSA-pqg4-j6r4-53mv in `shell-quote` 1.9.0. The working tree now sets CI and `composer.json` to PHP 8.4 and overrides `shell-quote` to 1.12.0. Local `npm audit --audit-level=high` exited 0. That fix is not on GitHub yet, so TASK-014 stays open.
 
 ## Risks to Watch
 
@@ -80,7 +103,7 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 
 ## Next Step
 
-Continue on `phase-1-setup`. Confirm `.env` stays ignored. Protect `main` on GitHub when you want that rule (needs a GitHub login; `gh` is not installed on this machine). Next build task is TASK-014 (GitHub Actions). Phase 0 accounts can proceed in parallel.
+Continue on `phase-1-setup`. TASK-015 and TASK-016 passed the local checks in this file. The CI PHP and `shell-quote` fix is in the working tree and has not been pushed, so TASK-014 stays open until GitHub CI is green. TASK-017 stays open until the DigitalOcean and Aiven deploy. Phase 0 accounts can proceed in parallel.
 
 ## Session Log
 
@@ -96,3 +119,12 @@ Continue on `phase-1-setup`. Confirm `.env` stays ignored. Protect `main` on Git
 | 07 Oct 2026 | TASK-012: `.env.example`, dev-only MySQL 8 Compose, optional `DB_SSL_CA`, database sessions/cache/queue, `config/portal.php`, and a non-local boot guard. Enabled `pdo_mysql`. Migrated `university_portal` and `university_portal_testing`. `composer check` passed (16 tests). Commit not made. |
 | 07 Oct 2026 | TASK-013: repository hygiene. Broader `.gitignore` (env files except `.env.example`, storage, logs, IDE folders, Docker data dirs; `.cursor` and docs stay tracked). EditorConfig matches Pint (4 spaces PHP, 2 for JS/CSS/YAML). Pull-request checklist and README commit style. Local `APP_KEY` is only in ignored `.env`. |
 | 07 Oct 2026 | Initial commit on `main` covering TASK-008 through TASK-013. Remote `origin` is `https://github.com/plexxypc/universityportalprototype.git`. Working branch is `phase-1-setup`. Branch protection for `main` is still open. |
+| 07 Oct 2026 | `gh` 2.102.0 is logged in as `plexxypc`. The repository is private. Branch protection and a `main` ruleset both returned HTTP 403 (GitHub Pro required). Secret scanning returned HTTP 422. |
+| 07 Oct 2026 | TASK-014: GitHub Actions workflow `.github/workflows/ci.yml` with Pint, Larastan, Pest (MySQL 8.0), Composer and npm audit, and the frontend build. README badge for `main`. Composer audit exited 0. npm audit exited 1 on `shell-quote` via `concurrently`. |
+| 07 Oct 2026 | TASK-015: production Docker image. nginx, php-fpm, queue worker, and scheduler in one container. Entrypoint caches config, routes, and views, and migrates only when `RUN_MIGRATIONS=true`. Local run on the Compose network served `/up` with HTTP 200. PHP 8.4 because the lockfile requires it. |
+| 07 Oct 2026 | TASK-016: `/health` JSON check beside `/up`. Database probe uses its own 3-second PDO. Scheduler heartbeat every minute and once at container startup. 60/minute per forwarded client IP. `composer check` passed (25 tests). |
+| 07 Oct 2026 | TASK-017 part 1: `docs/DEPLOYMENT.md` for App Platform plus Aiven MySQL. No provider accounts were changed. `composer check` passed (25 tests). TASK-017 remains open until the first deploy. |
+| 07 Oct 2026 | TASK-017 part 1 follow-up: entrypoint rebuilds a flattened or literal-`\n` Aiven CA and refuses non-certificates without logging the value. `MEMORY.md` moved from `.cursor/rules/` to the repository root. Other project docs are still only under `.cursor/rules/`. `composer check` passed (32 tests). |
+| 07 Oct 2026 | Housekeeping: project documents moved from `.cursor/rules/` to the repository root with `git mv`. `starter.md.txt` moved to `docs/`. `.cursor/rules` kept `backend.mdc` and `testing.mdc`. |
+| 07 Oct 2026 | Local checks before commit: `composer check` passed (32 tests, 189 assertions), `npm run build` finished, a fresh `university-portal:local` image served `/up` and `/health` (`database` ok, `heartbeat` ok) on port 8082 with no entrypoint errors, and a flattened throwaway CA logged `Database CA certificate written (1 block(s)).` |
+| 07 Oct 2026 | CI run 37623461522 failed on PHP 8.3 versus the Symfony 8.1 lockfile, and on critical `shell-quote` 1.9.0. CI and `composer.json` now require PHP 8.4. `package.json` overrides `shell-quote` to 1.12.0. Local `npm audit --audit-level=high` exited 0. `composer check` passed (32 tests). Not pushed. |

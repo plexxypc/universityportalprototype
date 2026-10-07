@@ -1,6 +1,8 @@
+[![CI](https://github.com/plexxypc/universityportalprototype/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/plexxypc/universityportalprototype/actions/workflows/ci.yml)
+
 ## Run locally
 
-PHP 8.3+, Composer, and Docker Desktop are required. `compose.dev.yaml` is for local MySQL only.
+PHP 8.4+, Composer, and Docker Desktop are required. `compose.dev.yaml` is for local MySQL only.
 
 ```powershell
 docker compose -f compose.dev.yaml up -d
@@ -12,6 +14,8 @@ php artisan serve
 
 Open http://127.0.0.1:8000.
 
+`php artisan serve` does not run the scheduler. `/health` reports the heartbeat as `stale` until you start `php artisan schedule:work` or run `php artisan portal:heartbeat` once. The production container runs that command at startup and every minute.
+
 MySQL is on `127.0.0.1:3306`. The app database is `university_portal`. The test database is `university_portal_testing` (created the first time the data volume is empty). User `portal`, password `portal`.
 
 Leave `DB_SSL_CA` empty on this machine. For Aiven, set it to the CA file path or paste the certificate text.
@@ -20,7 +24,7 @@ Leave `DB_SSL_CA` empty on this machine. For Aiven, set it to the CA file path o
 
 ## Contributing
 
-Commit messages follow [`.cursor/rules/RULES.md`](.cursor/rules/RULES.md): `type(scope): summary`, with the task id in the body (for example `TASK-013`).
+Commit messages follow [`RULES.md`](RULES.md): `type(scope): summary`, with the task id in the body (for example `TASK-013`).
 
 Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 

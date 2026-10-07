@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\PingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -9,6 +10,4 @@ use Illuminate\Support\Facades\Route;
  * Filament owns /staff and its page slugs (/staff/login, resources, pages).
  * Do not add a Filament page or resource whose slug is "downloads".
  */
-Route::get('/staff/downloads/ping', static function (): string {
-    return 'staff routes ok';
-})->name('staff.downloads.ping');
+Route::get('/staff/downloads/ping', [PingController::class, 'staff_downloads'])->name('staff.downloads.ping');

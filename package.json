@@ -18,5 +18,8 @@
     },
     "dependencies": {
         "@fontsource/inter": "^5.3.0"
+    },
+    "overrides": {
+        "shell-quote": "1.12.0"
     }
 }
