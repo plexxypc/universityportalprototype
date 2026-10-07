@@ -3,7 +3,7 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Wednesday, 07 October 2026 (TASK-018 Render fallback guide)
+**Last updated:** Wednesday, 07 October 2026 (Pest testing env and PHP 8.4 docs)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
@@ -58,7 +58,7 @@ Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, 
 
 ## Key Decisions in Force
 
-- Stack: Laravel (PHP 8.3+), Filament staff panel, Blade + Livewire student portal, Tailwind, MySQL 8, Pest.
+- Stack: Laravel (PHP 8.4+), Filament staff panel, Blade + Livewire student portal, Tailwind, MySQL 8, Pest. `composer.lock` requires PHP 8.4.1 or newer.
 - Demo hosting: DigitalOcean App Platform (Docker) + Aiven free MySQL on DigitalOcean, same region. Fallback: Render free.
 - Production: paid, always-on host, HA database, same region; recommended start is DigitalOcean Europe; decide with the institution after data-residency advice (ADR-022).
 - CBT engine: no integration of any kind (ADR-004).
@@ -105,7 +105,7 @@ Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, 
 
 ## Next Step
 
-Continue on `phase-1-setup`. TASK-018’s Render guide and local `PORT=10000` boot check are done. The live Render service waits on a Render account (TASK-007). TASK-015 and TASK-016 passed the local checks in this file. The CI PHP and `shell-quote` fix is in the working tree and has not been pushed, so TASK-014 stays open until GitHub CI is green. TASK-017 stays open until the DigitalOcean and Aiven deploy. Phase 0 accounts can proceed in parallel.
+Continue on `phase-1-setup`. TASK-018’s Render guide and local `PORT=10000` boot check are done. The live Render service waits on a Render account (TASK-007). `phpunit.xml` now sets `$_SERVER` `APP_ENV=testing` and `APP_DEBUG=false` so Pest sees `testing` while the CI job env stays `local` for `config:clear`. A temporary JUnit artifact is on the Pest job so the full warning text can be read. TASK-014 stays open until GitHub CI is green. TASK-017 stays open until the DigitalOcean and Aiven deploy. Phase 0 accounts can proceed in parallel.
 
 ## Session Log
 
@@ -131,3 +131,4 @@ Continue on `phase-1-setup`. TASK-018’s Render guide and local `PORT=10000` bo
 | 07 Oct 2026 | Local checks before commit: `composer check` passed (32 tests, 189 assertions), `npm run build` finished, a fresh `university-portal:local` image served `/up` and `/health` (`database` ok, `heartbeat` ok) on port 8082 with no entrypoint errors, and a flattened throwaway CA logged `Database CA certificate written (1 block(s)).` |
 | 07 Oct 2026 | CI run 37623461522 failed on PHP 8.3 versus the Symfony 8.1 lockfile, and on critical `shell-quote` 1.9.0. CI and `composer.json` now require PHP 8.4. `package.json` overrides `shell-quote` to 1.12.0. Local `npm audit --audit-level=high` exited 0. `composer check` passed (32 tests). Not pushed. |
 | 07 Oct 2026 | TASK-018: Render fallback in `docs/DEPLOYMENT.md` section 9 and `render.yaml` (free Docker web service, secrets left for the dashboard, health check `/up`). Local image with `PORT=10000` served `/up` and `/health`. No application code changed. `composer check` passed (32 tests, 189 assertions). No Render account, so the live service was not created. |
+| 07 Oct 2026 | Pest CI saw `APP_ENV=local` because Laravel reads `$_SERVER` before PHPUnit’s forced env. `phpunit.xml` now also sets those server variables to `testing` and `APP_DEBUG=false`. The CI job env stays `local`. Local run with `APP_ENV=local` and `APP_DEBUG=true` passed 32 tests; `/health` reported `testing`. `composer check` with no shell overrides passed. Docs now say PHP 8.4+ because `composer.lock` requires 8.4.1 or newer. TASK-014 stays open. |
