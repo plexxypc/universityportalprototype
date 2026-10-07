@@ -99,4 +99,8 @@
         color: var(--color-text);
         font-family: var(--font-sans);
     }
+
+    [x-cloak] {
+        display: none !important;
+    }
 }

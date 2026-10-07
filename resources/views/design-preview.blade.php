@@ -74,36 +74,47 @@
     </section>
 
     <section class="mb-space-48 max-w-full" aria-labelledby="controls-heading">
-        <h2 id="controls-heading" class="mb-space-16 text-h2 font-semibold">Buttons and field</h2>
+        <h2 id="controls-heading" class="mb-space-16 text-h2 font-semibold">Form components</h2>
         <div class="max-w-full rounded-card border border-border bg-surface p-space-16 shadow-sm sm:p-space-24">
+            <p class="mb-space-16 text-small font-normal text-muted">Keyboard focus uses a 2px primary ring. Hover darkens a primary button and tints secondary and ghost buttons. Check those states in the browser. On a phone, controls are at least 44px tall.</p>
             <div class="flex max-w-full flex-wrap items-center gap-space-8">
-                <button type="button" class="inline-flex h-10 items-center rounded-control bg-primary-600 px-space-16 text-body font-semibold text-white hover:bg-primary-700">
-                    Primary
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control border border-border bg-surface px-space-16 text-body font-semibold text-text">
-                    Secondary
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control px-space-16 text-body font-semibold text-text hover:bg-primary-50">
-                    Ghost
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control bg-destructive px-space-16 text-body font-semibold text-white hover:bg-destructive-hover">
-                    Destructive
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control px-space-8 text-body font-semibold text-primary-600 underline-offset-2 hover:underline">
-                    Link
-                </button>
+                <x-button>Primary</x-button>
+                <x-button variant="secondary">Secondary</x-button>
+                <x-button variant="ghost">Ghost</x-button>
+                <x-button variant="destructive">Destructive</x-button>
+                <x-button variant="link" href="#controls-heading">Link</x-button>
             </div>
-            <label class="mt-space-24 block max-w-full text-body font-semibold" for="preview-name">
-                Sample field
-            </label>
-            <input
-                id="preview-name"
-                class="mt-space-8 h-10 w-full max-w-full rounded-control border border-border bg-surface px-space-12 text-input font-normal text-text outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                type="text"
-                name="preview_name"
-                inputmode="text"
-            >
-            <p class="mt-space-8 text-small font-normal text-muted">Buttons and inputs use an 8px radius. This card uses 12px.</p>
+            <div class="mt-space-16 flex max-w-full flex-wrap items-center gap-space-8">
+                <x-button size="small" variant="secondary">Small</x-button>
+                <x-button size="large">Large</x-button>
+                <x-button disabled variant="secondary">Disabled</x-button>
+                <x-button loading loading-label="Paying…">Pay now</x-button>
+            </div>
+
+            <div class="mt-space-24 grid max-w-full gap-space-16">
+                <x-field name="preview_email" label="Email address" required help="Use the address on your school record.">
+                    <x-input name="preview_email" type="email" inputmode="email" autocomplete="email" />
+                </x-field>
+                <x-field name="preview_amount" label="Amount (naira)" error="Enter an amount greater than zero.">
+                    <x-input name="preview_amount" inputmode="decimal" value="0" />
+                </x-field>
+                <x-field name="preview_password" label="Password" required>
+                    <x-password-input name="preview_password" />
+                </x-field>
+                <x-field name="preview_level" label="Level">
+                    <x-select name="preview_level">
+                        <option value="">Choose a level</option>
+                        <option value="100">100</option>
+                    </x-select>
+                </x-field>
+                <x-field name="preview_note" label="Note" help="Optional.">
+                    <x-textarea name="preview_note">Hello</x-textarea>
+                </x-field>
+                <x-checkbox name="preview_agree" label="I agree to the fee schedule" />
+                <x-field name="preview_disabled" label="Reference">
+                    <x-input name="preview_disabled" value="Read only" disabled />
+                </x-field>
+            </div>
         </div>
     </section>
 

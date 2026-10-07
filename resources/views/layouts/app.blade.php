@@ -10,5 +10,6 @@
         <div class="mx-auto w-full min-w-0 max-w-content px-page-mobile py-page-mobile md:px-page-tablet md:py-page-tablet lg:px-page-desktop lg:py-page-desktop">
             @yield('content')
         </div>
+        @livewireScripts
     </body>
 </html>
