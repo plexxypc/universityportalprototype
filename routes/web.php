@@ -2,10 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Support\DesignPreviewTable;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome');
 
 if (app()->environment('local')) {
-    Route::view('/design-preview', 'design-preview')->name('design-preview');
+    Route::get('/design-preview', function () {
+        return view('design-preview', [
+            'preview_table' => DesignPreviewTable::fromQuery(request()->query()),
+        ]);
+    })->name('design-preview');
 }

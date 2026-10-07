@@ -235,4 +235,48 @@
             <p class="mt-space-8 text-small font-normal text-muted">Amounts are integer kobo. Dates use Africa/Lagos. A formula-like export cell starts with an apostrophe.</p>
         </div>
     </section>
+
+    <section id="table" class="mb-space-48 max-w-full" aria-labelledby="table-heading">
+        <h2 id="table-heading" class="mb-space-16 text-h2 font-semibold">Responsive table</h2>
+        <x-table
+            :columns="$preview_table['columns']"
+            :rows="$preview_table['rows']"
+            :paginator="$preview_table['paginator']"
+            :sort="$preview_table['sort']"
+            :direction="$preview_table['direction']"
+            caption="Sample students"
+        >
+            <x-slot:toolbar>
+                <form method="get" action="{{ url('/design-preview') }}" class="grid max-w-full gap-space-12 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
+                    <x-field name="q" label="Search">
+                        <x-input name="q" type="search" :value="$preview_table['q']" />
+                    </x-field>
+                    <x-field name="status" label="Status">
+                        <x-select name="status">
+                            <option value="">All statuses</option>
+                            @foreach (\App\Enums\StudentStatus::cases() as $student_status)
+                                <option value="{{ $student_status->value }}" @selected($preview_table['status'] === $student_status->value)>{{ $student_status->value }}</option>
+                            @endforeach
+                        </x-select>
+                    </x-field>
+                    <x-button type="submit" variant="secondary">Filter</x-button>
+                    <x-button type="button" variant="ghost">Export</x-button>
+                    <input type="hidden" name="sort" value="{{ $preview_table['sort'] }}">
+                    <input type="hidden" name="direction" value="{{ $preview_table['direction'] }}">
+                </form>
+            </x-slot:toolbar>
+            <x-slot:empty>
+                <x-empty-state message="No students match this search." />
+            </x-slot:empty>
+        </x-table>
+
+        <div class="mt-space-24">
+            <h3 class="mb-space-12 text-h3 font-semibold">Empty table</h3>
+            <x-table :columns="$preview_table['columns']" :rows="[]" caption="Matching students">
+                <x-slot:empty>
+                    <x-empty-state message="No students match this search." />
+                </x-slot:empty>
+            </x-table>
+        </div>
+    </section>
 @endsection
