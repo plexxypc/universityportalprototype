@@ -31,7 +31,7 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
-          php-version: "8.3"
+          php-version: "8.4"
           extensions: mbstring, xml, curl, zip, bcmath, intl, gd, pdo_mysql
           coverage: none
           tools: composer:2.10.3
@@ -59,7 +59,7 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
-          php-version: "8.3"
+          php-version: "8.4"
           extensions: mbstring, xml, curl, zip, bcmath, intl, gd, pdo_mysql
           coverage: none
           tools: composer:2.10.3
@@ -110,7 +110,7 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
-          php-version: "8.3"
+          php-version: "8.4"
           extensions: mbstring, xml, curl, zip, bcmath, intl, gd, pdo_mysql
           coverage: none
           tools: composer:2.10.3
@@ -136,7 +136,7 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
-          php-version: "8.3"
+          php-version: "8.4"
           coverage: none
           tools: composer:2.10.3
 

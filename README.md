@@ -2,7 +2,7 @@
 
 ## Run locally
 
-PHP 8.3+, Composer, and Docker Desktop are required. `compose.dev.yaml` is for local MySQL only.
+PHP 8.4+, Composer, and Docker Desktop are required. `compose.dev.yaml` is for local MySQL only.
 
 ```powershell
 docker compose -f compose.dev.yaml up -d
