@@ -8,11 +8,11 @@
 
 **Status:** Accepted.
 
-**Decision:** One Laravel application (PHP 8.3+) with Filament for the staff/admin interface and Blade + Livewire for the student portal.
+**Decision:** One Laravel application (PHP 8.4+) with Filament for the staff/admin interface and Blade + Livewire for the student portal.
 
 **Reason:** Laravel includes authentication, validation, migrations, mail, queues, scheduling, policies and testing out of the box, so less code and fewer moving parts than a JavaScript front end plus a hosted backend service. Filament generates most staff-side CRUD screens. The owner has found Supabase costly in debugging time; a conventional framework with a plain database is simpler to reason about and to build with AI assistance.
 
-**Consequences:** PHP hosting is required (Docker). Business logic stays in `app/Services`.
+**Consequences:** PHP hosting is required (Docker). `composer.lock` requires PHP 8.4.1 or newer. Business logic stays in `app/Services`.
 
 ## ADR-002: Use managed MySQL 8 (Aiven); no Supabase
 

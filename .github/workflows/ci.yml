@@ -122,8 +122,21 @@ jobs:
       - name: Wait for MySQL to accept connections
         run: php .github/scripts/wait_for_mysql.php
 
+      # TEMPORARY: wide columns plus a JUnit artifact so the full
+      # file_get_contents warning text is visible. Remove this comment,
+      # COLUMNS, --log-junit, and the upload step after the cause is known.
       - name: Run tests
-        run: composer test
+        env:
+          COLUMNS: "400"
+        run: composer test -- --log-junit storage/logs/pest-junit.xml
+
+      - name: Upload Pest JUnit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pest-junit
+          path: storage/logs/pest-junit.xml
+          if-no-files-found: warn
 
   dependency_audit:
     name: Dependency audit

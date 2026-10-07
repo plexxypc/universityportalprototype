@@ -18,7 +18,7 @@ Work on **one task at a time**: `TASK-nnn → implement → test → review → 
 
 ## General
 
-- Use PHP 8.3+ with `declare(strict_types=1);` in new files and full type declarations on parameters, returns and properties.
+- Use PHP 8.4+ with `declare(strict_types=1);` in new files and full type declarations on parameters, returns and properties.
 - Follow Laravel conventions and the structure in `ARCHITECTURE.md`; prefer framework features over new packages.
 - Reuse existing classes, components and helpers; search before creating.
 - Do not duplicate logic. Extract shared logic into Services or `app/Support`.

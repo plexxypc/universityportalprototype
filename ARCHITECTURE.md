@@ -6,7 +6,7 @@
 
 | Concern | Choice |
 |---|---|
-| Language / framework | PHP 8.3+ and **Laravel** (current stable at project start; pin exact versions in `composer.json`) |
+| Language / framework | PHP 8.4+ and **Laravel** (current stable at project start; pin exact versions in `composer.json`) |
 | Staff / admin interface | **Filament** admin panel (tables, forms, filters, actions, role-aware navigation) |
 | Student portal and public pages | Blade + **Livewire** + Alpine.js |
 | Styling | Tailwind CSS (Vite build), Inter font self-hosted, tokens from DESIGN.md |
