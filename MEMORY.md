@@ -3,12 +3,18 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Wednesday, 07 October 2026 (Pest testing env and PHP 8.4 docs)
+**Last updated:** Wednesday, 07 October 2026 (public repo and live Render demo)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
 
-Laravel 13 skeleton is in the working tree (PHP 8.5.10, Laravel 13.35.0). Tailwind 4 is configured with design tokens and a local-only `/design-preview` page. TASK-010 added Livewire 4.4, Filament 5.10 (staff panel at `/staff`), Pest 4.7, Larastan 3.12, Pint, Excel 4.0, and Dompdf 3.1. TASK-011 added the empty folder skeleton (services, enums, support helpers, route files). TASK-012 points local development at MySQL 8 (dev-only Compose), with database sessions, cache, and queue, optional TLS, and a non-local boot check. TASK-013 tightened repository hygiene (ignore rules, EditorConfig, pull-request checklist, commit style in the README). TASK-014 adds `.github/workflows/ci.yml` (Pint, Larastan, Pest on MySQL 8.0, Composer and npm audit, frontend build) and a CI badge on `main`. TASK-015 adds the production image in `docker/` (nginx, php-fpm, queue worker, and scheduler). TASK-016 adds `/health` beside the built-in `/up` route. No university features yet. Setup through TASK-013 is the initial commit on `main`. Day-to-day work continues on `phase-1-setup`. Remote: `https://github.com/plexxypc/universityportalprototype.git`. Protecting `main` is still open.
+Phase 1 setup is on `phase-1-setup` at `d5fc5c0`, which matches `origin/phase-1-setup`. The working tree has the Phase 1 status notes from this session. `main` is the skeleton commit `c599ee0` and is 13 commits behind this branch. Remote: `https://github.com/plexxypc/universityportalprototype.git` (public). No university features yet. The staff panel is Filament's default amber theme until TASK-019.
+
+**Live demo:** `https://universityportalprototype.onrender.com` (Render free web service, Aiven MySQL). On 07 October 2026 the home page and `/up` returned HTTP 200 with the title University Portal. `/health` returned HTTP 200 with `"status": "ok"`, `"database": "ok"`, `"heartbeat": "ok"`, `"mail_driver": "log"`, `"payment_provider": "sandbox"`, and `"environment": "production"`. DigitalOcean App Platform is not in use. A local container named `university-portal` is still running at `http://127.0.0.1:8081` (host 8081 to container 8080).
+
+**Versions locked in `composer.lock`:** Laravel 13.35.0, Filament 5.10.0, Livewire 4.4.7. Also Pest 4.7.8, Larastan 3.12.3, Pint 1.32.1, Excel 4.0.3, Dompdf 3.1.2. `composer.json` requires PHP `^8.4`; the lockfile needs PHP 8.4.1 or newer. This machine's CLI is PHP 8.5.10. GitHub Actions and the production image use PHP 8.4.
+
+**Check commands:** `composer lint` (Pint), `composer analyse` (Larastan), `composer test` (Pest), and `composer check` (all three). On 07 October 2026, `composer check` passed: Pint passed, Larastan reported 0 errors, Pest passed 32 tests and 189 assertions. GitHub CI on `d5fc5c0` is green for Pint, Larastan, Pest, Dependency audit, and Frontend build: https://github.com/plexxypc/universityportalprototype/actions/runs/37689062914.
 
 Two changes since the first Laravel rewrite: (1) **Paystack is out; payments use Remita and/or Interswitch (Quickteller)** behind a provider-neutral gateway with a Demo Gateway (ADR-023); (2) **capacity target: about 150 students now, up to 1,000 supported on launch infrastructure, expansion planned beyond about 2,000** (ADR-024).
 
@@ -25,41 +31,19 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 - TEST_PLAN.md
 - SECURITY.md
 - SYSTEM_OVERVIEW.md
+- Phase 1 in the repository: TASK-008 through TASK-018
+- Live demo on Render with Aiven MySQL: `https://universityportalprototype.onrender.com`
 
 ## Current Task
 
-**TASK-018** is documented and the same image was checked locally. `docs/DEPLOYMENT.md` section 9 is the Render fallback: one Docker web service from this repository, free instance, the section 1 environment variables, and health check path `/up`. `render.yaml` uses plan `free` and marks secrets, the Aiven connection, `APP_KEY`, `APP_URL`, and `RUN_MIGRATIONS` as `sync: false`. It does not set `PORT`. A separate container of `university-portal:local` with `PORT=10000` listened with `listen 10000;`, returned HTTP 200 from `/up` on that port, refused port 8080, and returned `/health` with `"database": "ok"` and `"heartbeat": "ok"`. That container was removed afterwards. No Render account was used, so the live service is not created (TASK-007). The existing `university-portal` container on host port 8081 was left running.
+**TASK-019** (Phase 2): theme the Filament staff panel with the design tokens, Inter, a logo from settings, and role-aware navigation groups.
 
-**TASK-017 (part 1)** is the deployment write-up in `docs/DEPLOYMENT.md`, plus a boot fix for flattened Aiven CA text. `docker/entrypoint.sh` rebuilds `DB_SSL_CA` when line breaks were removed, replaced with spaces, or stored as literal `\n`, writes a normal PEM, and refuses anything that is not a certificate without logging the value. `tests/Unit/MysqlCaEntrypointTest.php` covers that. The doc tells the first deploy to use `APP_URL=https://pending.example.com`, then the real hostname, and to check the instance price and set a spending alert first. The flattened-CA boot in the checks below is the local proof of the rebuild. The app has not been created in DigitalOcean or Aiven yet. TASK-017 stays open until that deploy is done.
-
-Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `RULES.md`, `TASKS.md`, `DECISIONS.md`, `MEMORY.md`, `TEST_PLAN.md`, `SECURITY.md`, and `SYSTEM_OVERVIEW.md`. `docs/starter.md.txt` is the session starter. `.cursor/rules` has `backend.mdc`, `testing.mdc`, `general.mdc`, and `frontend.mdc`.
-
-**Checked on this machine, 07 October 2026:**
-
-- `composer check`: Pint passed, Larastan passed with 0 errors, Pest passed 32 tests and 189 assertions.
-- `npm run build`: the Vite production build finished in 25.47s.
-- `docker build -f docker/Dockerfile -t university-portal:local .` finished and tagged `university-portal:local`.
-- Container `university-portal-check` joined `universityportalprototype_default` with `DB_HOST=mysql` and was published on host port 8082. `http://127.0.0.1:8082/up` returned HTTP 200. `/health` returned HTTP 200 with `"database":"ok"` and `"heartbeat":"ok"`. Docker reported the container healthy. The entrypoint log showed the config, route, and view caches, `Scheduler heartbeat recorded.`, and supervisord starting php-fpm, nginx, the queue worker, and the scheduler. It had no error, refusal, or exception line.
-- A second boot used a one-day throwaway certificate whose line breaks had been replaced with spaces. The log line was `Database CA certificate written (1 block(s)).` The log did not contain the certificate. The private key and the certificate file were deleted. No real CA was used.
-
-**TASK-016** is implemented and awaiting review. `/up` stays Laravel's built-in health route. `/health` is registered outside the web middleware group, allows 60 requests per minute per forwarded client IP using the file cache (so a database failure cannot turn the probe into an error page), and returns coarse JSON with `Cache-Control: no-store, private`. The database probe opens its own PDO with a 3-second connect timeout and does not change the shared MySQL connection. `portal:heartbeat` stores the current time every minute, and the container entrypoint runs it once at startup. A database failure or a heartbeat older than 2 minutes returns HTTP 503 with status `degraded`. That heartbeat shows the scheduler ran recently. It does not show that the queue worker is consuming jobs. Phase 5 notes a queue-backlog check once the email outbox exists. `APP_VERSION` is optional. The checks in this section are the verification for this task.
-
-**TASK-015** is implemented and awaiting review. `docker/Dockerfile` is a three-stage image: Node builds Vite assets, Composer installs production dependencies with optimised autoloading, and the final stage runs nginx, php-fpm, `queue:work`, and `schedule:work` under supervisor as `www-data`. The container listens on `PORT` (default 8080). The entrypoint writes `DB_SSL_CA` certificate text to `storage/app/certs/mysql-ca.pem` when provided, caches config, routes, and views, links storage, and runs `php artisan migrate --force` only when `RUN_MIGRATIONS=true`. Outside `local` it refuses to start when `APP_DEBUG` is not `false` or `APP_KEY`, `APP_URL`, or the MySQL settings are missing. Upload limits are 8 MB in nginx and PHP. Opcache is on for php-fpm, version headers are hidden, and the load balancer is trusted for HTTPS and client IP. The image is PHP 8.4 because `composer.lock` (Symfony 8.1) requires PHP 8.4.1 or newer. The checks in this section are the verification for this image. Host port 8080 was already taken by another project's `cbt-preview-1`, so the new container was published on host port 8082.
-
-**TASK-014** is written and stays open until GitHub CI is green on `phase-1-setup`. The workflow name is CI. Job names for required checks are Pint, Larastan, Pest, Dependency audit, and Frontend build. Actions are pinned to `actions/checkout` v7.0.1 (`3d3c42e5aac5ba805825da76410c181273ba90b1`), `actions/setup-node` v7.0.0 (`820762786026740c76f36085b0efc47a31fe5020`), and `shivammathur/setup-php` 2.37.2 (`f3e473d116dcccaddc5834248c87452386958240`). PHP 8.4 and Composer 2.10.3. Node 22. Pest uses throwaway MySQL user `portal` / password `portal` on `university_portal_testing`, matching `phpunit.xml`. No current Pest test renders a page that needs Vite: `tests/Feature/ExampleTest.php` hits `/`, and `welcome.blade.php` calls `@vite` only when `public/build/manifest.json` or `public/hot` exists (both gitignored). `tests/Feature/DesignPreviewTest.php` expects 404 because `/design-preview` is registered only when `APP_ENV=local`, so `layouts/app.blade.php` (unconditional `@vite`) is not rendered. `composer audit` on this lockfile exited 0. `npm audit --audit-level=high` exited 1.
-
-**TASK-013** hygiene is in the initial commit and awaiting review. `.gitignore` ignores env files (except `.env.example`), dependencies, build output, local storage and logs, IDE folders, and Docker data directories. The `.cursor` folder and documentation stay tracked. `.editorconfig` uses 4 spaces for PHP and 2 for JS, CSS, and YAML. `.github/pull_request_template.md` is the pull-request checklist. The README Contributing section points at `RULES.md` for `type(scope): summary` with the task id in the body. `.env` is ignored and holds the local `APP_KEY`; it is not in the index. Branch protection for `main` is not done. Work continues on `phase-1-setup`.
-
-**TASK-012** is implemented and awaiting review. `.env.example` lists the ARCHITECTURE.md section 9 variables with placeholders. `compose.dev.yaml` runs MySQL 8.0 with a persistent volume, app database `university_portal`, and test database `university_portal_testing` (user `portal`, password `portal`). `DB_SSL_CA` is optional: a file path or certificate text (text is written to `storage/app/certs/mysql-ca.pem` on boot). Sessions, cache, and the queue use the database. Existing skeleton migrations created `sessions`, `password_reset_tokens`, `cache`, `cache_locks`, `jobs`, `job_batches`, and `failed_jobs` on both databases. `config/portal.php` holds institution placeholders, upload limits, and capacity placeholders. Outside `local`, boot fails if `APP_KEY`, `APP_URL`, or MySQL settings are missing, if `DB_CONNECTION` is not `mysql`, or if `APP_DEBUG` is true. The session cookie is HttpOnly, SameSite=Lax, and Secure when `APP_ENV` is not `local`. `composer check` passed (16 tests) against `university_portal_testing`.
-
-**TASK-011** is implemented and awaiting review. Empty service classes, status and role enums, and `Money`, `Dates`, and `CsvSafe` placeholders are in place. Student and staff route files use the `web` middleware group. `routes/webhooks.php` is loaded outside that group. The non-Filament staff placeholder is `GET /staff/downloads/ping`, so it does not take Filament's `/staff` panel. No models, migrations, or controller logic were added.
-
-**TASK-010** is implemented and awaiting review. The staff Filament panel is the default panel at `/staff`, with Filament's own login at `/staff/login`. No Filament user was created. Theme stays at Filament's default amber until TASK-019. Resource discovery points at `app/Filament/Staff/`. Pest 4 runs the existing PHPUnit tests. Pint uses the Laravel preset. Larastan is level 5 in `phpstan.neon`. Commands: `composer lint`, `composer analyse`, `composer test`, `composer check`. PHPUnit is locked at 12.5.33 because Pest 4.7.8 conflicts with any newer 12.5 patch. TASK-009 remains uncommitted. Phase 0 account setup (TASK-001 to TASK-007) is still open. The TASK-008 skeleton commit has not been made.
+Still open from Phase 0, and not blockers for the layout work: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 
 ## Key Decisions in Force
 
 - Stack: Laravel (PHP 8.4+), Filament staff panel, Blade + Livewire student portal, Tailwind, MySQL 8, Pest. `composer.lock` requires PHP 8.4.1 or newer.
-- Demo hosting: DigitalOcean App Platform (Docker) + Aiven free MySQL on DigitalOcean, same region. Fallback: Render free.
+- Demo hosting: Render free web service plus Aiven MySQL. DigitalOcean App Platform remains the documented alternative; the owner said not to pursue it for this demo.
 - Production: paid, always-on host, HA database, same region; recommended start is DigitalOcean Europe; decide with the institution after data-residency advice (ADR-022).
 - CBT engine: no integration of any kind (ADR-004).
 - No public student registration; students are imported or added by staff; login by matric number + emailed temporary password (ADR-005, 007, 008).
@@ -71,26 +55,29 @@ Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, 
 
 | Item | Needed for | Status |
 |---|---|---|
-| GitHub repository | TASK-001 | Private repo `plexxypc/universityportalprototype`. `gh` 2.102.0 is logged in as `plexxypc`. Branch protection and secret scanning need GitHub Pro on a private repo. |
-| DigitalOcean account | TASK-002 | Pending |
-| Aiven account + free MySQL on DigitalOcean + CA certificate | TASK-003 | Pending |
+| GitHub repository | TASK-001 | Public repo `plexxypc/universityportalprototype`. The owner said not to protect `main`. |
+| DigitalOcean account | TASK-002 | Not in use. The owner said not to pursue this production host. |
+| Aiven account + free MySQL + CA certificate | TASK-003 | Connected. The live `/health` check reports the database ok. Host, user, and password stay in the Render dashboard. |
 | Which payment provider the institution uses or requires (Remita or Interswitch) and sandbox/demo credentials | TASK-004 | **Open question for the bursary**; Demo Gateway works without it |
 | Agreement with the institution on capacity targets (300 concurrent users, 2-second p95) | PRD §13.1, load-test task | Proposed, needs agreement |
 | Brevo account + verified sender | TASK-005 | Optional (log mailer works without it) |
 | Demo institution name, code, logo | TASK-006 | Placeholder acceptable |
-| Render account (fallback host) | TASK-007 | Optional |
-| Confirm Aiven free tier region availability on DigitalOcean | TASK-003 | Check in Aiven console |
+| Render account (demo host) | TASK-007 | Live at `https://universityportalprototype.onrender.com` |
 
 ## Known limitations
 
-- Branch protection is unavailable on this private repo without a paid GitHub plan; until then, merges to main happen only through pull requests with all five checks green.
+- `main` is not branch-protected. The owner made the repository public and said not to add that protection. Anyone can open the repository. Secrets stay in the Render dashboard and in the ignored `.env`.
 
 ## Known Issues
 
-- PHP 8.5.10 (winget `PHP.PHP.8.5`) is on the user `PATH`. `ext-intl`, `ext-gd`, and `ext-pdo_mysql` are enabled in that PHP's `php.ini`. `pdo_mysql` was commented out until TASK-012. Composer 2.10.3 is `%LOCALAPPDATA%\Composer\composer.bat`. A new terminal is required before `composer` is on `PATH`.
-- Docker Desktop's engine was stopped. TASK-012 started Docker Desktop so `compose.dev.yaml` could run. The engine must be running before `php artisan migrate` or `composer test`.
-- `.gitignore` no longer ignores `.cursor`. The whole folder, including the project documents, can be committed. `.env` stays ignored.
-- The first GitHub CI run on `phase-1-setup` (run 37623461522) failed because CI used PHP 8.3.35 while Symfony 8.1 in the lockfile requires PHP 8.4.1 or newer, and because `npm audit` reported critical GHSA-pqg4-j6r4-53mv in `shell-quote` 1.9.0. The working tree now sets CI and `composer.json` to PHP 8.4 and overrides `shell-quote` to 1.12.0. Local `npm audit --audit-level=high` exited 0. That fix is not on GitHub yet, so TASK-014 stays open.
+- The live `/health` payload reports `"payment_provider": "sandbox"`. The documented demo setting is `demo`.
+- `main` does not contain Phase 1 past the skeleton. Day-to-day work stays on `phase-1-setup` until that branch is merged. The Render service was built from the branch that contains `docker/Dockerfile`.
+- PHP 8.5.10 is on the user `PATH`. CI and `docker/Dockerfile` use PHP 8.4 because `composer.lock` requires 8.4.1 or newer. `ext-intl`, `ext-gd`, and `ext-pdo_mysql` are enabled. Composer 2.10.3 is `%LOCALAPPDATA%\Composer\composer.bat`.
+- Pest needs MySQL from `compose.dev.yaml` (`university_portal_testing`, user `portal`, password `portal`). Docker Desktop has to be running before `composer test` or `composer check`.
+- `/health` reports a scheduler heartbeat. It does not show that the queue worker is consuming jobs. A queue-backlog check waits until the email outbox exists (Phase 5, TASK-047).
+- The Pest job in `.github/workflows/ci.yml` still uploads a temporary JUnit artifact and widens `COLUMNS` so a past `file_get_contents` warning could be read. CI is green with that step in place.
+- Host port 8080 is taken by another project's `cbt-preview-1`. The local portal container uses host port 8081.
+- `.gitignore` does not ignore `.cursor`. `.env` stays ignored.
 
 ## Risks to Watch
 
@@ -105,7 +92,7 @@ Project markdown now lives at the repository root: `PRD.md`, `ARCHITECTURE.md`, 
 
 ## Next Step
 
-Continue on `phase-1-setup`. TASK-018’s Render guide and local `PORT=10000` boot check are done. The live Render service waits on a Render account (TASK-007). `phpunit.xml` now sets `$_SERVER` `APP_ENV=testing` and `APP_DEBUG=false` so Pest sees `testing` while the CI job env stays `local` for `config:clear`. A temporary JUnit artifact is on the Pest job so the full warning text can be read. TASK-014 stays open until GitHub CI is green. TASK-017 stays open until the DigitalOcean and Aiven deploy. Phase 0 accounts can proceed in parallel.
+Start Phase 2 on `phase-1-setup` with TASK-019 (Filament staff theme). `Money`, `Dates`, and `CsvSafe` are placeholders until TASK-025. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
 
 ## Session Log
 
@@ -132,3 +119,5 @@ Continue on `phase-1-setup`. TASK-018’s Render guide and local `PORT=10000` bo
 | 07 Oct 2026 | CI run 37623461522 failed on PHP 8.3 versus the Symfony 8.1 lockfile, and on critical `shell-quote` 1.9.0. CI and `composer.json` now require PHP 8.4. `package.json` overrides `shell-quote` to 1.12.0. Local `npm audit --audit-level=high` exited 0. `composer check` passed (32 tests). Not pushed. |
 | 07 Oct 2026 | TASK-018: Render fallback in `docs/DEPLOYMENT.md` section 9 and `render.yaml` (free Docker web service, secrets left for the dashboard, health check `/up`). Local image with `PORT=10000` served `/up` and `/health`. No application code changed. `composer check` passed (32 tests, 189 assertions). No Render account, so the live service was not created. |
 | 07 Oct 2026 | Pest CI saw `APP_ENV=local` because Laravel reads `$_SERVER` before PHPUnit’s forced env. `phpunit.xml` now also sets those server variables to `testing` and `APP_DEBUG=false`. The CI job env stays `local`. Local run with `APP_ENV=local` and `APP_DEBUG=true` passed 32 tests; `/health` reported `testing`. `composer check` with no shell overrides passed. Docs now say PHP 8.4+ because `composer.lock` requires 8.4.1 or newer. TASK-014 stays open. |
+| 07 Oct 2026 | Phase 1 wrap-up. Ticked TASK-008 to TASK-012, TASK-014, and left TASK-015, TASK-016, and TASK-018 ticked. Left TASK-013 and TASK-017 open. CI run 37689062914 on `d5fc5c0` is green. `composer check` passed (32 tests, 189 assertions). No application code changed. No public demo URL. Next task is TASK-019. |
+| 07 Oct 2026 | Owner made the GitHub repository public and waived protection of `main` (TASK-013). The live demo is Render plus Aiven MySQL at `https://universityportalprototype.onrender.com` (TASK-017). Home, `/up`, and `/health` returned HTTP 200; database and heartbeat were ok. DigitalOcean App Platform was not used. |

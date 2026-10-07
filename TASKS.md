@@ -19,27 +19,27 @@
 
 ## Phase 0: Accounts and prerequisites (owner)
 
-- [ ] TASK-001 Create a private GitHub repository
+- [x] TASK-001 Create a GitHub repository. `plexxypc/universityportalprototype` exists and the owner made it public.
 - [ ] TASK-002 Create a DigitalOcean account (check for new-account credit) and note billing requirements
-- [ ] TASK-003 Create an Aiven account and a **free MySQL** service on DigitalOcean in the region nearest the planned app region; download the CA certificate; note host, port, user, password
+- [x] TASK-003 Create an Aiven account and a **free MySQL** service; download the CA certificate; note host, port, user, password. The Render app is connected to this database (`/health` reports `"database": "ok"`).
 - [ ] TASK-004 Ask the institution's bursary which payment provider they use or must use (**Remita** or **Interswitch/Quickteller**); request sandbox/demo credentials and start live merchant onboarding (the Demo Gateway works without them)
 - [ ] TASK-005 Create a Brevo account, verify a sender email address, create an API key or SMTP credentials (optional; the log mailer works without them)
 - [ ] TASK-006 Choose demo institution name, short code and a placeholder logo
-- [ ] TASK-007 (Fallback) Create a Render account for the free web service host
+- [x] TASK-007 (Fallback) Create a Render account for the free web service host. The service is live at `https://universityportalprototype.onrender.com`.
 
 ## Phase 1: Project setup
 
-- [ ] TASK-008 Create the Laravel project (PHP 8.3+), commit the initial skeleton
-- [ ] TASK-009 Install and configure Tailwind via Vite; set design tokens from DESIGN.md (colours, Inter self-hosted, radius)
-- [ ] TASK-010 Install Livewire, Filament (staff panel at `/staff`), Pest, Larastan, Pint, `maatwebsite/excel`, `barryvdh/laravel-dompdf`
-- [ ] TASK-011 Create the folder structure from ARCHITECTURE.md §4 (empty service classes, enums, support classes)
-- [ ] TASK-012 Configure environments: `.env.example`, MySQL over TLS option (`DB_SSL_CA`), database sessions/cache/queue
-- [ ] TASK-013 Git setup: `.gitignore`, conventional commits, protect `main`
-- [ ] TASK-014 GitHub Actions CI: Pint, Larastan, Pest (against MySQL service), Composer and npm audit, frontend build
+- [x] TASK-008 Create the Laravel project (PHP 8.3+), commit the initial skeleton
+- [x] TASK-009 Install and configure Tailwind via Vite; set design tokens from DESIGN.md (colours, Inter self-hosted, radius)
+- [x] TASK-010 Install Livewire, Filament (staff panel at `/staff`), Pest, Larastan, Pint, `maatwebsite/excel`, `barryvdh/laravel-dompdf`
+- [x] TASK-011 Create the folder structure from ARCHITECTURE.md §4 (empty service classes, enums, support classes)
+- [x] TASK-012 Configure environments: `.env.example`, MySQL over TLS option (`DB_SSL_CA`), database sessions/cache/queue
+- [x] TASK-013 Git setup: `.gitignore`, conventional commits, protect `main`. Ignore rules, EditorConfig, the pull-request checklist, and the commit style are in the repository. The repository is public. The owner said not to protect `main`.
+- [x] TASK-014 GitHub Actions CI: Pint, Larastan, Pest (against MySQL service), Composer and npm audit, frontend build. Green on `phase-1-setup` at `d5fc5c0` (run 37689062914).
 - [x] TASK-015 Docker: Dockerfile, nginx config, supervisor (php-fpm, queue worker, scheduler), entrypoint
 - [x] TASK-016 Health endpoints `/up` and `/health` (database, queue heartbeat, mail/payment config status)
-- [ ] TASK-017 **First deployment** to DigitalOcean App Platform with Aiven MySQL (health page only) to catch hosting problems early. The guide is written in `docs/DEPLOYMENT.md`. The deployment itself is pending.
-- [x] TASK-018 Document the fallback deployment to Render and verify it boots with the same image. The guide is section 9 of `docs/DEPLOYMENT.md`, with `render.yaml` for the free Docker web service. A local boot with `PORT=10000` served `/up` and `/health`. The live Render service is still not created (TASK-007).
+- [x] TASK-017 **First deployment** with Aiven MySQL (health page only) to catch hosting problems early. The live app is Render, not DigitalOcean App Platform: `https://universityportalprototype.onrender.com`. The Laravel home page, `/up`, and `/health` returned HTTP 200. `/health` reported `"database": "ok"` and `"heartbeat": "ok"`.
+- [x] TASK-018 Document the fallback deployment to Render and verify it boots with the same image. The guide is section 9 of `docs/DEPLOYMENT.md`, with `render.yaml` for the free Docker web service. A local boot with `PORT=10000` served `/up` and `/health`. The live service is `https://universityportalprototype.onrender.com`.
 
 ## Phase 2: Layout and shared UI
 
