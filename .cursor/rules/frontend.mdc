@@ -1,0 +1,18 @@
+---
+description: UI rules for Blade, Livewire and Filament
+globs: resources/views/**,app/Livewire/**,app/Filament/**,resources/css/**,resources/js/**
+alwaysApply: false
+---
+
+# Frontend
+
+- Follow DESIGN.md: Inter, colour tokens, 12px card radius, button variants, status badge mapping.
+- Reuse Blade components in resources/views/components; do not restyle primitives per page.
+- Views, Livewire components and Filament resources contain NO business logic. Creating, changing, approving, publishing, paying or importing goes through a Service in app/Services.
+- Authorise in every Livewire action; never trust public component properties holding ids. In student-facing code derive the student from auth()->user()->student, never from input.
+- Every data view needs a loading state, an empty state and an error state.
+- Forms: visible labels, error messages linked to fields, keyboard operable; validate with Livewire rules or Form Requests.
+- Destructive or irreversible actions require a confirmation dialog.
+- Responsive at 375px, 768px and 1440px; tables become cards under 768px.
+- Never hard-code the university name, logo or colours; use institution settings and design tokens.
+- Escape output; never use {!! !!} with user data.

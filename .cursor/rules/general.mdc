@@ -1,0 +1,18 @@
+---
+description: Project-wide rules for the University Management Portal (Laravel)
+alwaysApply: true
+---
+
+# General
+
+- Before any task, read MEMORY.md and the current task in TASKS.md, then the relevant parts of PRD.md, ARCHITECTURE.md, DESIGN.md and SECURITY.md.
+- Check DECISIONS.md before changing technology or structure. Do not override an ADR without adding a new one.
+- Work on ONE task at a time. Never build large features in one step.
+- PHP 8.3+, `declare(strict_types=1);`, full type declarations. Follow Laravel conventions.
+- Reuse existing classes and components. Do not duplicate logic. Keep methods small.
+- Do not modify unrelated files.
+- NEVER add any CBT-engine integration, link, client, route or env variable (ADR-004).
+- Money is unsigned integer kobo; display only through App\Support\Money.
+- Make a plan before changes touching more than three files or any migration.
+- Small commits: `type(scope): summary`, referencing the TASK id.
+- After finishing: run Pint, static analysis and Pest; update TASKS.md and MEMORY.md.
