@@ -217,3 +217,13 @@
 **Reason:** Matches the institution's commitment while keeping cost proportionate. Treating the promise as a measured result protects the owner from an untestable guarantee.
 
 **Consequences:** Tier 1 uses a single application server with a managed database. Monitoring thresholds must be set up from launch. Moving to Tier 2 or 3 is an infrastructure change, not a rewrite.
+
+## ADR-025: Application timezone is Africa/Lagos
+
+**Status:** Accepted.
+
+**Decision:** `config('app.timezone')` is `Africa/Lagos` (`APP_TIMEZONE` in `.env.example`). `App\Support\Dates` always displays that zone. A value that already carries a timezone, including UTC, is converted. A naive string is interpreted in an explicit source timezone, or in the application timezone when none is given, and is not shifted a second time.
+
+**Reason:** The portal serves a Nigerian university. West Africa Time has no daylight saving, so one zone keeps stored clock times and displayed clock times the same. UTC instants still display as Lagos local time.
+
+**Consequences:** Datetimes written by Laravel are Lagos wall time. Callers that hold a UTC clock time must pass a UTC `DateTimeInterface` or set the source timezone. Do not change `APP_TIMEZONE` to UTC without a new ADR.

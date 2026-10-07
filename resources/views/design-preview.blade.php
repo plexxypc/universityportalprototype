@@ -106,4 +106,23 @@
             <p class="mt-space-8 text-small font-normal text-muted">Buttons and inputs use an 8px radius. This card uses 12px.</p>
         </div>
     </section>
+
+    <section class="mb-space-48 max-w-full" aria-labelledby="helpers-heading">
+        <h2 id="helpers-heading" class="mb-space-16 text-h2 font-semibold">Money, dates and CSV</h2>
+        <div class="max-w-full rounded-card border border-border bg-surface p-space-16 shadow-sm sm:p-space-24">
+            <p class="text-body font-normal">Amount <x-money :kobo="12500000" /></p>
+            <p class="mt-space-8 text-body font-normal">Zero <x-money :kobo="0" /></p>
+            <p class="mt-space-8 text-body font-normal">
+                Date
+                <x-date value="2026-10-05" source-timezone="Africa/Lagos" />
+            </p>
+            <p class="mt-space-8 text-body font-normal">
+                Date and time
+                <x-date value="2026-10-05 14:30:00" mode="datetime" source-timezone="Africa/Lagos" />
+            </p>
+            <p class="mt-space-8 text-body font-normal">Missing <x-date :value="null" /></p>
+            <p class="mt-space-8 font-mono text-mono font-medium">CSV {{ \App\Support\CsvSafe::cell('=1+1') }}</p>
+            <p class="mt-space-8 text-small font-normal text-muted">Amounts are integer kobo. Dates use Africa/Lagos. A formula-like export cell starts with an apostrophe.</p>
+        </div>
+    </section>
 @endsection
