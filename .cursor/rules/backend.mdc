@@ -1,0 +1,19 @@
+---
+description: Services, models, database, security and integrations
+globs: app/Services/**,app/Models/**,app/Http/**,app/Policies/**,app/Support/**,app/Jobs/**,database/**,routes/**,config/**
+alwaysApply: false
+---
+
+# Backend
+
+- Layering: entry point (controller / Livewire / Filament action) -> validate -> authorise (Policy) -> Service -> Eloquent -> MySQL.
+- Database operations and business rules belong in app/Services. Entry points stay thin.
+- Multi-step writes use DB::transaction(); use lockForUpdate() for money, matric numbers and result publication.
+- Authorise every action and every route that takes an id. Use visibleTo() scopes for staff lists.
+- Payments: use only the PaymentGateway interface (Remita, Interswitch, Demo; no Paystack). Never trust redirects, callbacks or notification bodies; they only trigger a re-query. Check status/amount/currency/reference, settle idempotently in a transaction with lockForUpdate. Pending payments are polled and expire.
+- Imports: validate every row, chunk commits (25 rows), be idempotent, guard Google Sheet fetches (host allow-list, size/time limits, no cross-host redirects).
+- Email only through MailService (outbox + queue). Providers only through their interface/adapter.
+- Schema changes only via new migrations; never edit an applied migration. Add indexes and foreign keys.
+- Use $fillable allow-lists, bound parameters, enums for statuses/roles. Eager-load to avoid N+1.
+- Write audit entries and enqueue emails inside the service that performs the action.
+- Never log passwords, tokens, keys or provider secrets.

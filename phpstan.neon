@@ -1,0 +1,10 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    # Level 5 is the moderate starting point (0 is weakest, 9 is strictest).
+    # Raise this toward 9 as the codebase settles.
+    level: 5
+
+    paths:
+        - app

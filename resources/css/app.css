@@ -1,0 +1,102 @@
+@import 'tailwindcss';
+
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/inter/latin-ext-400.css';
+@import '@fontsource/inter/latin-ext-500.css';
+@import '@fontsource/inter/latin-ext-600.css';
+@import '@fontsource/inter/latin-ext-700.css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+
+/*
+ * Design tokens. This file is the only place colours, type, radius and
+ * spacing are defined. Tailwind utilities read these variables.
+ *
+ * Do not use --color-primary (#6366F1) as a background for white text.
+ * Primary actions use --color-primary-600.
+ */
+
+@theme {
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+    --color-primary: #6366f1;
+    --color-primary-600: #4f46e5;
+    --color-primary-700: #4338ca;
+    --color-primary-50: #eef2ff;
+    --color-background: #f8fafc;
+    --color-surface: #ffffff;
+    --color-text: #0f172a;
+    --color-muted: #64748b;
+    --color-border: #e2e8f0;
+    --color-destructive: #dc2626;
+    --color-destructive-hover: #b91c1c;
+
+    --color-success-text: #166534;
+    --color-success-bg: #dcfce7;
+    --color-warning-text: #92400e;
+    --color-warning-bg: #fef3c7;
+    --color-danger-text: #991b1b;
+    --color-danger-bg: #fee2e2;
+    --color-info-text: #3730a3;
+    --color-info-bg: #e0e7ff;
+    --color-neutral-text: #334155;
+    --color-neutral-bg: #f1f5f9;
+
+    --radius-card: 12px;
+    --radius-dialog: 12px;
+    --radius-control: 8px;
+    --radius-badge: 9999px;
+
+    /*
+     * Named spacing. The numeric Tailwind scale is unchanged:
+     * 4px = 1, 8px = 2, 12px = 3, 16px = 4, 24px = 6, 32px = 8, 48px = 12.
+     */
+    --spacing-space-4: 4px;
+    --spacing-space-8: 8px;
+    --spacing-space-12: 12px;
+    --spacing-space-16: 16px;
+    --spacing-space-24: 24px;
+    --spacing-space-32: 32px;
+    --spacing-space-48: 48px;
+    --spacing-page-mobile: 16px;
+    --spacing-page-tablet: 24px;
+    --spacing-page-desktop: 32px;
+
+    --container-content: 1280px;
+
+    --text-display: 30px;
+    --text-display--line-height: 38px;
+    --text-h1: 24px;
+    --text-h1--line-height: 32px;
+    --text-h2: 20px;
+    --text-h2--line-height: 28px;
+    --text-h3: 16px;
+    --text-h3--line-height: 24px;
+    --text-body: 14px;
+    --text-body--line-height: 22px;
+    --text-small: 12px;
+    --text-small--line-height: 18px;
+    --text-mono: 13px;
+    --text-mono--line-height: 20px;
+    --text-input: 16px;
+    --text-input--line-height: 24px;
+}
+
+@layer base {
+    html {
+        overflow-x: hidden;
+    }
+
+    body {
+        overflow-x: hidden;
+        background-color: var(--color-background);
+        color: var(--color-text);
+        font-family: var(--font-sans);
+    }
+}

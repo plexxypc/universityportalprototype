@@ -1,0 +1,15 @@
+---
+description: Testing rules (Pest)
+globs: tests/**
+alwaysApply: false
+---
+
+# Testing
+
+- Use Pest. Unit tests for pure logic (grading, GPA/CGPA, Money, CsvSafe); feature/Livewire tests for flows, policies and services.
+- Always test: cross-student isolation, cross-scope staff access, forged callback/notification, duplicate callbacks, payment still pending then confirmed, expired payment, amount mismatch, expired temporary password, import duplicates and re-runs, concurrent matric generation.
+- Use factories and fictional data only; never real student data.
+- Keep tests deterministic and independent (RefreshDatabase). CI runs against MySQL.
+- Run the full relevant suite after each task; fix failures before continuing.
+- Tick the matching items in TEST_PLAN.md before marking a task complete.
+- Bug fixes include a regression test where practical.

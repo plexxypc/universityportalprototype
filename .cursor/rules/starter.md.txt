@@ -1,0 +1,10 @@
+Read RULES.md, MEMORY.md and the current task in TASKS.md before doing anything.
+This is a Laravel (PHP 8.3+) + Filament + Livewire + MySQL project. Follow ARCHITECTURE.md, DECISIONS.md, SECURITY.md and DESIGN.md where relevant.
+Rules for this session:
+- Do ONLY the task I give you. Do not start later tasks and do not build university features yet.
+- If the task touches more than 3 files or changes the database, show me a short plan first and wait for my approval.
+- Do not add packages that are not listed in the task or ARCHITECTURE.md without asking.
+- Never add anything related to a CBT engine.
+- Never put secrets in files that are committed.
+- When finished: run the project's checks, list every file you created or changed, say what I should verify manually, and propose a commit message. Do not commit unless I ask.
+My operating system is: [WINDOWS / MACOS / LINUX]. Give me exact commands for my system whenever I need to run something myself.
