@@ -35,10 +35,10 @@
 - [ ] TASK-011 Create the folder structure from ARCHITECTURE.md §4 (empty service classes, enums, support classes)
 - [ ] TASK-012 Configure environments: `.env.example`, MySQL over TLS option (`DB_SSL_CA`), database sessions/cache/queue
 - [ ] TASK-013 Git setup: `.gitignore`, conventional commits, protect `main`
-- [ ] TASK-014 GitHub Actions CI: Pint, Larastan, Pest (against MySQL service), composer audit
-- [ ] TASK-015 Docker: Dockerfile, nginx config, supervisor (php-fpm, queue worker, scheduler), entrypoint
-- [ ] TASK-016 Health endpoints `/up` and `/health` (database, queue heartbeat, mail/payment config status)
-- [ ] TASK-017 **First deployment** to DigitalOcean App Platform with Aiven MySQL (health page only) to catch hosting problems early
+- [ ] TASK-014 GitHub Actions CI: Pint, Larastan, Pest (against MySQL service), Composer and npm audit, frontend build
+- [x] TASK-015 Docker: Dockerfile, nginx config, supervisor (php-fpm, queue worker, scheduler), entrypoint
+- [x] TASK-016 Health endpoints `/up` and `/health` (database, queue heartbeat, mail/payment config status)
+- [ ] TASK-017 **First deployment** to DigitalOcean App Platform with Aiven MySQL (health page only) to catch hosting problems early. The guide is written in `docs/DEPLOYMENT.md`. The deployment itself is pending.
 - [ ] TASK-018 Document the fallback deployment to Render and verify it boots with the same image
 
 ## Phase 2: Layout and shared UI
@@ -70,7 +70,7 @@
 - [ ] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
 - [ ] TASK-038 Base policies and `visibleTo()` scopes for scoped models
 - [ ] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
-- [ ] TASK-040 Login rate limiting (IP + identifier)
+- [ ] TASK-040 Login rate limiting (IP + identifier). `bootstrap/app.php` currently trusts every proxy (`at: '*'`). Revisit that when this throttle is built, because a client-supplied `X-Forwarded-For` is the address the limiter would count. See `docs/DEPLOYMENT.md`.
 - [ ] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
 - [ ] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
 - [ ] TASK-043 Logout and session expiry handling
@@ -78,6 +78,8 @@
 - [ ] TASK-045 Auth tests: login by matric and email, invalid credentials, forced change, expired temporary password, deactivated user, route protection
 
 ## Phase 5: Audit, email and notifications [MAIL-1..4, ADMIN-2]
+
+`/health` currently reports a scheduler heartbeat only. Once the email outbox exists (TASK-047), add a queue-backlog check to `/health`.
 
 - [ ] TASK-046 `AuditService` and audit helper used by every service
 - [ ] TASK-047 `MailService` with outbox recording, `SendOutboxEmail` job, retry rules; Brevo mailer configuration and `log` mailer
