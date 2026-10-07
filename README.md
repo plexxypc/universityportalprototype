@@ -1,3 +1,5 @@
+[![CI](https://github.com/plexxypc/universityportalprototype/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/plexxypc/universityportalprototype/actions/workflows/ci.yml)
+
 ## Run locally
 
 PHP 8.3+, Composer, and Docker Desktop are required. `compose.dev.yaml` is for local MySQL only.
