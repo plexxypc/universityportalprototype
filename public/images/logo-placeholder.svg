@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-hidden="true">
+    <!-- Fill matches the primary-600 token. An image file cannot read the CSS variable. -->
+    <rect width="32" height="32" rx="8" fill="#4F46E5"/>
+    <path d="M8 22.5V12.2L16 8l8 4.2v10.3" fill="none" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M12 22.5v-6h8v6" fill="none" stroke="#ffffff" stroke-width="2" stroke-linejoin="round"/>
+</svg>

@@ -13,4 +13,6 @@ if (app()->environment('local')) {
             'preview_table' => DesignPreviewTable::fromQuery(request()->query()),
         ]);
     })->name('design-preview');
+
+    Route::view('/design-preview/student', 'design-preview-student')->name('design-preview.student');
 }

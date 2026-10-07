@@ -7,7 +7,10 @@
         <p class="text-small font-normal text-muted">Local only</p>
         <h1 class="text-display font-bold">Design preview</h1>
         <p class="mt-space-8 max-w-full text-body font-normal text-muted">
-            Colour, type, radius and plain controls from the design tokens.
+            Colour, type, radius and shared components from the design tokens.
+        </p>
+        <p class="mt-space-12">
+            <x-button variant="link" href="{{ url('/design-preview/student') }}">Student layout sample</x-button>
         </p>
     </header>
 
