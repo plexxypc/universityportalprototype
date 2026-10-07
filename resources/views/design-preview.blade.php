@@ -118,6 +118,76 @@
         </div>
     </section>
 
+    <section class="mb-space-48 max-w-full" aria-labelledby="display-heading">
+        <h2 id="display-heading" class="mb-space-16 text-h2 font-semibold">Display components</h2>
+        <div class="grid max-w-full gap-space-16 md:grid-cols-3">
+            <x-stat-card label="Outstanding fees" hint="Current session">
+                <x-money :kobo="12500000" />
+            </x-stat-card>
+            <x-stat-card label="Courses" hint="Registered">
+                6
+            </x-stat-card>
+            <x-stat-card label="CGPA" hint="Published results">
+                4.20
+            </x-stat-card>
+        </div>
+
+        <div class="mt-space-16">
+            <x-card title="Invoice">
+                <x-slot:actions>
+                    <x-button size="small" variant="secondary">Export</x-button>
+                </x-slot:actions>
+                <p class="text-body font-normal">Balance <x-money :kobo="5000000" /></p>
+            </x-card>
+        </div>
+
+        <div class="mt-space-16 flex max-w-full flex-col gap-space-12">
+            @foreach ([
+                'Invoice' => \App\Enums\InvoiceStatus::cases(),
+                'Payment' => \App\Enums\PaymentStatus::cases(),
+                'Course registration' => \App\Enums\RegistrationStatus::cases(),
+                'Result' => \App\Enums\ResultStatus::cases(),
+                'Student' => \App\Enums\StudentStatus::cases(),
+                'Applicant' => \App\Enums\ApplicantStatus::cases(),
+                'Email' => \App\Enums\EmailStatus::cases(),
+                'Attendance' => \App\Enums\AttendanceStatus::cases(),
+            ] as $domain => $cases)
+                <div class="max-w-full">
+                    <h3 class="mb-space-8 text-h3 font-semibold">{{ $domain }}</h3>
+                    <div class="flex max-w-full flex-wrap gap-space-8">
+                        @foreach ($cases as $status)
+                            <x-status-badge :status="$status" />
+                        @endforeach
+                    </div>
+                </div>
+            @endforeach
+        </div>
+
+        <div class="mt-space-16">
+            <x-tabs :tabs="['profile' => 'Profile', 'fees' => 'Fees']" label="Record sections">
+                <div role="tabpanel" id="panel-profile" aria-labelledby="tab-profile" x-show="selected === 'profile'">
+                    <p class="text-body font-normal">Profile details stay on this panel.</p>
+                </div>
+                <div role="tabpanel" id="panel-fees" aria-labelledby="tab-fees" x-show="selected === 'fees'" x-cloak>
+                    <p class="text-body font-normal">Fees for this session.</p>
+                </div>
+            </x-tabs>
+        </div>
+
+        <div class="mt-space-16 flex max-w-full flex-wrap items-start gap-space-16">
+            <x-dialog id="preview-dialog" title="Receipt">
+                <x-slot:trigger>
+                    <x-button type="button" x-on:click="open = true">Open dialog</x-button>
+                </x-slot:trigger>
+                <p>This receipt is ready to view. Press Escape to close it.</p>
+            </x-dialog>
+            <x-button type="button" x-on:click="$dispatch('toast', { message: 'Payment received.' })">Show toast</x-button>
+        </div>
+        <div class="mt-space-16 max-w-full sm:max-w-sm">
+            <x-toast message="Payment received." />
+        </div>
+    </section>
+
     <section class="mb-space-48 max-w-full" aria-labelledby="helpers-heading">
         <h2 id="helpers-heading" class="mb-space-16 text-h2 font-semibold">Money, dates and CSV</h2>
         <div class="max-w-full rounded-card border border-border bg-surface p-space-16 shadow-sm sm:p-space-24">

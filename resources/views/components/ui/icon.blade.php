@@ -1,7 +1,7 @@
 @props(['name'])
 
 @php
-    $allowed = ['spinner', 'alert', 'eye', 'eye-off', 'chevron-down'];
+    $allowed = ['spinner', 'alert', 'eye', 'eye-off', 'chevron-down', 'check', 'x', 'info', 'minus'];
 
     if (! in_array($name, $allowed, true)) {
         throw new InvalidArgumentException('Unknown icon.');
@@ -33,7 +33,18 @@
         <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
         <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
         <line x1="2" x2="22" y1="2" y2="22" />
-    @else
+    @elseif ($name === 'chevron-down')
         <path d="m6 9 6 6 6-6" />
+    @elseif ($name === 'check')
+        <path d="M20 6 9 17l-5-5" />
+    @elseif ($name === 'x')
+        <path d="M18 6 6 18" />
+        <path d="m6 6 12 12" />
+    @elseif ($name === 'info')
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 16v-4" />
+        <path d="M12 8h.01" />
+    @else
+        <path d="M5 12h14" />
     @endif
 </svg>

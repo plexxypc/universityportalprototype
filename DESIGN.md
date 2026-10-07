@@ -50,7 +50,7 @@ Notes:
 | Domain | Status → badge |
 |---|---|
 | Invoice | Unpaid → Warning · Part-paid → Info · Paid → Success · Cancelled → Neutral |
-| Payment | Pending → Warning · Successful → Success · Failed → Danger · Cancelled → Neutral · Reversed → Danger |
+| Payment | Pending → Warning · Successful → Success · Failed → Danger · Cancelled → Neutral · Expired → Neutral · Reversed → Danger |
 | Course registration | Draft → Neutral · Submitted → Info · Approved → Success · Rejected → Danger |
 | Result | Draft → Neutral · Submitted → Info · Approved → Warning · Published → Success |
 | Student | Active → Success · Suspended → Danger · Deferred → Warning · Graduated → Info · Withdrawn → Neutral |
@@ -106,7 +106,7 @@ Pill, 12px text, semibold, coloured per the status mapping above.
 
 ### Dialogs, toasts, menus
 - Confirm dialogs for destructive or irreversible actions (publish results, deactivate user, re-issue credentials), stating the consequence plainly.
-- Toasts for success and non-blocking errors, auto-dismiss after 5s, dismissible, `aria-live="polite"`.
+- Toasts for success and non-blocking errors sit at the top end, use the full width at the top on phones, auto-dismiss after 5s, are dismissible, and use `aria-live="polite"`.
 
 ### Money, dates and numbers
 - Currency: `₦125,000.00` (Naira sign, thousands separators, two decimals). Convert from kobo only in the display helper.
@@ -115,7 +115,7 @@ Pill, 12px text, semibold, coloured per the status mapping above.
 - Matric numbers and references are copyable.
 
 ### Icons and charts
-- Icons: lucide-react, 16/20px, outline style, paired with text labels in navigation.
+- Icons: Lucide-style inline SVG, 16/20px, outline style, paired with text labels in navigation. Do not add the lucide-react package.
 - Charts (Filament chart widgets / Chart.js): primary `#6366F1`, secondary `#14B8A6`, tertiary `#F59E0B`; always include axis labels, tooltips and an accessible text summary or table alternative.
 
 ## 6. Key screen patterns
