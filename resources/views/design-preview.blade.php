@@ -188,6 +188,35 @@
         </div>
     </section>
 
+    <section class="mb-space-48 max-w-full" aria-labelledby="feedback-heading">
+        <h2 id="feedback-heading" class="mb-space-16 text-h2 font-semibold">Feedback</h2>
+        <div class="grid max-w-full gap-space-16">
+            <x-skeleton variant="page" />
+            <x-skeleton variant="card" />
+            <x-skeleton variant="row" />
+            <x-empty-state message="No invoices yet">
+                <x-slot:action>
+                    <x-button>Import students</x-button>
+                </x-slot:action>
+            </x-empty-state>
+            <x-error-state
+                message="We could not verify this payment yet."
+                hint="Your account has not been charged twice. Try again in a minute."
+                retry-label="Try again"
+            />
+            <x-confirm-dialog
+                id="preview-deactivate"
+                title="Deactivate student"
+                consequence="Ada will not be able to sign in or register courses."
+                confirm-label="Deactivate"
+            >
+                <x-slot:trigger>
+                    <x-button variant="destructive" type="button" x-on:click="open = true">Deactivate</x-button>
+                </x-slot:trigger>
+            </x-confirm-dialog>
+        </div>
+    </section>
+
     <section class="mb-space-48 max-w-full" aria-labelledby="helpers-heading">
         <h2 id="helpers-heading" class="mb-space-16 text-h2 font-semibold">Money, dates and CSV</h2>
         <div class="max-w-full rounded-card border border-border bg-surface p-space-16 shadow-sm sm:p-space-24">
