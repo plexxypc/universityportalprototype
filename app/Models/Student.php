@@ -124,4 +124,24 @@ class Student extends Model
     {
         return $this->hasMany(CourseRegistration::class);
     }
+
+    /**
+     * Invoices for this student.
+     *
+     * @return HasMany<Invoice, $this>
+     */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    /**
+     * Payments made by this student.
+     *
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
 }

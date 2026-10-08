@@ -78,4 +78,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(CourseRegistration::class, 'decided_by');
     }
+
+    /**
+     * Invoice reductions this account recorded.
+     *
+     * @return HasMany<InvoiceAdjustment, $this>
+     */
+    public function invoiceAdjustments(): HasMany
+    {
+        return $this->hasMany(InvoiceAdjustment::class, 'created_by');
+    }
 }

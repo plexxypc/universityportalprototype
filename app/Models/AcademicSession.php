@@ -62,4 +62,24 @@ class AcademicSession extends Model
     {
         return $this->hasMany(Student::class, 'entry_session_id');
     }
+
+    /**
+     * Fee prices for this session.
+     *
+     * @return HasMany<FeeStructure, $this>
+     */
+    public function feeStructures(): HasMany
+    {
+        return $this->hasMany(FeeStructure::class, 'session_id');
+    }
+
+    /**
+     * Invoices raised for this session.
+     *
+     * @return HasMany<Invoice, $this>
+     */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class, 'session_id');
+    }
 }

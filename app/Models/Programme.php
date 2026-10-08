@@ -59,4 +59,14 @@ class Programme extends Model
     {
         return $this->hasMany(Student::class);
     }
+
+    /**
+     * Fee prices for this programme.
+     *
+     * @return HasMany<FeeStructure, $this>
+     */
+    public function feeStructures(): HasMany
+    {
+        return $this->hasMany(FeeStructure::class);
+    }
 }
