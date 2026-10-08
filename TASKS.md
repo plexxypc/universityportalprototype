@@ -43,13 +43,13 @@
 
 ## Phase 2: Layout and shared UI
 
-- [ ] TASK-019 Theme the Filament staff panel (brand colours, Inter, logo from settings, role-aware navigation groups)
-- [ ] TASK-020 Blade form components: button variants, input, select, checkbox, textarea, field with error/help text
-- [ ] TASK-021 Blade display components: card, badge (status map from DESIGN.md), stat card, dialog, toast, tabs
-- [ ] TASK-022 Feedback components: skeleton, empty state, error state, confirm dialog
-- [ ] TASK-023 Student layout: sidebar (desktop), bottom tab bar and top bar (mobile), page header, breadcrumbs
-- [ ] TASK-024 Responsive table-to-card Blade component with server pagination
-- [ ] TASK-025 `Money`, `Dates` (Africa/Lagos), `CsvSafe` helpers with Pest unit tests
+- [x] TASK-019 Theme the Filament staff panel (brand colours, Inter, logo from settings, role-aware navigation groups). Groups follow the PRD module names. Role filtering stays in Phase 4, so empty groups stay hidden until a page is added.
+- [x] TASK-020 Blade form components: button variants, input, select, checkbox, textarea, field with error/help text
+- [x] TASK-021 Blade display components: card, badge (status map from DESIGN.md), stat card, dialog, toast, tabs
+- [x] TASK-022 Feedback components: skeleton, empty state, error state, confirm dialog
+- [x] TASK-023 Student layout: sidebar (desktop), bottom tab bar and top bar (mobile), page header, breadcrumbs
+- [x] TASK-024 Responsive table-to-card Blade component with server pagination
+- [x] TASK-025 `Money`, `Dates` (Africa/Lagos), `CsvSafe` helpers with Pest unit tests
 
 ## Phase 3: Database foundation
 

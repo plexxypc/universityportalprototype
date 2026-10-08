@@ -14,5 +14,6 @@ class DesignPreviewTest extends TestCase
     public function test_design_preview_is_not_available_outside_local(): void
     {
         $this->get('/design-preview')->assertNotFound();
+        $this->get('/design-preview/student')->assertNotFound();
     }
 }

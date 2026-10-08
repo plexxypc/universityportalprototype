@@ -176,6 +176,18 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The staff theme imports Filament CSS from vendor. That tree is not in git.
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: "8.4"
+          coverage: none
+          tools: composer:2.10.3
+          cache: composer
+
+      - name: Install Composer dependencies
+        run: composer install --no-dev --no-scripts --no-interaction --prefer-dist --no-progress
+
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:

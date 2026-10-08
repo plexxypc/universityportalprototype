@@ -17,6 +17,7 @@ return [
     'institution' => [
         'name' => 'University Portal',
         'code' => 'UNI',
+        'logo' => 'images/logo-placeholder.svg',
         'matric_pattern' => '{DEPT}/{YEAR}/{SEQ}',
         'min_units' => 15,
         'max_units' => 24,

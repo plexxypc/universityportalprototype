@@ -7,8 +7,10 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="min-h-screen overflow-x-hidden bg-background font-sans text-text antialiased">
+        <x-toast-stack />
         <div class="mx-auto w-full min-w-0 max-w-content px-page-mobile py-page-mobile md:px-page-tablet md:py-page-tablet lg:px-page-desktop lg:py-page-desktop">
             @yield('content')
         </div>
+        @livewireScripts
     </body>
 </html>

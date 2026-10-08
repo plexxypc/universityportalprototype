@@ -7,7 +7,10 @@
         <p class="text-small font-normal text-muted">Local only</p>
         <h1 class="text-display font-bold">Design preview</h1>
         <p class="mt-space-8 max-w-full text-body font-normal text-muted">
-            Colour, type, radius and plain controls from the design tokens.
+            Colour, type, radius and shared components from the design tokens.
+        </p>
+        <p class="mt-space-12">
+            <x-button variant="link" href="{{ url('/design-preview/student') }}">Student layout sample</x-button>
         </p>
     </header>
 
@@ -74,36 +77,209 @@
     </section>
 
     <section class="mb-space-48 max-w-full" aria-labelledby="controls-heading">
-        <h2 id="controls-heading" class="mb-space-16 text-h2 font-semibold">Buttons and field</h2>
+        <h2 id="controls-heading" class="mb-space-16 text-h2 font-semibold">Form components</h2>
         <div class="max-w-full rounded-card border border-border bg-surface p-space-16 shadow-sm sm:p-space-24">
+            <p class="mb-space-16 text-small font-normal text-muted">Keyboard focus uses a 2px primary ring. Hover darkens a primary button and tints secondary and ghost buttons. Check those states in the browser. On a phone, controls are at least 44px tall.</p>
             <div class="flex max-w-full flex-wrap items-center gap-space-8">
-                <button type="button" class="inline-flex h-10 items-center rounded-control bg-primary-600 px-space-16 text-body font-semibold text-white hover:bg-primary-700">
-                    Primary
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control border border-border bg-surface px-space-16 text-body font-semibold text-text">
-                    Secondary
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control px-space-16 text-body font-semibold text-text hover:bg-primary-50">
-                    Ghost
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control bg-destructive px-space-16 text-body font-semibold text-white hover:bg-destructive-hover">
-                    Destructive
-                </button>
-                <button type="button" class="inline-flex h-10 items-center rounded-control px-space-8 text-body font-semibold text-primary-600 underline-offset-2 hover:underline">
-                    Link
-                </button>
+                <x-button>Primary</x-button>
+                <x-button variant="secondary">Secondary</x-button>
+                <x-button variant="ghost">Ghost</x-button>
+                <x-button variant="destructive">Destructive</x-button>
+                <x-button variant="link" href="#controls-heading">Link</x-button>
             </div>
-            <label class="mt-space-24 block max-w-full text-body font-semibold" for="preview-name">
-                Sample field
-            </label>
-            <input
-                id="preview-name"
-                class="mt-space-8 h-10 w-full max-w-full rounded-control border border-border bg-surface px-space-12 text-input font-normal text-text outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-                type="text"
-                name="preview_name"
-                inputmode="text"
+            <div class="mt-space-16 flex max-w-full flex-wrap items-center gap-space-8">
+                <x-button size="small" variant="secondary">Small</x-button>
+                <x-button size="large">Large</x-button>
+                <x-button disabled variant="secondary">Disabled</x-button>
+                <x-button loading loading-label="Paying…">Pay now</x-button>
+            </div>
+
+            <div class="mt-space-24 grid max-w-full gap-space-16">
+                <x-field name="preview_email" label="Email address" required help="Use the address on your school record.">
+                    <x-input name="preview_email" type="email" inputmode="email" autocomplete="email" />
+                </x-field>
+                <x-field name="preview_amount" label="Amount (naira)" error="Enter an amount greater than zero.">
+                    <x-input name="preview_amount" inputmode="decimal" value="0" />
+                </x-field>
+                <x-field name="preview_password" label="Password" required>
+                    <x-password-input name="preview_password" />
+                </x-field>
+                <x-field name="preview_level" label="Level">
+                    <x-select name="preview_level">
+                        <option value="">Choose a level</option>
+                        <option value="100">100</option>
+                    </x-select>
+                </x-field>
+                <x-field name="preview_note" label="Note" help="Optional.">
+                    <x-textarea name="preview_note">Hello</x-textarea>
+                </x-field>
+                <x-checkbox name="preview_agree" label="I agree to the fee schedule" />
+                <x-field name="preview_disabled" label="Reference">
+                    <x-input name="preview_disabled" value="Read only" disabled />
+                </x-field>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-space-48 max-w-full" aria-labelledby="display-heading">
+        <h2 id="display-heading" class="mb-space-16 text-h2 font-semibold">Display components</h2>
+        <div class="grid max-w-full gap-space-16 md:grid-cols-3">
+            <x-stat-card label="Outstanding fees" hint="Current session">
+                <x-money :kobo="12500000" />
+            </x-stat-card>
+            <x-stat-card label="Courses" hint="Registered">
+                6
+            </x-stat-card>
+            <x-stat-card label="CGPA" hint="Published results">
+                4.20
+            </x-stat-card>
+        </div>
+
+        <div class="mt-space-16">
+            <x-card title="Invoice">
+                <x-slot:actions>
+                    <x-button size="small" variant="secondary">Export</x-button>
+                </x-slot:actions>
+                <p class="text-body font-normal">Balance <x-money :kobo="5000000" /></p>
+            </x-card>
+        </div>
+
+        <div class="mt-space-16 flex max-w-full flex-col gap-space-12">
+            @foreach ([
+                'Invoice' => \App\Enums\InvoiceStatus::cases(),
+                'Payment' => \App\Enums\PaymentStatus::cases(),
+                'Course registration' => \App\Enums\RegistrationStatus::cases(),
+                'Result' => \App\Enums\ResultStatus::cases(),
+                'Student' => \App\Enums\StudentStatus::cases(),
+                'Applicant' => \App\Enums\ApplicantStatus::cases(),
+                'Email' => \App\Enums\EmailStatus::cases(),
+                'Attendance' => \App\Enums\AttendanceStatus::cases(),
+            ] as $domain => $cases)
+                <div class="max-w-full">
+                    <h3 class="mb-space-8 text-h3 font-semibold">{{ $domain }}</h3>
+                    <div class="flex max-w-full flex-wrap gap-space-8">
+                        @foreach ($cases as $status)
+                            <x-status-badge :status="$status" />
+                        @endforeach
+                    </div>
+                </div>
+            @endforeach
+        </div>
+
+        <div class="mt-space-16">
+            <x-tabs :tabs="['profile' => 'Profile', 'fees' => 'Fees']" label="Record sections">
+                <div role="tabpanel" id="panel-profile" aria-labelledby="tab-profile" x-show="selected === 'profile'">
+                    <p class="text-body font-normal">Profile details stay on this panel.</p>
+                </div>
+                <div role="tabpanel" id="panel-fees" aria-labelledby="tab-fees" x-show="selected === 'fees'" x-cloak>
+                    <p class="text-body font-normal">Fees for this session.</p>
+                </div>
+            </x-tabs>
+        </div>
+
+        <div class="mt-space-16 flex max-w-full flex-wrap items-start gap-space-16">
+            <x-dialog id="preview-dialog" title="Receipt">
+                <x-slot:trigger>
+                    <x-button type="button" x-on:click="open = true">Open dialog</x-button>
+                </x-slot:trigger>
+                <p>This receipt is ready to view. Press Escape to close it.</p>
+            </x-dialog>
+            <x-button type="button" x-on:click="$dispatch('toast', { message: 'Payment received.' })">Show toast</x-button>
+        </div>
+        <div class="mt-space-16 max-w-full sm:max-w-sm">
+            <x-toast message="Payment received." />
+        </div>
+    </section>
+
+    <section class="mb-space-48 max-w-full" aria-labelledby="feedback-heading">
+        <h2 id="feedback-heading" class="mb-space-16 text-h2 font-semibold">Feedback</h2>
+        <div class="grid max-w-full gap-space-16">
+            <x-skeleton variant="page" />
+            <x-skeleton variant="card" />
+            <x-skeleton variant="row" />
+            <x-empty-state message="No invoices yet">
+                <x-slot:action>
+                    <x-button>Import students</x-button>
+                </x-slot:action>
+            </x-empty-state>
+            <x-error-state
+                message="We could not verify this payment yet."
+                hint="Your account has not been charged twice. Try again in a minute."
+                retry-label="Try again"
+            />
+            <x-confirm-dialog
+                id="preview-deactivate"
+                title="Deactivate student"
+                consequence="Ada will not be able to sign in or register courses."
+                confirm-label="Deactivate"
             >
-            <p class="mt-space-8 text-small font-normal text-muted">Buttons and inputs use an 8px radius. This card uses 12px.</p>
+                <x-slot:trigger>
+                    <x-button variant="destructive" type="button" x-on:click="open = true">Deactivate</x-button>
+                </x-slot:trigger>
+            </x-confirm-dialog>
+        </div>
+    </section>
+
+    <section class="mb-space-48 max-w-full" aria-labelledby="helpers-heading">
+        <h2 id="helpers-heading" class="mb-space-16 text-h2 font-semibold">Money, dates and CSV</h2>
+        <div class="max-w-full rounded-card border border-border bg-surface p-space-16 shadow-sm sm:p-space-24">
+            <p class="text-body font-normal">Amount <x-money :kobo="12500000" /></p>
+            <p class="mt-space-8 text-body font-normal">Zero <x-money :kobo="0" /></p>
+            <p class="mt-space-8 text-body font-normal">
+                Date
+                <x-date value="2026-10-05" source-timezone="Africa/Lagos" />
+            </p>
+            <p class="mt-space-8 text-body font-normal">
+                Date and time
+                <x-date value="2026-10-05 14:30:00" mode="datetime" source-timezone="Africa/Lagos" />
+            </p>
+            <p class="mt-space-8 text-body font-normal">Missing <x-date :value="null" /></p>
+            <p class="mt-space-8 font-mono text-mono font-medium">CSV {{ \App\Support\CsvSafe::cell('=1+1') }}</p>
+            <p class="mt-space-8 text-small font-normal text-muted">Amounts are integer kobo. Dates use Africa/Lagos. A formula-like export cell starts with an apostrophe.</p>
+        </div>
+    </section>
+
+    <section id="table" class="mb-space-48 max-w-full" aria-labelledby="table-heading">
+        <h2 id="table-heading" class="mb-space-16 text-h2 font-semibold">Responsive table</h2>
+        <x-table
+            :columns="$preview_table['columns']"
+            :rows="$preview_table['rows']"
+            :paginator="$preview_table['paginator']"
+            :sort="$preview_table['sort']"
+            :direction="$preview_table['direction']"
+            caption="Sample students"
+        >
+            <x-slot:toolbar>
+                <form method="get" action="{{ url('/design-preview') }}" class="grid max-w-full gap-space-12 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
+                    <x-field name="q" label="Search">
+                        <x-input name="q" type="search" :value="$preview_table['q']" />
+                    </x-field>
+                    <x-field name="status" label="Status">
+                        <x-select name="status">
+                            <option value="">All statuses</option>
+                            @foreach (\App\Enums\StudentStatus::cases() as $student_status)
+                                <option value="{{ $student_status->value }}" @selected($preview_table['status'] === $student_status->value)>{{ $student_status->value }}</option>
+                            @endforeach
+                        </x-select>
+                    </x-field>
+                    <x-button type="submit" variant="secondary">Filter</x-button>
+                    <x-button type="button" variant="ghost">Export</x-button>
+                    <input type="hidden" name="sort" value="{{ $preview_table['sort'] }}">
+                    <input type="hidden" name="direction" value="{{ $preview_table['direction'] }}">
+                </form>
+            </x-slot:toolbar>
+            <x-slot:empty>
+                <x-empty-state message="No students match this search." />
+            </x-slot:empty>
+        </x-table>
+
+        <div class="mt-space-24">
+            <h3 class="mb-space-12 text-h3 font-semibold">Empty table</h3>
+            <x-table :columns="$preview_table['columns']" :rows="[]" caption="Matching students">
+                <x-slot:empty>
+                    <x-empty-state message="No students match this search." />
+                </x-slot:empty>
+            </x-table>
         </div>
     </section>
 @endsection
