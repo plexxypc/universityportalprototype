@@ -3,12 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Thursday, 08 October 2026 (Phase 2 wrap-up)
+**Last updated:** Friday, 09 October 2026 (Phase 3, TASK-032)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
 
-Phase 2 (TASK-019 to TASK-025) is complete in the repository. The working tree is clean. `phase-2-ui` is `6c52a23` and matches `origin/phase-2-ui`. `origin/main` is `d253fd1` (merge of pull request #5 from `phase-2-ui`). Local `main` is still `c599ee0` and is behind that remote. `phase-1-setup` remains at `c3f5fa5`. Remote: `https://github.com/plexxypc/universityportalprototype.git` (public). No database features yet.
+Phase 3 is in progress on `phase-3-database`. TASK-029 (`c5bf8ee`), TASK-030 (`22b3c27`), TASK-031 (`d6366bc`), and TASK-032 (`bc13b73`, published-at fix `5e7e4b0`) are committed. A Published result requires `published_at`. Academic standing thresholds wait for a new table in TASK-060. Decimal totals and grade-band edges are decided in TASK-059.
 
 The staff panel uses the design tokens, self-hosted Inter, and the institution name and logo from `config/portal.php`. Navigation groups follow the PRD module names and stay hidden until a page is assigned. Role filtering is Phase 4. The staff theme imports Filament CSS from `vendor`, so the frontend CI job and the Docker asset stage install or copy that tree before `npm run build`. That copy is in `6c52a23` (`Fixed Frontend CI`).
 
@@ -35,7 +35,7 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 - DESIGN.md (with Filament theming notes)
 - RULES.md and Cursor rules in `cursor-rules/`
 - TASKS.md (TASK-001 to TASK-186, including post-demo backlog)
-- DECISIONS.md (ADR-001 to ADR-025)
+- DECISIONS.md (ADR-001 to ADR-027). ADR-027 cascades `guardians.student_id` only.
 - Phase 2 shared interface: TASK-019 through TASK-025, verified in the repository and merged to `origin/main` as pull request #5 (`d253fd1`)
 - TEST_PLAN.md
 - SECURITY.md
@@ -61,7 +61,7 @@ Blade pieces live in `resources/views/components/`. The student shell is `resour
 
 ## Current Task
 
-**TASK-026** (Phase 3): identity migrations (`users`, `role_assignments`, `staff`) and base model traits. Phase 2 layout work is done.
+**TASK-033** (Phase 3): attendance and exam timetable migrations. TASK-032 is committed as `bc13b73` and verified on local Docker MySQL. `composer check` passed (226 tests, 701 assertions). Academic standing thresholds wait for a new table in TASK-060. Decimal totals and grade-band edges are decided in TASK-059.
 
 Still open from Phase 0, and not blockers for the layout work: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 
@@ -122,7 +122,7 @@ Still open from Phase 0, and not blockers for the layout work: TASK-002 (Digital
 
 ## Next Step
 
-Start Phase 3, the database foundation, with TASK-026 (identity migrations for `users`, `role_assignments`, and `staff`, plus base model traits). Do that on a new branch from current `origin/main` (`d253fd1`), which already contains Phase 2. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
+Continue Phase 3 with TASK-033 (attendance and exam timetable) on `phase-3-database`. Run migrations only against local Docker MySQL (`127.0.0.1`, `university_portal` / `university_portal_testing`). The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
 
 ## Session Log
 
@@ -154,3 +154,7 @@ Start Phase 3, the database foundation, with TASK-026 (identity migrations for `
 | 08 Oct 2026 | Phase 2 shared interface (TASK-025, TASK-020, TASK-021, TASK-022, TASK-024, TASK-023, TASK-019). Helpers, form, display, feedback, table, and student layout are on the local design preview. The staff panel theme uses the design tokens, Inter through `LocalFontProvider`, and the institution name and logo. `composer check` passed (100 tests, 473 assertions) and `npm run build` finished. Not pushed. |
 | 08 Oct 2026 | Frontend CI failed because the staff theme imports Filament CSS from `vendor`, and that job never installed Composer packages. The frontend job now runs `composer install` first. The Docker asset stage copies `vendor/filament` and `app` before `npm run build`. Committed as `6c52a23` and merged to `origin/main` in pull request #5 (`d253fd1`). |
 | 08 Oct 2026 | Phase 2 wrap-up. TASK-019 through TASK-025 are present and already ticked. No application code changed. `composer check` passed (100 tests, 474 assertions). |
+| 08 Oct 2026 | Phase 3 TASK-029 and TASK-030. People tables and course registrations, plus ADR-027 (guardian cascade only). `composer check` passed after TASK-030 (173 tests, 608 assertions). Local `university_portal` on `127.0.0.1`: `migrate:fresh`, rollback of the seven new migrations, then migrate again. Not pushed. |
+| 09 Oct 2026 | Phase 3 TASK-031. Finance tables and money CHECK constraints. `composer check` passed (195 tests, 642 assertions). Local `university_portal` on `127.0.0.1`: `migrate:fresh`, rollback of the eight new migrations, then migrate again. Commit `d6366bc`. Not pushed. |
+| 09 Oct 2026 | Phase 3 TASK-032. Grading and results tables. `composer check` passed (226 tests, 701 assertions). Local `university_portal` on `127.0.0.1`: `migrate:fresh`, rollback of the six new migrations, then migrate again. Commit `bc13b73`. |
+| 09 Oct 2026 | TASK-032 follow-up. A Published result requires `published_at`. Commit `5e7e4b0`. Local `university_portal` on `127.0.0.1`: `migrate:fresh`, rollback of the six grading migrations, then migrate again. |
