@@ -13,7 +13,12 @@ use Illuminate\Support\Facades\Schema;
 uses(RefreshDatabase::class);
 
 /**
- * Roll the three identity migrations back, run a check, then migrate forward.
+ * Roll back every migration from the users identity columns onward, run a
+ * check, then migrate forward.
+ *
+ * The count comes from the migrations table so later files still roll back
+ * through the identity schema. A fixed step of 3 only reached those files
+ * when they were the latest three. The assertions are unchanged.
  *
  * MySQL commits the session on DDL, so the test transaction is closed first
  * and opened again afterwards for RefreshDatabase.
@@ -28,7 +33,11 @@ function without_identity_migrations(callable $callback): void
         $connection->commit();
     }
 
-    test()->artisan('migrate:rollback', ['--step' => 3])->assertSuccessful();
+    $steps = (int) DB::table('migrations')
+        ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
+        ->count();
+
+    test()->artisan('migrate:rollback', ['--step' => $steps])->assertSuccessful();
 
     try {
         $callback();
@@ -140,18 +149,22 @@ it('rejects a duplicate role assignment when faculty and department are null', f
 
 it('rejects a duplicate role assignment when the faculty matches and the department is null', function () {
     $user = User::factory()->create();
+    $faculty_id = DB::table('faculties')->insertGetId([
+        'name' => 'Science',
+        'code' => 'SCI',
+    ]);
 
     DB::table('role_assignments')->insert([
         'user_id' => $user->id,
         'role' => 'FacultyAdmin',
-        'faculty_id' => 1,
+        'faculty_id' => $faculty_id,
         'department_id' => null,
     ]);
 
     expect(fn () => DB::table('role_assignments')->insert([
         'user_id' => $user->id,
         'role' => 'FacultyAdmin',
-        'faculty_id' => 1,
+        'faculty_id' => $faculty_id,
         'department_id' => null,
     ]))->toThrow(QueryException::class);
 });

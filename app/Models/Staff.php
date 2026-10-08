@@ -41,4 +41,14 @@ class Staff extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * Department this staff member belongs to, when one is set.
+     *
+     * @return BelongsTo<Department, $this>
+     */
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
 }

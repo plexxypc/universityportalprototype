@@ -43,4 +43,24 @@ class RoleAssignment extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * Faculty scope for this assignment, when one is set.
+     *
+     * @return BelongsTo<Faculty, $this>
+     */
+    public function faculty(): BelongsTo
+    {
+        return $this->belongsTo(Faculty::class);
+    }
+
+    /**
+     * Department scope for this assignment, when one is set.
+     *
+     * @return BelongsTo<Department, $this>
+     */
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
 }
