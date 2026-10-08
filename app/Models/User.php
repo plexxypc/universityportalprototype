@@ -68,4 +68,14 @@ class User extends Authenticatable
     {
         return $this->hasOne(Student::class);
     }
+
+    /**
+     * Registrations this account approved or rejected.
+     *
+     * @return HasMany<CourseRegistration, $this>
+     */
+    public function decidedRegistrations(): HasMany
+    {
+        return $this->hasMany(CourseRegistration::class, 'decided_by');
+    }
 }

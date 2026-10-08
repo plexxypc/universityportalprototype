@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A semester inside one academic session.
@@ -43,5 +44,15 @@ class Semester extends Model
     public function academicSession(): BelongsTo
     {
         return $this->belongsTo(AcademicSession::class, 'session_id');
+    }
+
+    /**
+     * Course registrations for this semester.
+     *
+     * @return HasMany<CourseRegistration, $this>
+     */
+    public function courseRegistrations(): HasMany
+    {
+        return $this->hasMany(CourseRegistration::class);
     }
 }

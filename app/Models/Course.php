@@ -59,4 +59,14 @@ class Course extends Model
     {
         return $this->hasMany(CourseAssignment::class);
     }
+
+    /**
+     * Registration items that snapshot this course.
+     *
+     * @return HasMany<CourseRegistrationItem, $this>
+     */
+    public function registrationItems(): HasMany
+    {
+        return $this->hasMany(CourseRegistrationItem::class);
+    }
 }
