@@ -114,7 +114,10 @@ RUN npm ci
 COPY vite.config.js ./
 COPY resources ./resources
 COPY public ./public
+COPY app ./app
 COPY --from=php_dependencies /app/vendor/laravel/framework/src/Illuminate/Pagination/resources/views ./vendor/laravel/framework/src/Illuminate/Pagination/resources/views
+# The staff theme imports Filament CSS, which pulls in each Filament package.
+COPY --from=php_dependencies /app/vendor/filament ./vendor/filament
 
 RUN npm run build
 

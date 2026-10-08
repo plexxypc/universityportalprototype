@@ -3,12 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Thursday, 08 October 2026 (shared interface layer)
+**Last updated:** Thursday, 08 October 2026 (staff theme build)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
 
-Phase 2's shared interface layer (TASK-019 to TASK-025) is on `phase-1-setup` and has not been pushed. `main` is still the skeleton commit `c599ee0`. Remote: `https://github.com/plexxypc/universityportalprototype.git` (public). No database features yet. The staff panel uses the design tokens, self-hosted Inter, and the institution name and logo from `config/portal.php`. Navigation groups follow the PRD module names and stay hidden until a page is assigned. Role filtering is Phase 4.
+Phase 2's shared interface layer (TASK-019 to TASK-025) is on `phase-2-ui`, replayed onto `origin/main` (`02527ca`). `phase-1-setup` remains at `c3f5fa5`. Remote `main` already contains Phase 1 through merge commits; the local `main` ref can still be behind that. Remote: `https://github.com/plexxypc/universityportalprototype.git` (public). No database features yet. The staff panel uses the design tokens, self-hosted Inter, and the institution name and logo from `config/portal.php`. Navigation groups follow the PRD module names and stay hidden until a page is assigned. Role filtering is Phase 4. The staff theme imports Filament CSS from `vendor`, so the frontend CI job and the Docker asset stage install or copy that tree before `npm run build`.
 
 **Live demo:** `https://universityportalprototype.onrender.com` (Render free web service, Aiven MySQL). On 07 October 2026 the home page and `/up` returned HTTP 200 with the title University Portal. `/health` returned HTTP 200 with `"status": "ok"`, `"database": "ok"`, `"heartbeat": "ok"`, `"mail_driver": "log"`, `"payment_provider": "sandbox"`, and `"environment": "production"`. DigitalOcean App Platform is not in use. A local container named `university-portal` is still running at `http://127.0.0.1:8081` (host 8081 to container 8080).
 
@@ -72,7 +72,7 @@ Still open from Phase 0, and not blockers for the layout work: TASK-002 (Digital
 ## Known Issues
 
 - The live `/health` payload reports `"payment_provider": "sandbox"`. The documented demo setting is `demo`.
-- `main` does not contain Phase 1 past the skeleton. Day-to-day work stays on `phase-1-setup` until that branch is merged. The Render service was built from the branch that contains `docker/Dockerfile`.
+- Day-to-day work is on `phase-2-ui`. `phase-1-setup` is unchanged at `c3f5fa5`. The Render service was built from the branch that contains `docker/Dockerfile`.
 - PHP 8.5.10 is on the user `PATH`. CI and `docker/Dockerfile` use PHP 8.4 because `composer.lock` requires 8.4.1 or newer. `ext-intl`, `ext-gd`, and `ext-pdo_mysql` are enabled. Composer 2.10.3 is `%LOCALAPPDATA%\Composer\composer.bat`.
 - Pest needs MySQL from `compose.dev.yaml` (`university_portal_testing`, user `portal`, password `portal`). Docker Desktop has to be running before `composer test` or `composer check`.
 - `/health` reports a scheduler heartbeat. It does not show that the queue worker is consuming jobs. A queue-backlog check waits until the email outbox exists (Phase 5, TASK-047).
@@ -98,7 +98,7 @@ Still open from Phase 0, and not blockers for the layout work: TASK-002 (Digital
 
 ## Next Step
 
-Start Phase 3 on `phase-1-setup` with TASK-026 (identity migrations). Do not push the Phase 2 commits unless asked. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time. The live demo does not include this interface layer until the branch is deployed.
+Start Phase 3 on `phase-2-ui` with TASK-026 (identity migrations). The frontend CI fix and the Docker asset copy are local and uncommitted. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time. The live demo does not include this interface layer until the branch is deployed.
 
 ## Session Log
 
@@ -128,3 +128,4 @@ Start Phase 3 on `phase-1-setup` with TASK-026 (identity migrations). Do not pus
 | 07 Oct 2026 | Phase 1 wrap-up. Ticked TASK-008 to TASK-012, TASK-014, and left TASK-015, TASK-016, and TASK-018 ticked. Left TASK-013 and TASK-017 open. CI run 37689062914 on `d5fc5c0` is green. `composer check` passed (32 tests, 189 assertions). No application code changed. No public demo URL. Next task is TASK-019. |
 | 07 Oct 2026 | Owner made the GitHub repository public and waived protection of `main` (TASK-013). The live demo is Render plus Aiven MySQL at `https://universityportalprototype.onrender.com` (TASK-017). Home, `/up`, and `/health` returned HTTP 200; database and heartbeat were ok. DigitalOcean App Platform was not used. |
 | 08 Oct 2026 | Phase 2 shared interface (TASK-025, TASK-020, TASK-021, TASK-022, TASK-024, TASK-023, TASK-019). Helpers, form, display, feedback, table, and student layout are on the local design preview. The staff panel theme uses the design tokens, Inter through `LocalFontProvider`, and the institution name and logo. `composer check` passed (100 tests, 473 assertions) and `npm run build` finished. Not pushed. |
+| 08 Oct 2026 | Frontend CI failed because the staff theme imports Filament CSS from `vendor`, and that job never installed Composer packages. The frontend job now runs `composer install` first. The Docker asset stage copies `vendor/filament` and `app` before `npm run build`. Local `npm run build` succeeded. Not committed. |
