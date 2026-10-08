@@ -59,7 +59,7 @@
 - [ ] TASK-029 Migrations: `applicants`, `students`, `guardians`, `documents`, `import_batches`
 - [ ] TASK-030 Migrations: `course_registrations`, `course_registration_items`
 - [ ] TASK-031 Migrations: finance (`fee_categories`, `fee_structures`, `invoices`, `invoice_items`, `invoice_adjustments`, `payments`, `payment_events`, `receipts`) with CHECK constraints
-- [ ] TASK-032 Migrations: grading (`grading_schemes`, `assessment_components`, `grade_bands`, `classification_bands`) and results (`results`, `result_scores`)
+- [x] TASK-032 Migrations: grading (`grading_schemes`, `assessment_components`, `grade_bands`, `classification_bands`) and results (`results`, `result_scores`)
 - [ ] TASK-033 Migrations: `attendance_sessions`, `attendance_records`, `exam_timetable`
 - [ ] TASK-034 Migrations: `announcements`, `notifications`, `email_outbox`, `counters`, `audit_logs`
 - [ ] TASK-035 Eloquent models, enum casts, relationships and factories for all tables
@@ -97,8 +97,8 @@
 - [ ] TASK-056 Semesters resource (single active semester, registration and add/drop deadlines)
 - [ ] TASK-057 Faculties, departments and programmes resources with scope rules
 - [ ] TASK-058 Course catalogue resource with prerequisites and programme–course mapping
-- [ ] TASK-059 `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests
-- [ ] TASK-060 **Grading configuration** UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation; default-scheme loader; scheme versioning
+- [ ] TASK-059 `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests. Decide here whether a decimal total is rounded to a whole number before the grade lookup, or bands are lower-bound inclusive.
+- [ ] TASK-060 **Grading configuration** UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation; default-scheme loader; scheme versioning. Add the academic-standing threshold table (warning, probation) in this task.
 - [ ] TASK-061 Grading preview tool ("enter sample scores, see computed grade") to let the admin verify their configuration
 - [ ] TASK-062 Fee categories and fee structures resources
 - [ ] TASK-063 Setup tests (single current session, band validation, scoped edits)
