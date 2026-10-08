@@ -1,0 +1,20 @@
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/inter/latin-ext-400.css';
+@import '@fontsource/inter/latin-ext-500.css';
+@import '@fontsource/inter/latin-ext-600.css';
+@import '@fontsource/inter/latin-ext-700.css';
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/Staff/**/*';
+@source '../../../../resources/views/filament/staff/**/*';
+
+/*
+ * Filament badges are slightly rounded. The design token for badges is a pill.
+ * This stays outside a Tailwind layer so it wins over Filament's component layer.
+ */
+.fi-badge {
+    border-radius: 9999px;
+}

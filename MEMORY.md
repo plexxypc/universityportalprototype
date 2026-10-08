@@ -3,18 +3,18 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Wednesday, 07 October 2026 (public repo and live Render demo)
+**Last updated:** Thursday, 08 October 2026 (shared interface layer)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
 
-Phase 1 setup is on `phase-1-setup` at `d5fc5c0`, which matches `origin/phase-1-setup`. The working tree has the Phase 1 status notes from this session. `main` is the skeleton commit `c599ee0` and is 13 commits behind this branch. Remote: `https://github.com/plexxypc/universityportalprototype.git` (public). No university features yet. The staff panel is Filament's default amber theme until TASK-019.
+Phase 2's shared interface layer (TASK-019 to TASK-025) is on `phase-1-setup` and has not been pushed. `main` is still the skeleton commit `c599ee0`. Remote: `https://github.com/plexxypc/universityportalprototype.git` (public). No database features yet. The staff panel uses the design tokens, self-hosted Inter, and the institution name and logo from `config/portal.php`. Navigation groups follow the PRD module names and stay hidden until a page is assigned. Role filtering is Phase 4.
 
 **Live demo:** `https://universityportalprototype.onrender.com` (Render free web service, Aiven MySQL). On 07 October 2026 the home page and `/up` returned HTTP 200 with the title University Portal. `/health` returned HTTP 200 with `"status": "ok"`, `"database": "ok"`, `"heartbeat": "ok"`, `"mail_driver": "log"`, `"payment_provider": "sandbox"`, and `"environment": "production"`. DigitalOcean App Platform is not in use. A local container named `university-portal` is still running at `http://127.0.0.1:8081` (host 8081 to container 8080).
 
 **Versions locked in `composer.lock`:** Laravel 13.35.0, Filament 5.10.0, Livewire 4.4.7. Also Pest 4.7.8, Larastan 3.12.3, Pint 1.32.1, Excel 4.0.3, Dompdf 3.1.2. `composer.json` requires PHP `^8.4`; the lockfile needs PHP 8.4.1 or newer. This machine's CLI is PHP 8.5.10. GitHub Actions and the production image use PHP 8.4.
 
-**Check commands:** `composer lint` (Pint), `composer analyse` (Larastan), `composer test` (Pest), and `composer check` (all three). On 07 October 2026, `composer check` passed: Pint passed, Larastan reported 0 errors, Pest passed 32 tests and 189 assertions. GitHub CI on `d5fc5c0` is green for Pint, Larastan, Pest, Dependency audit, and Frontend build: https://github.com/plexxypc/universityportalprototype/actions/runs/37689062914.
+**Check commands:** `composer lint` (Pint), `composer analyse` (Larastan), `composer test` (Pest), and `composer check` (all three). On 08 October 2026, `composer check` passed: Pint passed, Larastan reported 0 errors, Pest passed 100 tests and 474 assertions. `npm run build` produced the staff theme. GitHub CI on `d5fc5c0` is the last green run: https://github.com/plexxypc/universityportalprototype/actions/runs/37689062914. This branch is ahead of that commit and has not been pushed.
 
 Two changes since the first Laravel rewrite: (1) **Paystack is out; payments use Remita and/or Interswitch (Quickteller)** behind a provider-neutral gateway with a Demo Gateway (ADR-023); (2) **capacity target: about 150 students now, up to 1,000 supported on launch infrastructure, expansion planned beyond about 2,000** (ADR-024).
 
@@ -27,7 +27,8 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 - DESIGN.md (with Filament theming notes)
 - RULES.md and Cursor rules in `cursor-rules/`
 - TASKS.md (TASK-001 to TASK-186, including post-demo backlog)
-- DECISIONS.md (ADR-001 to ADR-024)
+- DECISIONS.md (ADR-001 to ADR-025)
+- Phase 2 shared interface: TASK-019 through TASK-025. Local previews: `http://127.0.0.1:8000/design-preview` and `http://127.0.0.1:8000/design-preview/student`. Staff login: `http://127.0.0.1:8000/staff/login`.
 - TEST_PLAN.md
 - SECURITY.md
 - SYSTEM_OVERVIEW.md
@@ -36,7 +37,7 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 
 ## Current Task
 
-**TASK-019** (Phase 2): theme the Filament staff panel with the design tokens, Inter, a logo from settings, and role-aware navigation groups.
+**TASK-026** (Phase 3): identity migrations (`users`, `role_assignments`, `staff`) and base model traits. Phase 2 layout work is done.
 
 Still open from Phase 0, and not blockers for the layout work: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 
@@ -76,7 +77,12 @@ Still open from Phase 0, and not blockers for the layout work: TASK-002 (Digital
 - Pest needs MySQL from `compose.dev.yaml` (`university_portal_testing`, user `portal`, password `portal`). Docker Desktop has to be running before `composer test` or `composer check`.
 - `/health` reports a scheduler heartbeat. It does not show that the queue worker is consuming jobs. A queue-backlog check waits until the email outbox exists (Phase 5, TASK-047).
 - The Pest job in `.github/workflows/ci.yml` still uploads a temporary JUnit artifact and widens `COLUMNS` so a past `file_get_contents` warning could be read. CI is green with that step in place.
-- Host port 8080 is taken by another project's `cbt-preview-1`. The local portal container uses host port 8081.
+- Host port 8080 is taken by another project's `cbt-preview-1`. The local portal container uses host port 8081. That image can be older than `php artisan serve` on port 8000.
+- The logo placeholder SVG hard-codes `#4F46E5` and white because an image cannot read the CSS variables.
+- Filament stores the primary palette as OKLCH. Shades 50, 500, 600, and 700 are the design tokens. The other shades are Filament's generated palette for `#4F46E5`.
+- Staff navigation groups do not appear until a resource or page is added. Role filtering is Phase 4.
+- The first request to `/staff/login` after a view-cache clear can hit PHP's 30-second limit while Blade compiles. The next request returns the login page.
+- Filament's core scripts and its own Inter files are published under `public/js/filament` and `public/fonts/filament`. The staff theme also loads `@fontsource/inter`. Nothing is loaded from Bunny Fonts.
 - `.gitignore` does not ignore `.cursor`. `.env` stays ignored.
 
 ## Risks to Watch
@@ -92,7 +98,7 @@ Still open from Phase 0, and not blockers for the layout work: TASK-002 (Digital
 
 ## Next Step
 
-Start Phase 2 on `phase-1-setup` with TASK-019 (Filament staff theme). `Money`, `Dates`, and `CsvSafe` are placeholders until TASK-025. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
+Start Phase 3 on `phase-1-setup` with TASK-026 (identity migrations). Do not push the Phase 2 commits unless asked. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time. The live demo does not include this interface layer until the branch is deployed.
 
 ## Session Log
 
@@ -121,3 +127,4 @@ Start Phase 2 on `phase-1-setup` with TASK-019 (Filament staff theme). `Money`, 
 | 07 Oct 2026 | Pest CI saw `APP_ENV=local` because Laravel reads `$_SERVER` before PHPUnit’s forced env. `phpunit.xml` now also sets those server variables to `testing` and `APP_DEBUG=false`. The CI job env stays `local`. Local run with `APP_ENV=local` and `APP_DEBUG=true` passed 32 tests; `/health` reported `testing`. `composer check` with no shell overrides passed. Docs now say PHP 8.4+ because `composer.lock` requires 8.4.1 or newer. TASK-014 stays open. |
 | 07 Oct 2026 | Phase 1 wrap-up. Ticked TASK-008 to TASK-012, TASK-014, and left TASK-015, TASK-016, and TASK-018 ticked. Left TASK-013 and TASK-017 open. CI run 37689062914 on `d5fc5c0` is green. `composer check` passed (32 tests, 189 assertions). No application code changed. No public demo URL. Next task is TASK-019. |
 | 07 Oct 2026 | Owner made the GitHub repository public and waived protection of `main` (TASK-013). The live demo is Render plus Aiven MySQL at `https://universityportalprototype.onrender.com` (TASK-017). Home, `/up`, and `/health` returned HTTP 200; database and heartbeat were ok. DigitalOcean App Platform was not used. |
+| 08 Oct 2026 | Phase 2 shared interface (TASK-025, TASK-020, TASK-021, TASK-022, TASK-024, TASK-023, TASK-019). Helpers, form, display, feedback, table, and student layout are on the local design preview. The staff panel theme uses the design tokens, Inter through `LocalFontProvider`, and the institution name and logo. `composer check` passed (100 tests, 473 assertions) and `npm run build` finished. Not pushed. |
