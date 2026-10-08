@@ -15,7 +15,8 @@ return new class extends Migration
      * One row per student, course, and semester. A repeated course is another
      * row in a later semester. Both rows stay. Which attempt counts is enforced
      * in a service later. total, grade, and points are stored together: all
-     * null or all set. published_at is null unless the status is Published.
+     * null or all set. published_at is set exactly when the status is Published:
+     * it is null for every other status, and a Published row requires it.
      * Approved and Published rows require approved_by. Every foreign key is
      * restrict. grading_scheme_id points at the scheme row used. scheme_version
      * copies that row's version. A service later keeps the copy equal to the row.
@@ -93,6 +94,9 @@ return new class extends Migration
         );
         DB::statement(
             "alter table `results` add constraint `results_published_at_only_when_published_check` check (`published_at` is null or `status` = 'Published')",
+        );
+        DB::statement(
+            "alter table `results` add constraint `results_published_requires_published_at_check` check (`status` <> 'Published' or `published_at` is not null)",
         );
     }
 

@@ -279,18 +279,15 @@ it('stores published_at on a published result', function () {
         ->and($result->published_at?->format('Y-m-d H:i:s'))->toBe('2026-10-09 12:00:00');
 });
 
-it('stores a published result with no published_at when an approver is set', function () {
-    $result = Result::factory()->create([
+it('rejects a published result with no published_at', function () {
+    expect(fn () => Result::factory()->create([
         'status' => ResultStatus::Published,
         'approved_by' => User::factory(),
         'published_at' => null,
         'total' => null,
         'grade' => null,
         'points' => null,
-    ]);
-
-    expect($result->exists)->toBeTrue()
-        ->and($result->published_at)->toBeNull();
+    ]))->toThrow(QueryException::class);
 });
 
 it('rejects an unknown result status', function () {
