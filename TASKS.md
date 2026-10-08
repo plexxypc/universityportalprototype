@@ -56,9 +56,9 @@
 - [ ] TASK-026 Migrations: identity (`users`, `role_assignments`, `staff`), enums, base model traits
 - [ ] TASK-027 Migrations: `institution_settings`, `faculties`, `departments`, `programmes`, `academic_sessions`, `semesters` (flag-column unique for current/active)
 - [ ] TASK-028 Migrations: `courses`, `programme_courses`, `course_prerequisites`, `course_assignments`
-- [ ] TASK-029 Migrations: `applicants`, `students`, `guardians`, `documents`, `import_batches`
-- [ ] TASK-030 Migrations: `course_registrations`, `course_registration_items`
-- [ ] TASK-031 Migrations: finance (`fee_categories`, `fee_structures`, `invoices`, `invoice_items`, `invoice_adjustments`, `payments`, `payment_events`, `receipts`) with CHECK constraints
+- [x] TASK-029 Migrations: `applicants`, `students`, `guardians`, `documents`, `import_batches`
+- [x] TASK-030 Migrations: `course_registrations`, `course_registration_items`
+- [x] TASK-031 Migrations: finance (`fee_categories`, `fee_structures`, `invoices`, `invoice_items`, `invoice_adjustments`, `payments`, `payment_events`, `receipts`) with CHECK constraints
 - [x] TASK-032 Migrations: grading (`grading_schemes`, `assessment_components`, `grade_bands`, `classification_bands`) and results (`results`, `result_scores`)
 - [ ] TASK-033 Migrations: `attendance_sessions`, `attendance_records`, `exam_timetable`
 - [ ] TASK-034 Migrations: `announcements`, `notifications`, `email_outbox`, `counters`, `audit_logs`
