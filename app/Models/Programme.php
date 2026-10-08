@@ -39,4 +39,24 @@ class Programme extends Model
     {
         return $this->hasMany(ProgrammeCourse::class);
     }
+
+    /**
+     * Applicants to this programme.
+     *
+     * @return HasMany<Applicant, $this>
+     */
+    public function applicants(): HasMany
+    {
+        return $this->hasMany(Applicant::class);
+    }
+
+    /**
+     * Students enrolled on this programme.
+     *
+     * @return HasMany<Student, $this>
+     */
+    public function students(): HasMany
+    {
+        return $this->hasMany(Student::class);
+    }
 }

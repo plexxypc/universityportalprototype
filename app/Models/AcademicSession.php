@@ -42,4 +42,24 @@ class AcademicSession extends Model
     {
         return $this->hasMany(Semester::class, 'session_id');
     }
+
+    /**
+     * Applicants whose entry session is this session.
+     *
+     * @return HasMany<Applicant, $this>
+     */
+    public function applicants(): HasMany
+    {
+        return $this->hasMany(Applicant::class, 'entry_session_id');
+    }
+
+    /**
+     * Students who entered in this session.
+     *
+     * @return HasMany<Student, $this>
+     */
+    public function students(): HasMany
+    {
+        return $this->hasMany(Student::class, 'entry_session_id');
+    }
 }

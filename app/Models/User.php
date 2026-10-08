@@ -58,4 +58,14 @@ class User extends Authenticatable
     {
         return $this->hasOne(Staff::class);
     }
+
+    /**
+     * Student profile for this account, when the user is a student.
+     *
+     * @return HasOne<Student, $this>
+     */
+    public function student(): HasOne
+    {
+        return $this->hasOne(Student::class);
+    }
 }

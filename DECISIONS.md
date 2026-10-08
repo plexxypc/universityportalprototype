@@ -245,3 +245,13 @@
 **Reason:** Section 10 left the primary-key type open, and it described the one payment-event unique key under two names. The frozen `users` table already uses unsigned bigint. Local MySQL 8.0.46 enforces `CHECK` and stores `TIMESTAMP` in UTC, so new clock columns have to be `DATETIME` if Lagos wall time is to survive a round trip.
 
 **Consequences:** Later migrations follow this ADR where ARCHITECTURE.md disagrees, including `payment_events(provider, event_key)`. One-current rows still use the nullable flag column from ADR-002. Changing a delete rule or introducing soft deletes needs a new ADR.
+
+## ADR-027: Guardian rows cascade when a student is deleted
+
+**Status:** Accepted.
+
+**Decision:** `guardians.student_id` is `ON DELETE CASCADE`. Every other foreign key stays `ON DELETE RESTRICT`, including registration items and every people-table key other than that one guardian key (ADR-026).
+
+**Reason:** A guardian row exists only as a child of one student. It holds no money, results, or registrations. Phase 3 approved this single exception.
+
+**Consequences:** Deleting a student deletes that student's guardians. Documents have no foreign key, so a service must refuse that delete or remove the documents first. No other table may use cascade without a new ADR.
