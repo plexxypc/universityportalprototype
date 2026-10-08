@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A programme. Its code is unique across the institution. degree is free text.
@@ -27,5 +28,15 @@ class Programme extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Courses mapped into this programme.
+     *
+     * @return HasMany<ProgrammeCourse, $this>
+     */
+    public function programmeCourses(): HasMany
+    {
+        return $this->hasMany(ProgrammeCourse::class);
     }
 }

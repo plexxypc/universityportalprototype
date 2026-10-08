@@ -39,4 +39,14 @@ class Department extends Model
     {
         return $this->hasMany(Programme::class);
     }
+
+    /**
+     * Courses owned by this department.
+     *
+     * @return HasMany<Course, $this>
+     */
+    public function courses(): HasMany
+    {
+        return $this->hasMany(Course::class);
+    }
 }
