@@ -227,3 +227,21 @@
 **Reason:** The portal serves a Nigerian university. West Africa Time has no daylight saving, so one zone keeps stored clock times and displayed clock times the same. UTC instants still display as Lagos local time.
 
 **Consequences:** Datetimes written by Laravel are Lagos wall time. Callers that hold a UTC clock time must pass a UTC `DateTimeInterface` or set the source timezone. Do not change `APP_TIMEZONE` to UTC without a new ADR.
+
+## ADR-026: Database conventions
+
+**Status:** Accepted.
+
+**Decision:** Phase 3 schema follows one set of conventions.
+
+- **Primary keys.** Every new table uses an unsigned bigint auto-increment primary key. `users.id` is already that type. ULIDs are not used.
+- **Datetimes and timezone.** Every new instant is a `DATETIME`, including `created_at` and `updated_at`. Laravel writes Africa/Lagos wall time (ADR-025). `DATETIME` stores that clock time as written. The local MySQL session zone is UTC, and a `TIMESTAMP` converts by the session zone, which would shift a Lagos wall time by one hour. Calendar values, such as a date of birth, use `DATE`. Frozen framework columns stay `TIMESTAMP`: `users.email_verified_at`, `password_reset_tokens.created_at`, and `failed_jobs.failed_at`.
+- **Delete rules.** Every foreign key is `ON DELETE RESTRICT` and is named in the migration. `CASCADE` and `SET NULL` are not used. An exception needs a later ADR.
+- **Soft deletes.** There is no `deleted_at` column and no soft-delete trait. A row's lifecycle is a status column.
+- **Enum storage.** Statuses and roles are `varchar(32)` strings, cast to the backed enums in `app/Enums`. The stored text is the label from DESIGN.md (`Part-paid`, `Under review`, and the rest). MySQL `ENUM` columns are not used.
+- **Naming.** Migrations set the name of every unique index, secondary index, foreign key, and `CHECK`. The forms are `{table}_{columns}_unique`, `{table}_{columns}_index`, `{table}_{column}_foreign`, and `{table}_{rule}_check`, within MySQL's 64-character limit.
+- **Payment events.** `payment_events` has one unique index, `payment_events_provider_event_key_unique`, on `(provider, event_key)`. `event_key` is the provider idempotency key. The name `event_id` in the ARCHITECTURE.md unique-list bullet is not used.
+
+**Reason:** Section 10 left the primary-key type open, and it described the one payment-event unique key under two names. The frozen `users` table already uses unsigned bigint. Local MySQL 8.0.46 enforces `CHECK` and stores `TIMESTAMP` in UTC, so new clock columns have to be `DATETIME` if Lagos wall time is to survive a round trip.
+
+**Consequences:** Later migrations follow this ADR where ARCHITECTURE.md disagrees, including `payment_events(provider, event_key)`. One-current rows still use the nullable flag column from ADR-002. Changing a delete rule or introducing soft deletes needs a new ADR.
