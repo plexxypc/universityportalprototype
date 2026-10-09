@@ -38,4 +38,14 @@ class Faculty extends Model
     {
         return $this->hasMany(Announcement::class);
     }
+
+    /**
+     * Role assignments scoped to this faculty.
+     *
+     * @return HasMany<RoleAssignment, $this>
+     */
+    public function roleAssignments(): HasMany
+    {
+        return $this->hasMany(RoleAssignment::class);
+    }
 }

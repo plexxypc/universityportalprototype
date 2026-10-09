@@ -29,4 +29,14 @@ class StaffFactory extends Factory
             'status' => StaffStatus::Active,
         ];
     }
+
+    /**
+     * Mark the staff profile deactivated.
+     */
+    public function deactivated(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => StaffStatus::Deactivated,
+        ]);
+    }
 }

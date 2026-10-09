@@ -31,4 +31,16 @@ class SemesterFactory extends Factory
             'add_drop_deadline' => null,
         ];
     }
+
+    /**
+     * Mark this semester as the single active semester.
+     *
+     * active_flag is generated. Only one row in the table may use this state.
+     */
+    public function active(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_active' => true,
+        ]);
+    }
 }

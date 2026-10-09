@@ -54,10 +54,10 @@ it('rejects a semester number other than 1 or 2', function () {
 });
 
 it('rejects a programme course type other than core or elective', function () {
-    $programme = ProgrammeCourse::factory()->create()->programme;
+    $programme_id = ProgrammeCourse::factory()->create()->programme_id;
 
     expect(fn () => DB::table('programme_courses')->insert([
-        'programme_id' => $programme->id,
+        'programme_id' => $programme_id,
         'course_id' => Course::factory()->create()->id,
         'level' => 100,
         'semester_no' => 1,

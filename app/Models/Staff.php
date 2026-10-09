@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Staff profile for one user. Faculty is the faculty of department_id, once departments exist.
@@ -50,5 +51,15 @@ class Staff extends Model
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Courses this staff member teaches.
+     *
+     * @return HasMany<CourseAssignment, $this>
+     */
+    public function courseAssignments(): HasMany
+    {
+        return $this->hasMany(CourseAssignment::class);
     }
 }

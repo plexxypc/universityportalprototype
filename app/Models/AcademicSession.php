@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Database\Factories\AcademicSessionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -31,6 +32,19 @@ class AcademicSession extends Model
         return [
             'is_current' => 'boolean',
         ];
+    }
+
+    /**
+     * Limit the query to the current session.
+     *
+     * At most one row has is_current set. The flag column enforces that.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeCurrent(Builder $query): Builder
+    {
+        return $query->where('is_current', true);
     }
 
     /**

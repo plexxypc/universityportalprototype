@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Database\Factories\SemesterFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,6 +35,19 @@ class Semester extends Model
             'registration_deadline' => 'datetime',
             'add_drop_deadline' => 'datetime',
         ];
+    }
+
+    /**
+     * Limit the query to the active semester.
+     *
+     * At most one row has is_active set. The flag column enforces that.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
     }
 
     /**
@@ -74,5 +88,15 @@ class Semester extends Model
     public function examTimetable(): HasMany
     {
         return $this->hasMany(ExamTimetable::class);
+    }
+
+    /**
+     * Staff teaching assignments in this semester.
+     *
+     * @return HasMany<CourseAssignment, $this>
+     */
+    public function courseAssignments(): HasMany
+    {
+        return $this->hasMany(CourseAssignment::class);
     }
 }

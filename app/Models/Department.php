@@ -59,4 +59,24 @@ class Department extends Model
     {
         return $this->hasMany(Announcement::class);
     }
+
+    /**
+     * Role assignments scoped to this department.
+     *
+     * @return HasMany<RoleAssignment, $this>
+     */
+    public function roleAssignments(): HasMany
+    {
+        return $this->hasMany(RoleAssignment::class);
+    }
+
+    /**
+     * Staff who belong to this department.
+     *
+     * @return HasMany<Staff, $this>
+     */
+    public function staff(): HasMany
+    {
+        return $this->hasMany(Staff::class);
+    }
 }

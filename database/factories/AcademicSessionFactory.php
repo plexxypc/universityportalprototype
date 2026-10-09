@@ -27,4 +27,16 @@ class AcademicSessionFactory extends Factory
             'is_current' => false,
         ];
     }
+
+    /**
+     * Mark this session as the single current session.
+     *
+     * current_flag is generated. Only one row in the table may use this state.
+     */
+    public function current(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_current' => true,
+        ]);
+    }
 }

@@ -21,7 +21,7 @@ class FacultyFactory extends Factory
     {
         return [
             'name' => fake()->unique()->company(),
-            'code' => fake()->unique()->bothify('FC##'),
+            'code' => fake()->unique()->bothify('FC####'),
         ];
     }
 }

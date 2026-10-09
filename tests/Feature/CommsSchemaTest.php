@@ -63,14 +63,15 @@ it('returns portal notifications for the user', function () {
     Notification::factory()->create();
 
     $relation = $user->notifications();
+    $loaded = $relation->get();
 
     expect($relation)->toBeInstanceOf(HasMany::class)
         ->and($relation->getRelated())->toBeInstanceOf(Notification::class)
         ->and($relation->getRelated()->getTable())->toBe('notifications')
         ->and($relation->getForeignKeyName())->toBe('user_id')
         ->and($relation->toSql())->not->toContain('notifiable')
-        ->and($user->notifications)->toHaveCount(1)
-        ->and($user->notifications->first()?->is($notification))->toBeTrue();
+        ->and($loaded)->toHaveCount(1)
+        ->and($loaded->first()?->is($notification))->toBeTrue();
 });
 
 it('filters unread portal notifications through the user relation', function () {

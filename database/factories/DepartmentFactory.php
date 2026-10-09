@@ -23,7 +23,7 @@ class DepartmentFactory extends Factory
         return [
             'faculty_id' => Faculty::factory(),
             'name' => fake()->unique()->company(),
-            'code' => fake()->unique()->bothify('DP##'),
+            'code' => fake()->unique()->bothify('DP####'),
         ];
     }
 }

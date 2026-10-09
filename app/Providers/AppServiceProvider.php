@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Support\DatabaseTls;
 use App\Support\EnvironmentGuard;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,5 +26,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->make(DatabaseTls::class)->apply();
         $this->app->make(EnvironmentGuard::class)->enforce();
+
+        Model::preventLazyLoading(! $this->app->isProduction());
     }
 }

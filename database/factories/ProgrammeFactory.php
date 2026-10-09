@@ -23,7 +23,7 @@ class ProgrammeFactory extends Factory
         return [
             'department_id' => Department::factory(),
             'name' => fake()->unique()->words(3, true),
-            'code' => fake()->unique()->bothify('PG##'),
+            'code' => fake()->unique()->bothify('PG####'),
             'degree' => 'BSc',
             'duration_years' => 4,
         ];
