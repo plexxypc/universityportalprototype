@@ -68,7 +68,7 @@
 ## Phase 4: Authentication and authorisation [AUTH-1..7]
 
 - [x] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
-- [ ] TASK-038 Base policies and `visibleTo()` scopes for scoped models
+- [x] TASK-038 Base policies and `visibleTo()` scopes for scoped models
 - [ ] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
 - [ ] TASK-040 Login rate limiting (IP + identifier). `bootstrap/app.php` currently trusts every proxy (`at: '*'`). Revisit that when this throttle is built, because a client-supplied `X-Forwarded-For` is the address the limiter would count. See `docs/DEPLOYMENT.md`.
 - [ ] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
@@ -127,6 +127,7 @@
   - Phase 4 carry-over: suspending or reactivating a student must also update `users.status` (login checks the user, not the student row).
 - [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
+  - Phase 4 carry-over: authorised document download uses the Document policy.
 - [ ] TASK-071 Import engine: CSV and Excel parsers with size/row limits
 - [ ] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, no cross-host redirects)
 - [ ] TASK-073 Import wizard steps 1–2 (Livewire): choose source and preview
@@ -196,6 +197,7 @@
   - Phase 3 carry-over: a result score's component belongs to the result's scheme.
   - Phase 3 carry-over: `scheme_version` matches the linked scheme row.
 - [ ] TASK-112 Lecturer results entry UI per assigned course
+  - Phase 4 carry-over: lecturer screens show only name, matric number, programme and level.
 - [ ] TASK-113 Results CSV upload with validation and row errors
 - [ ] TASK-114 Workflow: submit → approve → publish, with role checks and locking on publish
 - [ ] TASK-115 Amendment process for published results (audited, re-publish)

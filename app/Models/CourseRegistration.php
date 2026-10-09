@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\RegistrationStatus;
+use App\Enums\Role;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\CourseRegistrationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -25,10 +30,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'decided_by',
     'rejection_reason',
 ])]
-class CourseRegistration extends Model
+class CourseRegistration extends Model implements VisibleToUser
 {
     /** @use HasFactory<CourseRegistrationFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the status and the decision instants.
@@ -82,5 +89,20 @@ class CourseRegistration extends Model
     public function items(): HasMany
     {
         return $this->hasMany(CourseRegistrationItem::class);
+    }
+
+    /**
+     * Registrations follow student records, submit, and approve.
+     *
+     * Lecturers are skipped. The student_records cell would include their
+     * courses, and a registration is not one of those rows.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['student_records', 'course_registration_submit', 'course_registration_approve'],
+            kind: VisibilityKind::StudentId,
+            skipRoles: [Role::Lecturer],
+        );
     }
 }

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\CourseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,10 +19,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * A catalogue course. Code is unique across the institution.
  */
 #[Fillable(['department_id', 'code', 'title', 'credit_units'])]
-class Course extends Model
+class Course extends Model implements VisibleToUser
 {
     /** @use HasFactory<CourseFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Department that owns this course.
@@ -108,5 +114,19 @@ class Course extends Model
     public function results(): HasMany
     {
         return $this->hasMany(Result::class);
+    }
+
+    /**
+     * Courses follow academic_structure.
+     *
+     * A lecturer sees only courses on course_assignments, which is narrower
+     * than the unscoped view cell.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['academic_structure'],
+            kind: VisibilityKind::Course,
+        );
     }
 }

@@ -3,12 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Friday, 09 October 2026 (Phase 4, TASK-037)
+**Last updated:** Friday, 09 October 2026 (Phase 4, TASK-038)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
 
-Phase 4 is in progress on `phase-4-auth`. TASK-037 is done: the PRD section 5 permission map, user role helpers, gates for every ADR-028 permission key, and the role-scope validator. An inactive user is granted nothing. Super Admin is allowed every ability except `course_registration.submit` and `payments.make`. Row-level access waits for policies in TASK-038. Phase 3 is merged to `main` as pull request #7 (`9aa094d`). ADR-028 is committed on this branch. A Published result requires `published_at`. Academic standing thresholds wait for a new table in TASK-060. Decimal totals and grade-band edges are decided in TASK-059.
+Phase 4 is in progress on `phase-4-auth`. TASK-037 and TASK-038 are done. TASK-038 adds policies and `visibleTo()` for the student-owned models and for Faculty, Department, Programme, and Course. An inactive user is granted nothing and sees no rows. Super Admin sees every row and is denied `course_registration.submit` and `payments.make`. Documents are visible only to the owning student, the Registrar, and Super Admin. Draft results are visible only to Super Admin and to a lecturer assigned to that course. A lecturer sees a student only with an Approved registration item for an assigned course and semester. Other models wait for their features. Phase 3 is merged to `main` as pull request #7 (`9aa094d`). ADR-028 is committed on this branch. A Published result requires `published_at`. Academic standing thresholds wait for a new table in TASK-060. Decimal totals and grade-band edges are decided in TASK-059.
 
 **Live database:** The Phase 3 migrations have not run on the live Aiven database. Those files are not on `origin/main`. TASK-172, which runs migrations on Aiven, is still open. This machine's `.env` points at local Docker (`127.0.0.1`, database `university_portal`). That local database has 46 applied migrations, through `2026_10_09_230007_create_audit_logs_table`.
 
@@ -18,7 +18,7 @@ The staff panel uses the design tokens, self-hosted Inter, and the institution n
 
 **Filament theme:** Filament **v5.10.0**. `StaffPanelProvider` registers a Vite theme at `resources/css/filament/staff/theme.css`. That file imports `@fontsource/inter` and `vendor/filament/filament/resources/css/theme.css`, and forces badge radius to a pill. Inter is set with `Filament\FontProviders\LocalFontProvider` (no Bunny Fonts). The primary palette is `Filament\Support\Colors\Color::hex('#4F46E5')` from `App\Filament\StaffPanelTheme`, with shades 50, 500, 600, and 700 replaced by the design tokens. Filament stores the palette as OKLCH. Dark mode is off. The sidebar is 240px and collapsible. Brand name and logo come from `config/portal.php`.
 
-**Checks:** On 09 October 2026, `composer check` passed on `phase-4-auth`: Pint passed, Larastan reported 0 errors, Pest passed **374 tests** and **1526 assertions**. Larastan reads `casts()` (`parseModelCastsMethod`) so a status or role column is the enum, not the varchar. GitHub CI on `d5fc5c0` is the last green run recorded here: https://github.com/plexxypc/universityportalprototype/actions/runs/37689062914. Phase 4 has not been through a recorded GitHub run.
+**Checks:** On 09 October 2026, `composer check` passed on `phase-4-auth`: Pint passed, Larastan reported 0 errors, Pest passed **385 tests** and **1779 assertions**. Larastan reads `casts()` (`parseModelCastsMethod`) so a status or role column is the enum, not the varchar. GitHub CI on `d5fc5c0` is the last green run recorded here: https://github.com/plexxypc/universityportalprototype/actions/runs/37689062914. Phase 4 has not been through a recorded GitHub run.
 
 **Live demo:** `https://universityportalprototype.onrender.com` (Render free web service, Aiven MySQL). On 07 October 2026 the home page and `/up` returned HTTP 200 with the title University Portal. `/health` returned HTTP 200 with `"status": "ok"`, `"database": "ok"`, `"heartbeat": "ok"`, `"mail_driver": "log"`, `"payment_provider": "sandbox"`, and `"environment": "production"`. DigitalOcean App Platform is not in use. A local container named `university-portal` is still running at `http://127.0.0.1:8081` (host 8081 to container 8080).
 
@@ -183,7 +183,7 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 
 ## Current Task
 
-**TASK-038** (Phase 4): base policies and `visibleTo()` scopes. TASK-037 is done. The role-scope rule (which roles require a faculty, a department, or neither) is `App\Support\Rbac\RoleScopeValidator`, tested by `it enforces which roles require a faculty, a department, or neither`. Authentication and authorisation continues with TASK-038 through TASK-045.
+**TASK-039** (Phase 4): login page and login action. TASK-038 is done. The release-gate isolation suite is `tests/Feature/Auth/CrossUserIsolationTest.php`. The role-scope rule (which roles require a faculty, a department, or neither) is `App\Support\Rbac\RoleScopeValidator`, tested by `it enforces which roles require a faculty, a department, or neither`. Authentication and authorisation continues with TASK-039 through TASK-045.
 
 Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 

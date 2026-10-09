@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\NotificationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,10 +28,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'data',
     'read_at',
 ])]
-class Notification extends Model
+class Notification extends Model implements VisibleToUser
 {
     /** @use HasFactory<NotificationFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the payload and the read instant.
@@ -72,5 +78,16 @@ class Notification extends Model
     public function scopeUnread(Builder $query): Builder
     {
         return $query->whereNull('read_at');
+    }
+
+    /**
+     * Each account sees its own notifications. Super Admin sees every row.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: [],
+            kind: VisibilityKind::Notification,
+        );
     }
 }

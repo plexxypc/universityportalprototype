@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\ResultStatus;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\ResultFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -33,10 +37,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'approved_by',
     'published_at',
 ])]
-class Result extends Model
+class Result extends Model implements VisibleToUser
 {
     /** @use HasFactory<ResultFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the stored score, the status, and the publication instant.
@@ -121,5 +127,19 @@ class Result extends Model
     public function scores(): HasMany
     {
         return $this->hasMany(ResultScore::class);
+    }
+
+    /**
+     * Results follow results_view, then the draft rule in Visibility.
+     *
+     * A student sees only their own Published rows. Draft rows stay with
+     * Super Admin and lecturers assigned to the course.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['results_view'],
+            kind: VisibilityKind::Result,
+        );
     }
 }

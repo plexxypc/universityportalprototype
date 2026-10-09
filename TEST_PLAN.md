@@ -35,13 +35,13 @@
 
 ## 2. Authorisation and data isolation (release gate)
 
-- [ ] (I) Student A cannot read Student B's profile, invoices, payments, results, registrations, documents
-- [ ] (I) Faculty Admin sees only own faculty's students; Department Officer only own department
-- [ ] (I) Lecturer can enter results only for assigned courses
+- [x] (I) Student A cannot read Student B's profile, invoices, payments, results, registrations, documents
+- [x] (I) Faculty Admin sees only own faculty's students; Department Officer only own department
+- [x] (I) Lecturer can enter results only for assigned courses
 - [ ] (I) Only Exam Officer / Super Admin can publish results; only Super Admin edits grading scheme
 - [ ] (I) Only Super Admin can read audit logs
 - [ ] (I) Direct API/action calls with a student session to staff actions return forbidden
-- [ ] (I) Every model with a Policy has a test proving denial for an unauthorised user
+- [x] (I) Every model with a Policy has a test proving denial for an unauthorised user
 - [ ] (I) Every download/PDF/receipt/document route rejects another user's record id
 - [ ] (I) Tampering with a Livewire public property (e.g. another student id) is rejected
 

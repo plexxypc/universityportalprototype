@@ -6,6 +6,10 @@ namespace App\Models;
 
 use App\Enums\PaymentGateway;
 use App\Enums\PaymentStatus;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\PaymentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -33,10 +37,12 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'last_checked_at',
     'paid_at',
 ])]
-class Payment extends Model
+class Payment extends Model implements VisibleToUser
 {
     /** @use HasFactory<PaymentFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the gateway, status, and payment instants.
@@ -92,5 +98,16 @@ class Payment extends Model
     public function receipt(): HasOne
     {
         return $this->hasOne(Receipt::class);
+    }
+
+    /**
+     * Payments follow the fees cell and the student's payments cell.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['fees', 'payments'],
+            kind: VisibilityKind::StudentId,
+        );
     }
 }
