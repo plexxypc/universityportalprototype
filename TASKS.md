@@ -62,7 +62,7 @@
 - [x] TASK-032 Migrations: grading (`grading_schemes`, `assessment_components`, `grade_bands`, `classification_bands`) and results (`results`, `result_scores`)
 - [ ] TASK-033 Migrations: `attendance_sessions`, `attendance_records`, `exam_timetable`
 - [ ] TASK-034 Migrations: `announcements`, `notifications`, `email_outbox`, `counters`, `audit_logs`
-- [ ] TASK-035 Eloquent models, enum casts, relationships and factories for all tables
+- [x] TASK-035 Eloquent models, enum casts, relationships and factories for all tables
 - [ ] TASK-036 Constraint tests (unique matric/email/reference, single current session, money CHECKs)
 
 ## Phase 4: Authentication and authorisation [AUTH-1..7]
