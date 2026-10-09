@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\RepeatPolicy;
 use Database\Factories\GradingSchemeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -43,6 +44,19 @@ class GradingScheme extends Model
             'repeat_policy' => RepeatPolicy::class,
             'resit_points_cap' => 'decimal:2',
         ];
+    }
+
+    /**
+     * Limit the query to the active scheme.
+     *
+     * At most one row has is_active set. The flag column enforces that.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
     }
 
     /**

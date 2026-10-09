@@ -152,4 +152,24 @@ class User extends Authenticatable
     {
         return $this->hasMany(ImportBatch::class);
     }
+
+    /**
+     * Results this account entered.
+     *
+     * @return HasMany<Result, $this>
+     */
+    public function enteredResults(): HasMany
+    {
+        return $this->hasMany(Result::class, 'entered_by');
+    }
+
+    /**
+     * Results this account approved.
+     *
+     * @return HasMany<Result, $this>
+     */
+    public function approvedResults(): HasMany
+    {
+        return $this->hasMany(Result::class, 'approved_by');
+    }
 }

@@ -99,4 +99,14 @@ class Semester extends Model
     {
         return $this->hasMany(CourseAssignment::class);
     }
+
+    /**
+     * Results recorded in this semester.
+     *
+     * @return HasMany<Result, $this>
+     */
+    public function results(): HasMany
+    {
+        return $this->hasMany(Result::class);
+    }
 }

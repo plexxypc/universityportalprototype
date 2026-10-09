@@ -165,4 +165,14 @@ class Student extends Model
     {
         return $this->morphMany(Document::class, 'owner');
     }
+
+    /**
+     * Results recorded for this student.
+     *
+     * @return HasMany<Result, $this>
+     */
+    public function results(): HasMany
+    {
+        return $this->hasMany(Result::class);
+    }
 }

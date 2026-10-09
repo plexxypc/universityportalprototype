@@ -28,4 +28,14 @@ class AttendanceRecordFactory extends Factory
             'status' => AttendanceStatus::Present,
         ];
     }
+
+    /**
+     * Mark the student absent.
+     */
+    public function absent(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => AttendanceStatus::Absent,
+        ]);
+    }
 }

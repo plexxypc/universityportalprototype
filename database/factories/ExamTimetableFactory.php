@@ -35,4 +35,14 @@ class ExamTimetableFactory extends Factory
             'published_at' => null,
         ];
     }
+
+    /**
+     * Mark the sitting published.
+     */
+    public function published(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'published_at' => now(),
+        ]);
+    }
 }

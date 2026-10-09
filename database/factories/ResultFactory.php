@@ -44,4 +44,49 @@ class ResultFactory extends Factory
             'published_at' => null,
         ];
     }
+
+    /**
+     * Mark the result submitted, with the score fields still empty.
+     */
+    public function submitted(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => ResultStatus::Submitted,
+            'total' => null,
+            'grade' => null,
+            'points' => null,
+            'approved_by' => null,
+            'published_at' => null,
+        ]);
+    }
+
+    /**
+     * Mark the result approved, with the score fields set together.
+     */
+    public function approved(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'total' => '70.00',
+            'grade' => 'A',
+            'points' => '5.00',
+            'status' => ResultStatus::Approved,
+            'approved_by' => User::factory(),
+            'published_at' => null,
+        ]);
+    }
+
+    /**
+     * Mark the result published. Published requires published_at.
+     */
+    public function published(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'total' => '70.00',
+            'grade' => 'A',
+            'points' => '5.00',
+            'status' => ResultStatus::Published,
+            'approved_by' => User::factory(),
+            'published_at' => now(),
+        ]);
+    }
 }

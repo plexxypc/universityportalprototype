@@ -29,4 +29,14 @@ class NotificationFactory extends Factory
             'read_at' => null,
         ];
     }
+
+    /**
+     * Mark the notification read.
+     */
+    public function read(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'read_at' => now(),
+        ]);
+    }
 }

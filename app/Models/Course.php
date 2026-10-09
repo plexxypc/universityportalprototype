@@ -99,4 +99,14 @@ class Course extends Model
     {
         return $this->hasMany(ExamTimetable::class);
     }
+
+    /**
+     * Results recorded for this course.
+     *
+     * @return HasMany<Result, $this>
+     */
+    public function results(): HasMany
+    {
+        return $this->hasMany(Result::class);
+    }
 }

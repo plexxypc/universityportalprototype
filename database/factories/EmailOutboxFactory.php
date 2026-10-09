@@ -38,4 +38,30 @@ class EmailOutboxFactory extends Factory
             'redacted_at' => null,
         ];
     }
+
+    /**
+     * Mark the email sent. Sent requires sent_at.
+     */
+    public function sent(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => EmailStatus::Sent,
+            'sent_at' => now(),
+            'redacted_at' => null,
+        ]);
+    }
+
+    /**
+     * Mark the email failed.
+     */
+    public function failed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => EmailStatus::Failed,
+            'attempts' => 1,
+            'last_error' => 'Mailbox unavailable',
+            'sent_at' => null,
+            'redacted_at' => null,
+        ]);
+    }
 }

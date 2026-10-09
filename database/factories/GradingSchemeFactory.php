@@ -33,4 +33,16 @@ class GradingSchemeFactory extends Factory
             'resit_points_cap' => null,
         ];
     }
+
+    /**
+     * Mark this scheme as the single active scheme.
+     *
+     * active_flag is generated. Only one row in the table may use this state.
+     */
+    public function active(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_active' => true,
+        ]);
+    }
 }
