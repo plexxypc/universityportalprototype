@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\Role;
 use App\Enums\UserStatus;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,6 +22,27 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    /**
+     * Staff roles plus Student when a students row exists. Null until loaded.
+     *
+     * @var list<Role>|null
+     */
+    private ?array $resolvedRoles = null;
+
+    /**
+     * Faculty ids from Faculty Admin assignments. Loaded with the roles.
+     *
+     * @var list<int>
+     */
+    private array $facultyScopeIds = [];
+
+    /**
+     * Department ids from Department Officer assignments. Loaded with the roles.
+     *
+     * @var list<int>
+     */
+    private array $departmentScopeIds = [];
 
     /**
      * Get the attributes that should be cast.
@@ -47,6 +69,111 @@ class User extends Authenticatable
     public function roleAssignments(): HasMany
     {
         return $this->hasMany(RoleAssignment::class);
+    }
+
+    /**
+     * Staff roles from role assignments, plus Student when a students row exists.
+     *
+     * A Student value stored on role_assignments is ignored. The first call
+     * loads the assignments and checks the students table. Later calls on
+     * this same instance do not query again.
+     *
+     * @return list<Role>
+     */
+    public function roles(): array
+    {
+        $this->loadRoleContext();
+
+        return $this->resolvedRoles ?? [];
+    }
+
+    /**
+     * Whether this account has the given role.
+     */
+    public function hasRole(Role $role): bool
+    {
+        return in_array($role, $this->roles(), true);
+    }
+
+    /**
+     * Faculty ids stored on this user's Faculty Admin assignments.
+     *
+     * @return list<int>
+     */
+    public function facultyIds(): array
+    {
+        $this->loadRoleContext();
+
+        return $this->facultyScopeIds;
+    }
+
+    /**
+     * Department ids stored on this user's Department Officer assignments.
+     *
+     * A Department Officer's faculty is not looked up here.
+     *
+     * @return list<int>
+     */
+    public function departmentIds(): array
+    {
+        $this->loadRoleContext();
+
+        return $this->departmentScopeIds;
+    }
+
+    /**
+     * Load staff roles, the derived student role, and the stored scope ids.
+     */
+    private function loadRoleContext(): void
+    {
+        if ($this->resolvedRoles !== null) {
+            return;
+        }
+
+        if ($this->relationLoaded('roleAssignments')) {
+            $assignments = $this->roleAssignments;
+        } else {
+            $assignments = $this->roleAssignments()->orderBy('id')->get();
+            $this->setRelation('roleAssignments', $assignments);
+        }
+
+        $roles = [];
+        $seen = [];
+        $facultyIds = [];
+        $departmentIds = [];
+
+        foreach ($assignments as $assignment) {
+            $role = $assignment->role;
+
+            if ($role === Role::Student) {
+                continue;
+            }
+
+            if (! isset($seen[$role->value])) {
+                $seen[$role->value] = true;
+                $roles[] = $role;
+            }
+
+            if ($role === Role::FacultyAdmin && $assignment->faculty_id !== null) {
+                $facultyIds[] = (int) $assignment->faculty_id;
+            }
+
+            if ($role === Role::DepartmentOfficer && $assignment->department_id !== null) {
+                $departmentIds[] = (int) $assignment->department_id;
+            }
+        }
+
+        $isStudent = $this->relationLoaded('student')
+            ? $this->getRelation('student') !== null
+            : $this->student()->exists();
+
+        if ($isStudent) {
+            $roles[] = Role::Student;
+        }
+
+        $this->resolvedRoles = $roles;
+        $this->facultyScopeIds = $facultyIds;
+        $this->departmentScopeIds = $departmentIds;
     }
 
     /**

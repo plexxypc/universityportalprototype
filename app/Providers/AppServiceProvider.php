@@ -8,6 +8,7 @@ use App\Models\Applicant;
 use App\Models\Student;
 use App\Support\DatabaseTls;
 use App\Support\EnvironmentGuard;
+use App\Support\Rbac\Permissions;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\ServiceProvider;
@@ -36,5 +37,7 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         Model::preventLazyLoading(! $this->app->isProduction());
+
+        Permissions::registerGates();
     }
 }

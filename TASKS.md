@@ -67,7 +67,7 @@
 
 ## Phase 4: Authentication and authorisation [AUTH-1..7]
 
-- [ ] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
+- [x] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
 - [ ] TASK-038 Base policies and `visibleTo()` scopes for scoped models
 - [ ] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
 - [ ] TASK-040 Login rate limiting (IP + identifier). `bootstrap/app.php` currently trusts every proxy (`at: '*'`). Revisit that when this throttle is built, because a client-supplied `X-Forwarded-For` is the address the limiter would count. See `docs/DEPLOYMENT.md`.
