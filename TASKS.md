@@ -72,6 +72,7 @@
 - [ ] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
 - [ ] TASK-040 Login rate limiting (IP + identifier). `bootstrap/app.php` currently trusts every proxy (`at: '*'`). Revisit that when this throttle is built, because a client-supplied `X-Forwarded-For` is the address the limiter would count. See `docs/DEPLOYMENT.md`.
 - [ ] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
+  - Phase 3 carry-over: block login when the temporary password has expired.
 - [ ] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
 - [ ] TASK-043 Logout and session expiry handling
 - [ ] TASK-044 `create-super-admin` Artisan command
@@ -82,23 +83,33 @@
 `/health` currently reports a scheduler heartbeat only. Once the email outbox exists (TASK-047), add a queue-backlog check to `/health`.
 
 - [ ] TASK-046 `AuditService` and audit helper used by every service
+  - Phase 3 carry-over: remove secrets from audit `before` and `after`.
 - [ ] TASK-047 `MailService` with outbox recording, `SendOutboxEmail` job, retry rules; Brevo mailer configuration and `log` mailer
+  - Phase 3 carry-over: redact a credentials email when it is sent, when attempts are exhausted, or when credentials are re-issued.
+  - Phase 3 carry-over: keep the password out of the subject, `last_error`, and application logs.
 - [ ] TASK-048 Email templates: base layout plus welcome/credentials, password reset, admission, registration confirmation, payment confirmation/receipt, result published, announcement, timetable published
 - [ ] TASK-049 Scheduler: `outbox:send` every minute with batch limit and daily-limit awareness
 - [ ] TASK-050 Staff outbox page (Filament): list, filter, view, retry failed, send queued, **send test email**
 - [ ] TASK-051 Password reset flow through `MailService`
 - [ ] TASK-052 `NotificationService` and bell with unread count (staff and student layouts)
+  - Phase 3 carry-over: limit notification `type` to the known types.
 - [ ] TASK-053 Tests: template rendering (no unresolved placeholders), outbox status transitions, provider failure and retry, redaction of temporary passwords
 
 ## Phase 6: University setup [SETUP-1..8]
 
 - [ ] TASK-054 Institution settings page (profile, logo upload, matric pattern, unit limits, approval toggle, deadlines, attendance threshold, withhold-results toggle)
+  - Phase 3 carry-over: while `institution_settings` is empty, reads fall back to `config/portal.php`.
 - [ ] TASK-055 Academic sessions resource (single current session)
+  - Phase 3 carry-over: session names match `2026/2027`.
 - [ ] TASK-056 Semesters resource (single active semester, registration and add/drop deadlines)
+  - Phase 3 carry-over: the active semester belongs to the current session.
 - [ ] TASK-057 Faculties, departments and programmes resources with scope rules
+  - Phase 3 carry-over: degree is chosen from a closed list.
 - [ ] TASK-058 Course catalogue resource with prerequisites and programme–course mapping
 - [ ] TASK-059 `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests. Decide here whether a decimal total is rounded to a whole number before the grade lookup, or bands are lower-bound inclusive.
 - [ ] TASK-060 **Grading configuration** UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation; default-scheme loader; scheme versioning. Add the academic-standing threshold table (warning, probation) in this task.
+  - Phase 3 carry-over: when unpublished results move to a new scheme version, remap `result_scores` to that version's components in the same transaction.
+  - Phase 3 carry-over: the pass mark agrees with the fail band.
 - [ ] TASK-061 Grading preview tool ("enter sample scores, see computed grade") to let the admin verify their configuration
 - [ ] TASK-062 Fee categories and fee structures resources
 - [ ] TASK-063 Setup tests (single current session, band validation, scoped edits)
@@ -106,17 +117,21 @@
 ## Phase 7: Student onboarding and records [PRD §6, ADM, STU]
 
 - [ ] TASK-064 `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`)
+  - Phase 3 carry-over: set `users.name` from the student's three name parts.
+  - Phase 3 carry-over: default a blank entry session to the current session.
 - [ ] TASK-065 `CredentialService`: temporary password, expiry, welcome email, **resend credentials**
 - [ ] TASK-066 Single "Add student" form
 - [ ] TASK-067 Student list: search, filters (faculty, department, programme, level, status), pagination
 - [ ] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
 - [ ] TASK-069 Edit student; suspend/reactivate; level promotion (single and bulk)
 - [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
+  - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
 - [ ] TASK-071 Import engine: CSV and Excel parsers with size/row limits
 - [ ] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, no cross-host redirects)
 - [ ] TASK-073 Import wizard steps 1–2 (Livewire): choose source and preview
 - [ ] TASK-074 Import wizard step 3: column mapping with auto-match
 - [ ] TASK-075 Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table
+  - Phase 3 carry-over: normalise every saved phone number to `+234`.
 - [ ] TASK-076 Chunked commit (25 rows per request) with progress bar, duplicate options (skip/update), send-emails now/later; `import_batches` records
 - [ ] TASK-077 Import report page and downloadable failed-rows CSV; audit entry per batch
 - [ ] TASK-078 Downloadable templates (CSV and Excel) and in-app Google Form guide page
@@ -138,6 +153,7 @@
 - [ ] TASK-088 `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules
 - [ ] TASK-089 Student course registration UI (core pre-selected, electives, live unit total, sticky summary)
 - [ ] TASK-090 Submit, status handling, confirmation email and notification
+  - Phase 3 carry-over: copy `credit_units` onto the registration item when it is saved.
 - [ ] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
 - [ ] TASK-092 Add/drop within window; admin reopen for an individual student
 - [ ] TASK-093 Registration slip PDF
@@ -147,16 +163,25 @@
 ## Phase 10: Fees, invoices and payments [FIN, PAY]
 
 - [ ] TASK-096 Invoice generation: single and bulk by programme/level/session, with preview and confirm
+  - Phase 3 carry-over: at most one non-cancelled invoice per student per session.
+  - Phase 3 carry-over: allocate the invoice number from `counters` inside the creating transaction.
 - [ ] TASK-097 Adjustments: scholarship, discount, waiver with reason and audit
 - [ ] TASK-098 Student fees page and invoice detail
 - [ ] TASK-099 `PaymentGateway` interface (`initialize`, `verify`, `parseNotification`) and **Demo Gateway** (checkout page and signed event)
 - [ ] TASK-100 `PaymentService::initiate`: authorise, amount ≤ outstanding, pending payment with unique reference and expiry, store provider reference
+  - Phase 3 carry-over: the payment's `student_id` is the invoice's student.
+  - Phase 3 carry-over: allocate the payment reference from `counters` inside the creating transaction.
 - [ ] TASK-101 `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling
+  - Phase 3 carry-over: a pending payment does not change `paid_kobo`.
+  - Phase 3 carry-over: a reversal reduces `paid_kobo` and does not delete the payment.
 - [ ] TASK-102 Payment return/status page (verifying → success / pending / failed / cancelled / expired) with "Check status" button
 - [ ] TASK-103 Notification endpoint (outside CSRF, rate-limited, reference only, triggers re-query) and `payments:poll-pending` scheduled job with back-off
+  - Phase 3 carry-over: payment events are inserted and never updated.
 - [ ] TASK-104 Adapter for the **institution's chosen provider**: Interswitch Web Checkout (redirect/inline, requery) **or** Remita (RRR invoice, status by RRR); verify against the provider's sandbox/demo
 - [ ] TASK-105 *(Optional)* Second provider adapter (the one not chosen first)
 - [ ] TASK-106 Receipts: numbering, viewer and PDF
+  - Phase 3 carry-over: create a receipt only for a Successful payment, once, inside the settlement transaction.
+  - Phase 3 carry-over: allocate the receipt number from `counters` inside the creating transaction.
 - [ ] TASK-107 Payment confirmation email and notification
 - [ ] TASK-108 Admin transactions list and detail; re-verify; receipt download
 - [ ] TASK-109 Reconciliation view and finance dashboard
@@ -167,6 +192,8 @@
 ## Phase 11: Results and grading [RES-1..11]
 
 - [ ] TASK-111 `ResultService`: draft results with component scores validated against configured maximums
+  - Phase 3 carry-over: a result score's component belongs to the result's scheme.
+  - Phase 3 carry-over: `scheme_version` matches the linked scheme row.
 - [ ] TASK-112 Lecturer results entry UI per assigned course
 - [ ] TASK-113 Results CSV upload with validation and row errors
 - [ ] TASK-114 Workflow: submit → approve → publish, with role checks and locking on publish
@@ -181,6 +208,8 @@
 ## Phase 12: Attendance [ATT-1..5]
 
 - [ ] TASK-122 `AttendanceService` (sessions, records, percentages, threshold)
+  - Phase 3 carry-over: the marked student is registered for that course in that semester.
+  - Phase 3 carry-over: a lecturer marks only assigned courses.
 - [ ] TASK-123 Lecturer UI: create session, mark all/individual, edit within allowed window
 - [ ] TASK-124 Student attendance view per course
 - [ ] TASK-125 Summaries, low-attendance warnings and CSV export
@@ -197,11 +226,14 @@
 ## Phase 14: Staff management [STAFF-1..5]
 
 - [ ] TASK-132 `StaffService`: create/update with credentials (reuse `CredentialService`)
+  - Phase 3 carry-over: enforce the `staff_no` pattern.
 - [ ] TASK-133 Staff list and profile pages
 - [ ] TASK-134 Staff CSV import (reuse import engine)
 - [ ] TASK-135 Role assignment with faculty/department scope
+  - Phase 3 carry-over: when a role assignment sets both scope ids, the department belongs to that faculty.
 - [ ] TASK-136 Lecturer–course assignments per semester
 - [ ] TASK-137 Activate/deactivate staff
+  - Phase 3 carry-over: deactivating a staff profile revokes that user's sessions.
 - [ ] TASK-138 Staff tests
 
 **GATE (Milestone B):** Journeys 5 and 6 pass on the deployed URL.
@@ -209,6 +241,7 @@
 ## Phase 15: Announcements [MAIL-5]
 
 - [ ] TASK-139 `AnnouncementService` with audience targeting (all, faculty, department, programme, level)
+  - Phase 3 carry-over: publishing an announcement creates the notification and, when `send_email` is true, the outbox row.
 - [ ] TASK-140 Compose and list UI with optional email
 - [ ] TASK-141 Student announcement display and notifications
 - [ ] TASK-142 Announcement tests (targeting, scoped authors)
@@ -225,6 +258,7 @@
 ## Phase 17: Administration and audit [ADMIN-1..5]
 
 - [ ] TASK-149 Audit log viewer: filter by actor, entity, action, date; export
+  - Phase 3 carry-over: only a Super Admin can read audit logs.
 - [ ] TASK-150 User management page and role/permission view
 - [ ] TASK-151 Backup and export (ZIP of CSV/JSON of core tables)
 - [ ] TASK-152 Settings status panel (database, queue, mail, payment configuration)
@@ -244,6 +278,8 @@
 ## Phase 19: Hardening
 
 `audit_logs` is append-only in application code: only the audit service inserts, and nothing updates or deletes. Revisit database-level protection once the production host is chosen.
+
+Phase 3 carry-over: database-level append-only protection for `audit_logs` waits until the production host is chosen. No task id yet.
 
 - [ ] TASK-160 Responsive pass at 375px, 768px and 1440px across every screen
 - [ ] TASK-161 Accessibility pass (keyboard, focus, labels, contrast, axe checks)
