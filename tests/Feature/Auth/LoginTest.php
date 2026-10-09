@@ -405,7 +405,11 @@ it('shows the login form with the password toggle', function () {
 it('stops a student from opening the staff panel', function () {
     $student = login_student();
 
-    $this->actingAs($student->user)->get('/staff')->assertForbidden();
+    $response = $this->actingAs($student->user)->get('/staff');
+
+    $response->assertRedirect('/student');
+    $response->assertDontSee('Account');
+    expect($response->getContent())->not->toContain('wire:snapshot');
 });
 
 it('sends a guest from the staff panel to the portal login', function () {

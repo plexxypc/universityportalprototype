@@ -6,6 +6,9 @@ namespace App\Providers\Filament;
 
 use App\Filament\StaffPanelTheme;
 use App\Http\Middleware\AuthenticateStaffPanel;
+use App\Http\Middleware\EnsureActive;
+use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsurePortalArea;
 use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -28,7 +31,8 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
  *
  * The panel does not register a login, registration, password reset, email
  * verification, profile, or multi-factor page. Guests are sent to the portal
- * login. AuthenticateStaffPanel stays persistent on Livewire requests.
+ * login. EnsureActive, EnsurePasswordChanged, the staff area check, and
+ * AuthenticateStaffPanel stay persistent on Livewire requests.
  * Navigation groups follow the PRD module names and stay empty until later
  * pages exist. Filament hides a group that has no items.
  */
@@ -80,6 +84,9 @@ class StaffPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->authMiddleware([
+                EnsureActive::class,
+                EnsurePasswordChanged::class,
+                EnsurePortalArea::class.':staff',
                 AuthenticateStaffPanel::class,
             ], isPersistent: true);
     }

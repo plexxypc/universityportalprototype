@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Http\Middleware\EnsureActive;
+use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsurePortalArea;
 use App\Models\User;
 use App\Services\AuthService;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -26,6 +30,12 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Filament's Authenticate implements AuthenticatesRequests, so the
+        // router would run it before these checks and answer 403 first.
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsureActive::class);
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsurePasswordChanged::class);
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsurePortalArea::class);
+
         $middleware->redirectGuestsTo(fn (): string => route('login'));
         $middleware->redirectUsersTo(function (Request $request): string {
             $user = $request->user();
@@ -34,7 +44,16 @@ return Application::configure(basePath: dirname(__DIR__))
                 return route('login');
             }
 
-            return app(AuthService::class)->homePath($user);
+            $auth = app(AuthService::class);
+            $home = $auth->homePath($user);
+
+            if ($home === null) {
+                $auth->logout($request);
+
+                return route('login');
+            }
+
+            return $home;
         });
 
         // Trust the platform proxy for scheme, host, and port so HTTPS and

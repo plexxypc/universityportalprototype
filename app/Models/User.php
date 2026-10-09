@@ -7,6 +7,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\Role;
 use App\Enums\UserStatus;
+use App\Support\Rbac\Permissions;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
@@ -98,15 +99,16 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * Whether role assignments grant a staff role.
+     * Whether the permission map grants this account a staff role.
      *
-     * A students row does not count. The panel allows only an Active user
-     * with one of these roles, in every environment.
+     * A students row does not count. A role that is not in the map is not
+     * staff. The panel allows only an Active user with one of these roles,
+     * in every environment.
      */
     public function hasStaffRole(): bool
     {
         foreach ($this->roles() as $role) {
-            if ($role !== Role::Student) {
+            if (Permissions::isStaffRole($role)) {
                 return true;
             }
         }

@@ -337,4 +337,43 @@ final class Permissions
 
         return new PermissionCell($access, $scopes);
     }
+
+    /**
+     * Staff roles named in the permission map.
+     *
+     * Student is not a staff role. A role that is missing from the map is
+     * not staff either.
+     *
+     * @return list<Role>
+     */
+    public static function staffRoles(): array
+    {
+        $roles = [];
+
+        foreach (self::MATRIX as $grants) {
+            foreach (array_keys($grants) as $role_name) {
+                if ($role_name === Role::Student->value || isset($roles[$role_name])) {
+                    continue;
+                }
+
+                $roles[$role_name] = Role::from($role_name);
+            }
+        }
+
+        return array_values($roles);
+    }
+
+    /**
+     * Whether this role is a staff role in the permission map.
+     */
+    public static function isStaffRole(Role $role): bool
+    {
+        foreach (self::staffRoles() as $staff_role) {
+            if ($staff_role === $role) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

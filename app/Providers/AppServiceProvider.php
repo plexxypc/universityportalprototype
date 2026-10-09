@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Http\Middleware\EnsureActive;
+use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsurePortalArea;
 use App\Models\Applicant;
 use App\Models\AttendanceRecord;
 use App\Models\Course;
@@ -38,6 +41,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -66,6 +70,12 @@ class AppServiceProvider extends ServiceProvider
 
         Permissions::registerGates();
         $this->registerPolicies();
+
+        Livewire::addPersistentMiddleware([
+            EnsureActive::class,
+            EnsurePasswordChanged::class,
+            EnsurePortalArea::class,
+        ]);
     }
 
     /**

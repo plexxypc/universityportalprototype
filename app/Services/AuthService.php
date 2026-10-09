@@ -67,7 +67,9 @@ final class AuthService
             return LoginResult::failed();
         }
 
-        if (! $user->hasStaffRole() && ! $user->hasRole(Role::Student)) {
+        $destination = $this->homePath($user);
+
+        if ($destination === null) {
             $this->discardSignedInSession($request, $user);
             $this->recordFailure($normalised, $address);
 
@@ -77,22 +79,41 @@ final class AuthService
         $this->clearFailures($normalised, $address);
         $this->completeSignIn($request, $user);
 
-        return LoginResult::succeeded($this->homePath($user));
+        return LoginResult::succeeded($destination);
     }
 
     /**
      * Where a signed-in user continues.
      *
      * Any staff role wins, including when a students row also exists.
-     * A student-only user goes to the student placeholder.
+     * A student-only user goes to the student placeholder. Null means the
+     * account has no staff role and no students row, so the caller signs
+     * them out instead of redirecting.
      */
-    public function homePath(User $user): string
+    public function homePath(User $user): ?string
     {
         if ($user->hasStaffRole()) {
             return '/staff';
         }
 
-        return '/student';
+        if ($user->hasRole(Role::Student)) {
+            return '/student';
+        }
+
+        return null;
+    }
+
+    /**
+     * End this session.
+     *
+     * The same method serves the portal logout and a middleware sign-out.
+     * It does not record why the session ended.
+     */
+    public function logout(Request $request): void
+    {
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
     }
 
     /**
