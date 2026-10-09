@@ -124,6 +124,7 @@
 - [ ] TASK-067 Student list: search, filters (faculty, department, programme, level, status), pagination
 - [ ] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
 - [ ] TASK-069 Edit student; suspend/reactivate; level promotion (single and bulk)
+  - Phase 4 carry-over: suspending or reactivating a student must also update `users.status` (login checks the user, not the student row).
 - [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
 - [ ] TASK-071 Import engine: CSV and Excel parsers with size/row limits
