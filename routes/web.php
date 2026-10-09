@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\ChangePasswordController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\LogoutController;
 use App\Http\Middleware\EnsureActive;
@@ -17,7 +18,8 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::middleware(['auth', EnsureActive::class, EnsurePasswordChanged::class])->group(function (): void {
-    Route::view('/change-password', 'auth.change-password')->name('password.edit');
+    Route::get('/change-password', [ChangePasswordController::class, 'create'])->name('password.edit');
+    Route::post('/change-password', [ChangePasswordController::class, 'store'])->name('password.update');
     Route::post('/logout', LogoutController::class)->name('logout');
 });
 

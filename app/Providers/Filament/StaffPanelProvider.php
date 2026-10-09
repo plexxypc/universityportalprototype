@@ -17,6 +17,7 @@ use Filament\Navigation\NavigationGroup;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -88,6 +89,12 @@ class StaffPanelProvider extends PanelProvider
                 EnsurePasswordChanged::class,
                 EnsurePortalArea::class.':staff',
                 AuthenticateStaffPanel::class,
-            ], isPersistent: true);
+            ], isPersistent: true)
+            ->renderHook(
+                PanelsRenderHook::BODY_END,
+                fn (): string => filled(session('toast'))
+                    ? view('components.toast-stack')->render()
+                    : '',
+            );
     }
 }

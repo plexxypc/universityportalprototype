@@ -11,6 +11,10 @@
             this.toasts = this.toasts.filter((toast) => toast.id !== id);
         }
     }"
+    @if (filled(session('toast')))
+        data-toast="{{ session('toast') }}"
+        x-init="push({ message: $el.dataset.toast })"
+    @endif
     x-on:toast.window="push($event.detail)"
     aria-live="polite"
     class="pointer-events-none fixed inset-x-0 top-0 z-50 flex w-full flex-col gap-space-8 p-space-16 sm:inset-x-auto sm:end-0 sm:w-96"

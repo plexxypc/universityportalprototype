@@ -12,6 +12,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\AuthenticateSession;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -35,6 +36,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsureActive::class);
         $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsurePasswordChanged::class);
         $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsurePortalArea::class);
+
+        // The staff panel already checks this hash. The portal routes need it too,
+        // so a password change can keep the current browser signed in.
+        $middleware->web(append: [
+            AuthenticateSession::class,
+        ]);
 
         $middleware->redirectGuestsTo(fn (): string => route('login'));
         $middleware->redirectUsersTo(function (Request $request): string {
