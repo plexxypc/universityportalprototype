@@ -71,6 +71,7 @@ it('renders a password show and hide toggle', function () {
     expect($html)->toContain('for="field-preview_password"')
         ->and($html)->toContain('type="password"')
         ->and($html)->toContain('aria-label="Show password"')
+        ->and($html)->toContain('data-password-toggle')
         ->and($html)->toContain('Hide password')
         ->and($html)->toContain('x-data')
         ->and($html)->toContain('aria-required="true"');
