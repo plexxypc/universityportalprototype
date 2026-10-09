@@ -275,26 +275,27 @@ DEMO_SEED_PASSWORD=       # used only by the seeder
 
 ## 10. Database overview
 
-Primary keys are unsigned big integers or ULIDs (choose one at project start and use it everywhere); `created_at`/`updated_at` on every table; money columns `*_kobo` unsigned bigint; enums stored as strings with application enum casting.
+Primary keys are unsigned big integers (ADR-026). ULIDs are not used. New clock columns, including `created_at` and `updated_at`, are `DATETIME`. Frozen framework columns stay `TIMESTAMP`: `users.email_verified_at`, `password_reset_tokens.created_at`, and `failed_jobs.failed_at`. Money columns are `*_kobo` unsigned bigint. Enums are stored as strings and cast to PHP backed enums.
 
 | Group | Tables (key columns) |
 |---|---|
 | Identity | `users` (email, password, name, phone, status, must_change_password, temp_password_expires_at, last_login_at) · `role_assignments` (user_id, role, faculty_id, department_id) · `staff` (user_id, staff_no, title, department_id, status) |
-| Structure | `institution_settings` (singleton: name, code, logo_path, matric_pattern, min_units, max_units, approval_required, withhold_results_for_debt, attendance_threshold) · `faculties` · `departments` · `programmes` (code, department_id, degree, duration_years) · `academic_sessions` (name, is_current) · `semesters` (session_id, name, is_active, registration_deadline, add_drop_deadline) |
+| Structure | `institution_settings` (singleton: name, code, logo_path, address, phone, email, motto, matric_pattern, min_units, max_units, approval_required, withhold_results_for_debt, attendance_threshold, require_minimum_payment) · `faculties` · `departments` · `programmes` (code, department_id, degree as free text, duration_years) · `academic_sessions` (name, is_current) · `semesters` (session_id, name, is_active, registration_deadline, add_drop_deadline) |
 | Courses | `courses` · `programme_courses` (programme_id, course_id, level, semester_no, type) · `course_prerequisites` · `course_assignments` (staff_id, course_id, semester_id) |
 | People | `applicants` · `students` (user_id, matric_no, programme_id, level, entry_session_id, status, …) · `guardians` · `documents` (owner_type, owner_id, kind, path, mime, size) · `import_batches` |
 | Registration | `course_registrations` (student_id, semester_id, status, total_units, …) · `course_registration_items` |
-| Finance | `fee_categories` · `fee_structures` · `invoices` (number, student_id, session_id, total_kobo, adjustments_kobo, paid_kobo, status) · `invoice_items` · `invoice_adjustments` · `payments` (reference, gateway, provider_reference (RRR or txn_ref), invoice_id, student_id, amount_kobo, status, expires_at, last_checked_at, paid_at) · `payment_events` (provider, event_key unique, payload, source: callback/notification/poll/manual) · `receipts` |
-| Grading | `grading_schemes` (name, pass_mark, version, is_active, repeat_policy) · `assessment_components` (scheme_id, name, max_score, sort) · `grade_bands` (scheme_id, min, max, letter, points, remark) · `classification_bands` |
-| Results | `results` (student_id, course_id, semester_id, total, grade, points, status, scheme_version, entered_by, approved_by, published_at) · `result_scores` (result_id, component_id, score) |
+| Finance | `fee_categories` · `fee_structures` · `invoices` (number, student_id, session_id, total_kobo, adjustments_kobo, paid_kobo, status) · `invoice_items` · `invoice_adjustments` · `payments` (reference, gateway with no CHECK, provider_reference (RRR or txn_ref), invoice_id, student_id, amount_kobo, status, expires_at, last_checked_at, paid_at) · `payment_events` (provider, event_key unique, payload, source: callback/notification/poll/manual, payment_id) · `receipts` |
+| Grading | `grading_schemes` (name, pass_mark, version, is_active, repeat_policy, resit_points_cap) · `assessment_components` (scheme_id, name, max_score, sort) · `grade_bands` (scheme_id, min_score, max_score, letter, points, remark) · `classification_bands` |
+| Results | `results` (student_id, course_id, semester_id, grading_scheme_id, total, grade, points, status, scheme_version, entered_by, approved_by, published_at) · `result_scores` (result_id, component_id, score) |
 | Attendance / Exams | `attendance_sessions` · `attendance_records` · `exam_timetable` |
 | Comms | `announcements` · `notifications` · `email_outbox` |
-| System | `counters` (key, value) · `audit_logs` (actor_id, action, entity, entity_id, before, after, ip) · Laravel `jobs`, `sessions`, `cache`, `password_reset_tokens` |
+| System | `counters` (key, value) · `audit_logs` (actor_id, action, entity, entity_id, before, after, ip, `created_at` only) · Laravel `jobs`, `sessions`, `cache`, `password_reset_tokens` |
 
 MySQL specifics:
-- No partial unique indexes: "exactly one current session / active semester" is enforced with a nullable unique flag column (`current_flag` = 1 or NULL) and set inside a transaction.
-- `CHECK` constraints (MySQL 8.0.16+) on money columns: non-negative, `paid_kobo <= total_kobo - adjustments_kobo`.
-- Unique: `students.matric_no`, `users.email`, `payments.reference`, `payment_events(provider, event_id)`.
+- No partial unique indexes. Exactly one current session, one active semester, and one active grading scheme use a nullable generated flag (`current_flag` or `active_flag` is 1 or NULL) on `academic_sessions`, `semesters`, and `grading_schemes`. The application writes the boolean and clears the previous row inside a transaction.
+- Money `CHECK` constraints reject a negative amount. A payment, fee-structure amount, invoice line, and adjustment must be at least 1 kobo. The invoice balance check is `paid_kobo + adjustments_kobo <= total_kobo`, because unsigned subtraction wraps.
+- Unique: `users.email`, `staff.staff_no`, `students.matric_no`, `invoices.number`, `payments.reference`, `receipts.number`, `receipts.payment_id` (one receipt per payment), and `payment_events (provider, event_key)`.
+- Every foreign key is `ON DELETE RESTRICT`, except `guardians.student_id`, which is `ON DELETE CASCADE` (ADR-027).
 - Atomic matric numbers: `counters` row per department+year read with `lockForUpdate()` inside the creating transaction.
 - Index foreign keys and frequent filters (matric_no, email, status, session/semester, invoice status).
 
