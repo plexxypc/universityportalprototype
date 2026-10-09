@@ -414,14 +414,25 @@ it('sends a guest from the staff panel to the portal login', function () {
 });
 
 it('does not register filament login, registration, password reset, or profile', function () {
-    $uris = collect(Route::getRoutes())->map(fn ($route): string => $route->uri())->all();
-
-    expect($uris)->not->toContain('staff/register')
+    $routes = collect(Route::getRoutes());
+    $uris = $routes->map(fn ($route): string => $route->uri())->all();
+    $names = $routes->map(fn ($route): ?string => $route->getName())->all();
+    expect($names)->not->toContain('filament.staff.auth.login')
+        ->and($names)->not->toContain('filament.staff.auth.register')
+        ->and($names)->not->toContain('filament.staff.auth.password-reset.request')
+        ->and($names)->not->toContain('filament.staff.auth.password-reset.reset')
+        ->and($names)->not->toContain('filament.staff.auth.profile')
+        ->and($names)->not->toContain('filament.staff.pages.profile')
+        ->and($names)->toContain('staff.login')
+        ->and($uris)->not->toContain('staff/register')
         ->and($uris)->not->toContain('staff/password-reset/request')
+        ->and($uris)->not->toContain('staff/password-reset/reset')
         ->and($uris)->not->toContain('staff/email-verification/prompt')
         ->and($uris)->not->toContain('staff/profile');
 
     $this->get('/staff/register')->assertNotFound();
+    $this->get('/staff/password-reset/request')->assertNotFound();
+    $this->get('/staff/profile')->assertNotFound();
 });
 
 it('rejects an unauthenticated Livewire update inside the staff panel', function () {
