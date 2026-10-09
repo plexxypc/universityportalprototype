@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Database\Factories\FeeCategoryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -29,6 +30,17 @@ class FeeCategory extends Model
         return [
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Limit the query to categories that can be used on new fees.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
     }
 
     /**

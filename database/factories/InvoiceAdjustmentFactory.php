@@ -32,4 +32,14 @@ class InvoiceAdjustmentFactory extends Factory
             'created_by' => User::factory(),
         ];
     }
+
+    /**
+     * Record the reduction as a discount.
+     */
+    public function discount(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'type' => InvoiceAdjustmentType::Discount,
+        ]);
+    }
 }

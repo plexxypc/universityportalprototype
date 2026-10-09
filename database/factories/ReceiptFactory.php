@@ -17,14 +17,14 @@ class ReceiptFactory extends Factory
      * Define the model's default state.
      *
      * number is supplied here. The counters table generates it later.
-     * A service creates a receipt only after the payment succeeds.
+     * The default payment is Successful, which is when a receipt exists.
      *
      * @return array<string, mixed>
      */
     public function definition(): array
     {
         return [
-            'payment_id' => Payment::factory(),
+            'payment_id' => Payment::factory()->successful(),
             'number' => fake()->unique()->bothify('RCT-########'),
         ];
     }

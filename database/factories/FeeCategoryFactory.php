@@ -27,4 +27,14 @@ class FeeCategoryFactory extends Factory
             'sort' => 0,
         ];
     }
+
+    /**
+     * Mark the category inactive.
+     */
+    public function inactive(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_active' => false,
+        ]);
+    }
 }

@@ -12,6 +12,7 @@ use App\Models\InvoiceAdjustment;
 use App\Models\Payment;
 use App\Models\PaymentEvent;
 use App\Models\Receipt;
+use App\Models\Student;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -183,8 +184,10 @@ it('rejects an adjustment with a blank reason', function () {
 });
 
 it('rejects a payment for a missing invoice', function () {
-    expect(fn () => Payment::factory()->create(['invoice_id' => 0]))
-        ->toThrow(QueryException::class);
+    expect(fn () => Payment::factory()->create([
+        'invoice_id' => 0,
+        'student_id' => Student::factory(),
+    ]))->toThrow(QueryException::class);
 });
 
 it('blocks deleting an invoice that has a payment', function () {
