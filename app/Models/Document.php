@@ -9,6 +9,7 @@ use Database\Factories\DocumentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
  * A file owned by an applicant or a student.
@@ -31,5 +32,17 @@ class Document extends Model
         return [
             'owner_type' => DocumentOwner::class,
         ];
+    }
+
+    /**
+     * Applicant or student that owns this file.
+     *
+     * owner_type stores the label Applicant or Student. The morph map binds those labels.
+     *
+     * @return MorphTo<Model, $this>
+     */
+    public function owner(): MorphTo
+    {
+        return $this->morphTo();
     }
 }

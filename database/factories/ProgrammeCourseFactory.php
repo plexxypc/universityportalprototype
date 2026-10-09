@@ -30,4 +30,14 @@ class ProgrammeCourseFactory extends Factory
             'type' => CourseType::Core,
         ];
     }
+
+    /**
+     * Map the course as an elective.
+     */
+    public function elective(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'type' => CourseType::Elective,
+        ]);
+    }
 }

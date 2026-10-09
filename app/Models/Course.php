@@ -51,6 +51,16 @@ class Course extends Model
     }
 
     /**
+     * Prerequisite rows where this course is the course that must be passed first.
+     *
+     * @return HasMany<CoursePrerequisite, $this>
+     */
+    public function dependents(): HasMany
+    {
+        return $this->hasMany(CoursePrerequisite::class, 'prerequisite_course_id');
+    }
+
+    /**
      * Staff assignments for this course.
      *
      * @return HasMany<CourseAssignment, $this>

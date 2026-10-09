@@ -39,4 +39,18 @@ class ImportBatchFactory extends Factory
             'completed_at' => null,
         ];
     }
+
+    /**
+     * Mark the batch completed, with every row processed.
+     */
+    public function completed(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => ImportBatchStatus::Completed,
+            'total_rows' => 2,
+            'processed_rows' => 2,
+            'created_count' => 2,
+            'completed_at' => now(),
+        ]);
+    }
 }

@@ -44,4 +44,14 @@ class StudentFactory extends Factory
             'import_batch_id' => null,
         ];
     }
+
+    /**
+     * Mark the student graduated.
+     */
+    public function graduated(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => StudentStatus::Graduated,
+        ]);
+    }
 }

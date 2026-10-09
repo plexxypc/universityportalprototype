@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Factories;
 
 use App\Enums\DocumentOwner;
+use App\Models\Applicant;
 use App\Models\Document;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -31,5 +32,16 @@ class DocumentFactory extends Factory
             'mime' => 'application/pdf',
             'size' => 1024,
         ];
+    }
+
+    /**
+     * Own the file by an applicant.
+     */
+    public function forApplicant(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'owner_type' => DocumentOwner::Applicant,
+            'owner_id' => Applicant::factory(),
+        ]);
     }
 }

@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
  * An admissions applicant. This row is the intake snapshot, including names and contact fields.
@@ -92,5 +93,15 @@ class Applicant extends Model
     public function student(): HasOne
     {
         return $this->hasOne(Student::class);
+    }
+
+    /**
+     * Files owned by this applicant.
+     *
+     * @return MorphMany<Document, $this>
+     */
+    public function documents(): MorphMany
+    {
+        return $this->morphMany(Document::class, 'owner');
     }
 }

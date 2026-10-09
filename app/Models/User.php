@@ -142,4 +142,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(AuditLog::class, 'actor_id');
     }
+
+    /**
+     * Import batches this account ran.
+     *
+     * @return HasMany<ImportBatch, $this>
+     */
+    public function importBatches(): HasMany
+    {
+        return $this->hasMany(ImportBatch::class);
+    }
 }

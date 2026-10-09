@@ -41,4 +41,24 @@ class ApplicantFactory extends Factory
             'import_batch_id' => null,
         ];
     }
+
+    /**
+     * Mark the applicant admitted.
+     */
+    public function admitted(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => ApplicantStatus::Admitted,
+        ]);
+    }
+
+    /**
+     * Mark the applicant rejected.
+     */
+    public function rejected(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => ApplicantStatus::Rejected,
+        ]);
+    }
 }
