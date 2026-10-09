@@ -106,7 +106,7 @@ it('refuses a non-mysql connection outside local', function () {
         ->toThrow(RuntimeException::class, 'DB_CONNECTION must be mysql');
 });
 
-it('trusts the platform load balancer for https and the client address', function () {
+it('trusts the platform load balancer for https and ignores a forged client address', function () {
     $this->withServerVariables([
         'REMOTE_ADDR' => '10.0.0.8',
         'HTTP_X_FORWARDED_FOR' => '203.0.113.10',
@@ -114,7 +114,7 @@ it('trusts the platform load balancer for https and the client address', functio
         'HTTP_X_FORWARDED_PORT' => '443',
     ])->get('/up')->assertOk();
 
-    expect(request()->ip())->toBe('203.0.113.10')
+    expect(request()->ip())->toBe('10.0.0.8')
         ->and(request()->isSecure())->toBeTrue();
 });
 

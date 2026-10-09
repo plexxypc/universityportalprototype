@@ -37,16 +37,16 @@ return Application::configure(basePath: dirname(__DIR__))
             return app(AuthService::class)->homePath($user);
         });
 
-        // The host load balancer terminates TLS. Trust its forwarded headers
-        // so the app sees HTTPS and the real client address.
+        // Trust the platform proxy for scheme, host, and port so HTTPS and
+        // generated URLs stay correct. Do not trust X-Forwarded-For: a client
+        // can forge it, and neither Render nor App Platform publishes a
+        // stable proxy range. Login limits use the socket address instead.
         $middleware->trustProxies(
             at: '*',
-            headers: Request::HEADER_X_FORWARDED_FOR
-                | Request::HEADER_X_FORWARDED_HOST
+            headers: Request::HEADER_X_FORWARDED_HOST
                 | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO
-                | Request::HEADER_X_FORWARDED_PREFIX
-                | Request::HEADER_X_FORWARDED_AWS_ELB,
+                | Request::HEADER_X_FORWARDED_PREFIX,
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {

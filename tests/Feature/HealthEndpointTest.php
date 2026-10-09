@@ -96,7 +96,7 @@ it('sends no-store and sets no cookies', function () {
         ->and($response->headers->has('set-cookie'))->toBeFalse();
 });
 
-it('keys the rate limit on the forwarded client address', function () {
+it('keys the health rate limit on the socket address', function () {
     $this->artisan('portal:heartbeat')->assertSuccessful();
 
     $this->withServerVariables([
@@ -111,24 +111,25 @@ it('keys the rate limit on the forwarded client address', function () {
 
     $limiter = new RateLimiter(Cache::store((string) config('portal.health.rate_limit_store')));
 
-    expect($limiter->attempts('health203.0.113.10'))->toBe(1)
-        ->and($limiter->attempts('health203.0.113.11'))->toBe(1)
-        ->and($limiter->attempts('health10.0.0.8'))->toBe(0);
+    expect($limiter->attempts('health10.0.0.8'))->toBe(2)
+        ->and($limiter->attempts('health203.0.113.10'))->toBe(0)
+        ->and($limiter->attempts('health203.0.113.11'))->toBe(0);
 });
 
 it('returns 429 on the 61st request in a minute', function () {
     $this->artisan('portal:heartbeat')->assertSuccessful();
 
-    $server = [
-        'REMOTE_ADDR' => '10.0.0.8',
-        'HTTP_X_FORWARDED_FOR' => '198.51.100.61',
-    ];
-
     for ($attempt = 0; $attempt < 60; $attempt++) {
-        $this->withServerVariables($server)->get('/health')->assertOk();
+        $this->withServerVariables([
+            'REMOTE_ADDR' => '10.0.0.8',
+            'HTTP_X_FORWARDED_FOR' => '198.51.100.'.$attempt,
+        ])->get('/health')->assertOk();
     }
 
-    $limited = $this->withServerVariables($server)->get('/health');
+    $limited = $this->withServerVariables([
+        'REMOTE_ADDR' => '10.0.0.8',
+        'HTTP_X_FORWARDED_FOR' => '198.51.100.99',
+    ])->get('/health');
 
     $limited->assertTooManyRequests();
 
@@ -136,7 +137,8 @@ it('returns 429 on the 61st request in a minute', function () {
 
     expect($limited->headers->getCookies())->toBe([])
         ->and($limited->headers->has('set-cookie'))->toBeFalse()
-        ->and($limiter->attempts('health198.51.100.61'))->toBe(60);
+        ->and($limiter->attempts('health10.0.0.8'))->toBe(60)
+        ->and($limiter->attempts('health198.51.100.99'))->toBe(0);
 });
 
 it('fails a blackholed database within a few seconds without changing the application connection', function () {

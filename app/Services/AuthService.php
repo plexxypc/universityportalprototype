@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * The only authenticator.
@@ -21,9 +22,23 @@ use Illuminate\Support\Facades\Hash;
 final class AuthService
 {
     /**
-     * Shown for every failed sign-in. The text does not say why.
+     * Shown for every failed sign-in, including a lockout. The text does not say why.
      */
     public const string FAILURE_MESSAGE = 'Invalid credentials.';
+
+    /**
+     * Failures for one identifier from one socket address.
+     */
+    private const int PAIR_MAX_ATTEMPTS = 5;
+
+    private const int PAIR_DECAY_SECONDS = 60;
+
+    /**
+     * Failures for one identifier from any address.
+     */
+    private const int IDENTIFIER_MAX_ATTEMPTS = 10;
+
+    private const int IDENTIFIER_DECAY_SECONDS = 900;
 
     /**
      * Bcrypt hash used when there is no user hash to check.
@@ -33,25 +48,33 @@ final class AuthService
     /**
      * Sign in, or fail with no reason.
      *
-     * The password is checked once on every attempt. A missing user is
-     * checked against a dummy hash so that path still does the slow work.
+     * The password is checked once on every attempt. A missing user, and a
+     * locked identifier, are checked against the same dummy hash.
      */
     public function attempt(Request $request, string $identifier, string $password): LoginResult
     {
         $normalised = $this->normaliseIdentifier($identifier);
+        $address = $this->clientAddress($request);
+        $locked = $this->isLocked($normalised, $address);
         $user = $this->findUser($normalised);
-        $password_matches = $this->passwordMatches($user, $password);
+        $password_matches = $this->passwordMatches($locked ? null : $user, $password);
 
-        if (! $user instanceof User || ! $password_matches || ! $this->maySignIn($user)) {
+        if ($locked || ! $user instanceof User || ! $password_matches || ! $this->maySignIn($user)) {
+            if (! $locked) {
+                $this->recordFailure($normalised, $address);
+            }
+
             return LoginResult::failed();
         }
 
         if (! $user->hasStaffRole() && ! $user->hasRole(Role::Student)) {
             $this->discardSignedInSession($request, $user);
+            $this->recordFailure($normalised, $address);
 
             return LoginResult::failed();
         }
 
+        $this->clearFailures($normalised, $address);
         $this->completeSignIn($request, $user);
 
         return LoginResult::succeeded($this->homePath($user));
@@ -172,6 +195,70 @@ final class AuthService
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+    }
+
+    /**
+     * Socket address. A client-supplied X-Forwarded-For is ignored.
+     */
+    private function clientAddress(Request $request): string
+    {
+        $address = $request->server->get('REMOTE_ADDR');
+
+        return is_string($address) && $address !== '' ? $address : '0';
+    }
+
+    /**
+     * Whether either login limit is already spent.
+     *
+     * The pair limit is 5 failures per minute. The identifier limit is
+     * 10 failures per 15 minutes, from any address.
+     */
+    private function isLocked(string $normalised, string $address): bool
+    {
+        return RateLimiter::tooManyAttempts($this->pairKey($normalised, $address), self::PAIR_MAX_ATTEMPTS)
+            || RateLimiter::tooManyAttempts($this->identifierKey($normalised), self::IDENTIFIER_MAX_ATTEMPTS);
+    }
+
+    /**
+     * Count one failure against both limits.
+     */
+    private function recordFailure(string $normalised, string $address): void
+    {
+        RateLimiter::hit($this->pairKey($normalised, $address), self::PAIR_DECAY_SECONDS);
+        RateLimiter::hit($this->identifierKey($normalised), self::IDENTIFIER_DECAY_SECONDS);
+    }
+
+    /**
+     * Forget both limits after a successful sign-in.
+     */
+    private function clearFailures(string $normalised, string $address): void
+    {
+        RateLimiter::clear($this->pairKey($normalised, $address));
+        RateLimiter::clear($this->identifierKey($normalised));
+    }
+
+    /**
+     * Cache key for the identifier limit. The identifier is an HMAC, not plaintext.
+     */
+    private function identifierKey(string $normalised): string
+    {
+        return 'login-identifier:'.$this->identifierHmac($normalised);
+    }
+
+    /**
+     * Cache key for the address-plus-identifier limit.
+     */
+    private function pairKey(string $normalised, string $address): string
+    {
+        return 'login-pair:'.$this->identifierHmac($normalised).':'.$address;
+    }
+
+    /**
+     * HMAC of the normalised identifier, keyed with the application key.
+     */
+    private function identifierHmac(string $normalised): string
+    {
+        return hash_hmac('sha256', $normalised, (string) config('app.key'));
     }
 
     /**

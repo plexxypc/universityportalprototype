@@ -171,7 +171,11 @@ App Platform uses its own health check. The `HEALTHCHECK` instruction in the Doc
 
 `/up` is the liveness probe. It answers when PHP is up. `/health` is a deeper JSON check (database and scheduler heartbeat) and can return HTTP 503 while MySQL is down. Use `/up` for the platform probe so a database blip does not restart the instance. After deploy, open `/health` yourself.
 
-`bootstrap/app.php` trusts every connecting address (`at: '*'`), and it honours `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Port`, and `X-Forwarded-Prefix`. App Platform and Render terminate TLS at their own proxy and do not publish a stable proxy address, so a fixed proxy list is not practical. The risk is that a client-supplied `X-Forwarded-For` becomes the address the app uses for rate limits. Revisit this when login throttling is built (TASK-040).
+`bootstrap/app.php` trusts every connecting address (`at: '*'`). It honours `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Port`, and `X-Forwarded-Prefix`, so the app sees HTTPS behind App Platform or Render. It does not honour `X-Forwarded-For`. A client can forge that header, and neither host publishes a stable proxy range, so the app does not treat it as the client address.
+
+Login limits use the socket address (`REMOTE_ADDR`), not `X-Forwarded-For`. On Render that address is the platform proxy, shared by every visitor to the instance. The identifier limit is 10 failures in 15 minutes and is the control that still belongs to one account. The other limit is 5 failures per minute for one identifier from one socket address. `/health` uses `$request->ip()`, which is that same socket address while `X-Forwarded-For` stays untrusted.
+
+What remains uncertain on Render: the platform does not publish a proxy range, and it is not verified from this repository whether Render overwrites or appends `X-Forwarded-For`. Until a production host publishes ranges, do not trust that header. The same gap applies to `audit_logs` when that column is written (TASK-046).
 
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Give the health check an initial delay of at least 60 seconds. On the first deploy, a longer delay is safer. **Verify in the provider dashboard** the initial-delay field name.
 
