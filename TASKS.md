@@ -69,10 +69,9 @@
 
 - [x] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
 - [x] TASK-038 Base policies and `visibleTo()` scopes for scoped models
-- [ ] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
+- [x] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
 - [ ] TASK-040 Login rate limiting (IP + identifier). `bootstrap/app.php` currently trusts every proxy (`at: '*'`). Revisit that when this throttle is built, because a client-supplied `X-Forwarded-For` is the address the limiter would count. See `docs/DEPLOYMENT.md`.
 - [ ] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
-  - Phase 3 carry-over: block login when the temporary password has expired.
 - [ ] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
 - [ ] TASK-043 Logout and session expiry handling
 - [ ] TASK-044 `create-super-admin` Artisan command

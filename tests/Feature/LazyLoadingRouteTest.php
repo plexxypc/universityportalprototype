@@ -6,13 +6,17 @@ use App\Support\DesignPreviewTable;
 use Illuminate\Database\LazyLoadingViolationException;
 use Illuminate\Support\Facades\Route;
 
-it('serves the staff login page without a lazy-loading violation', function () {
+it('serves the portal login page without a lazy-loading violation', function () {
     $this->withoutVite();
 
-    $response = $this->get('/staff/login');
+    $redirect = $this->get('/staff/login');
+
+    expect($redirect->exception)->not->toBeInstanceOf(LazyLoadingViolationException::class);
+    $redirect->assertRedirect('/login');
+
+    $response = $this->get('/login');
 
     expect($response->exception)->not->toBeInstanceOf(LazyLoadingViolationException::class);
-
     $response->assertSuccessful();
 });
 

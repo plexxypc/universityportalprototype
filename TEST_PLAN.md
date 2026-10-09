@@ -19,19 +19,19 @@
 
 ## 1. Authentication [AUTH]
 
-- [ ] (E) Student logs in with **matric number** and password
-- [ ] (E) Student logs in with email and password
-- [ ] (E) Staff logs in with email and password and lands on the staff dashboard
-- [ ] (E) Invalid credentials show one generic error (no hint whether matric or password was wrong)
+- [x] (E) Student logs in with **matric number** and password
+- [x] (E) Student logs in with email and password
+- [x] (E) Staff logs in with email and password and lands on the staff dashboard
+- [x] (E) Invalid credentials show one generic error (no hint whether matric or password was wrong)
 - [ ] (I) Repeated failed logins are throttled
 - [ ] (E) First login with temporary password forces password change before any other page
 - [ ] (I) Expired temporary password is rejected; registrar can re-issue
 - [ ] (E) Password reset email is queued, link works once, new password works
-- [ ] (E) Deactivated user cannot log in
+- [x] (E) Deactivated user cannot log in
 - [ ] (E) Logged-out users are redirected to login from any private route
 - [ ] (E) Student cannot open `/staff/*`; staff cannot open `/student/*` data of another role
 - [ ] (E) Session expiry returns the user to login without data loss on public pages
-- [ ] (E) No registration/sign-up page or link exists anywhere
+- [x] (E) No registration/sign-up page or link exists anywhere
 
 ## 2. Authorisation and data isolation (release gate)
 

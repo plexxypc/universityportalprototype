@@ -8,6 +8,8 @@ namespace App\Models;
 use App\Enums\Role;
 use App\Enums\UserStatus;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,7 +20,7 @@ use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['name', 'email', 'password', 'phone', 'status', 'must_change_password', 'temp_password_expires_at', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -93,6 +95,38 @@ class User extends Authenticatable
     public function hasRole(Role $role): bool
     {
         return in_array($role, $this->roles(), true);
+    }
+
+    /**
+     * Whether role assignments grant a staff role.
+     *
+     * A students row does not count. The panel allows only an Active user
+     * with one of these roles, in every environment.
+     */
+    public function hasStaffRole(): bool
+    {
+        foreach ($this->roles() as $role) {
+            if ($role !== Role::Student) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether this account may open the staff panel.
+     *
+     * Active and a staff role are both required. A student-only account
+     * is refused. The check does not depend on the application environment.
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        if ($panel->getId() !== 'staff') {
+            return false;
+        }
+
+        return $this->status === UserStatus::Active && $this->hasStaffRole();
     }
 
     /**

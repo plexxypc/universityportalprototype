@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Models\User;
+use App\Services\AuthService;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -24,6 +26,17 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectGuestsTo(fn (): string => route('login'));
+        $middleware->redirectUsersTo(function (Request $request): string {
+            $user = $request->user();
+
+            if (! $user instanceof User) {
+                return route('login');
+            }
+
+            return app(AuthService::class)->homePath($user);
+        });
+
         // The host load balancer terminates TLS. Trust its forwarded headers
         // so the app sees HTTPS and the real client address.
         $middleware->trustProxies(
@@ -37,6 +50,12 @@ return Application::configure(basePath: dirname(__DIR__))
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontFlash([
+            'current_password',
+            'password',
+            'password_confirmation',
+        ]);
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->is('health') || $request->expectsJson(),
         );

@@ -3,12 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Friday, 09 October 2026 (Phase 4, TASK-038)
+**Last updated:** Friday, 09 October 2026 (Phase 4, TASK-039)
 **Demo date:** Wednesday, 07 October 2026
 
 ## Current Status
 
-Phase 4 is in progress on `phase-4-auth`. TASK-037 and TASK-038 are done. TASK-038 adds policies and `visibleTo()` for the student-owned models and for Faculty, Department, Programme, and Course. An inactive user is granted nothing and sees no rows. Super Admin sees every row and is denied `course_registration.submit` and `payments.make`. Documents are visible only to the owning student, the Registrar, and Super Admin. Draft results are visible only to Super Admin and to a lecturer assigned to that course. A lecturer sees a student only with an Approved registration item for an assigned course and semester. Other models wait for their features. Phase 3 is merged to `main` as pull request #7 (`9aa094d`). ADR-028 is committed on this branch. A Published result requires `published_at`. Academic standing thresholds wait for a new table in TASK-060. Decimal totals and grade-band edges are decided in TASK-059.
+Phase 4 is in progress on `phase-4-auth`. TASK-037, TASK-038, and TASK-039 are done. TASK-039 adds `AuthService` as the only authenticator. The portal login accepts a matric number or an email. Every failure uses the message "Invalid credentials." The staff panel has no Filament login; `/staff/login` redirects to `/login`, and `AuthenticateStaffPanel` is persistent on Livewire requests. An Active user with a staff role can open the panel in production. A student cannot. An expired temporary password is refused at login. TASK-038 adds policies and `visibleTo()` for the student-owned models and for Faculty, Department, Programme, and Course. An inactive user is granted nothing and sees no rows. Super Admin sees every row and is denied `course_registration.submit` and `payments.make`. Documents are visible only to the owning student, the Registrar, and Super Admin. Draft results are visible only to Super Admin and to a lecturer assigned to that course. A lecturer sees a student only with an Approved registration item for an assigned course and semester. Other models wait for their features. Phase 3 is merged to `main` as pull request #7 (`9aa094d`). ADR-028 is committed on this branch. A Published result requires `published_at`. Academic standing thresholds wait for a new table in TASK-060. Decimal totals and grade-band edges are decided in TASK-059.
 
 **Live database:** The Phase 3 migrations have not run on the live Aiven database. Those files are not on `origin/main`. TASK-172, which runs migrations on Aiven, is still open. This machine's `.env` points at local Docker (`127.0.0.1`, database `university_portal`). That local database has 46 applied migrations, through `2026_10_09_230007_create_audit_logs_table`.
 
@@ -18,7 +18,7 @@ The staff panel uses the design tokens, self-hosted Inter, and the institution n
 
 **Filament theme:** Filament **v5.10.0**. `StaffPanelProvider` registers a Vite theme at `resources/css/filament/staff/theme.css`. That file imports `@fontsource/inter` and `vendor/filament/filament/resources/css/theme.css`, and forces badge radius to a pill. Inter is set with `Filament\FontProviders\LocalFontProvider` (no Bunny Fonts). The primary palette is `Filament\Support\Colors\Color::hex('#4F46E5')` from `App\Filament\StaffPanelTheme`, with shades 50, 500, 600, and 700 replaced by the design tokens. Filament stores the palette as OKLCH. Dark mode is off. The sidebar is 240px and collapsible. Brand name and logo come from `config/portal.php`.
 
-**Checks:** On 09 October 2026, `composer check` passed on `phase-4-auth`: Pint passed, Larastan reported 0 errors, Pest passed **385 tests** and **1779 assertions**. Larastan reads `casts()` (`parseModelCastsMethod`) so a status or role column is the enum, not the varchar. GitHub CI on `d5fc5c0` is the last green run recorded here: https://github.com/plexxypc/universityportalprototype/actions/runs/37689062914. Phase 4 has not been through a recorded GitHub run.
+**Checks:** On 09 October 2026, `composer check` passed on `phase-4-auth`: Pint passed, Larastan reported 0 errors, Pest passed **413 tests** and **1918 assertions**. Larastan reads `casts()` (`parseModelCastsMethod`) so a status or role column is the enum, not the varchar. GitHub CI on `d5fc5c0` is the last green run recorded here: https://github.com/plexxypc/universityportalprototype/actions/runs/37689062914. Phase 4 has not been through a recorded GitHub run.
 
 **Live demo:** `https://universityportalprototype.onrender.com` (Render free web service, Aiven MySQL). On 07 October 2026 the home page and `/up` returned HTTP 200 with the title University Portal. `/health` returned HTTP 200 with `"status": "ok"`, `"database": "ok"`, `"heartbeat": "ok"`, `"mail_driver": "log"`, `"payment_provider": "sandbox"`, and `"environment": "production"`. DigitalOcean App Platform is not in use. A local container named `university-portal` is still running at `http://127.0.0.1:8081` (host 8081 to container 8080).
 
@@ -95,7 +95,7 @@ From ARCHITECTURE.md section 10, matched to the built schema. Laravel's `jobs`, 
 
 The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is implemented and tested by the task named there. These rules cannot be a database constraint. Step 0 listed none. Step 7 added none.
 
-**Priority.** The schema only guarantees shape: types, unique keys, foreign keys, and CHECKs. The service that writes the row owns the rule, and that task's tests prove it. Phase 4 meets two of them immediately: which roles require a faculty, which require a department, and which must leave both empty (TASK-037), and blocking login when the temporary password has expired (TASK-041). `must_change_password` and `temp_password_expires_at` are set together later (TASK-065). Money totals, grade bands, publication locks, attendance scope, and audit append-only behaviour stay with the tasks below.
+**Priority.** The schema only guarantees shape: types, unique keys, foreign keys, and CHECKs. The service that writes the row owns the rule, and that task's tests prove it. Phase 4 meets two of them immediately: which roles require a faculty, which require a department, and which must leave both empty (TASK-037), and blocking login when the temporary password has expired (TASK-039, test `it blocks login when the temporary password has expired`). `must_change_password` and `temp_password_expires_at` are set together later (TASK-065). Money totals, grade bands, publication locks, attendance scope, and audit append-only behaviour stay with the tasks below.
 
 | Rule | Task |
 |---|---|
@@ -105,7 +105,7 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 | Phone normalised to `+234` | TASK-075 |
 | `staff_no` pattern | TASK-132 |
 | `must_change_password` and `temp_password_expires_at` are set together | TASK-065 |
-| Block login when the temporary password has expired | TASK-041 |
+| Block login when the temporary password has expired | TASK-039 |
 | Deactivating a staff profile deactivates the user | TASK-137 |
 | Deactivating a staff profile revokes sessions | TASK-137 |
 | Switching the current session clears the old row first, inside a transaction | TASK-055 |
@@ -183,7 +183,7 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 
 ## Current Task
 
-**TASK-039** (Phase 4): login page and login action. TASK-038 is done. The release-gate isolation suite is `tests/Feature/Auth/CrossUserIsolationTest.php`. The role-scope rule (which roles require a faculty, a department, or neither) is `App\Support\Rbac\RoleScopeValidator`, tested by `it enforces which roles require a faculty, a department, or neither`. Authentication and authorisation continues with TASK-039 through TASK-045.
+**TASK-040** (Phase 4): login rate limiting. TASK-039 is done. The portal login is `AuthService`, tested in `tests/Feature/Auth/LoginTest.php`. The expired-temporary-password rule is `it blocks login when the temporary password has expired`. Authentication and authorisation continues with TASK-040 through TASK-045.
 
 Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 

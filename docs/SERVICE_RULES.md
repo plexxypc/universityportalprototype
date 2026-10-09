@@ -12,7 +12,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 1 | Phone normalised to `+234` | TASK-075 | Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table |
 | 1 | `staff_no` pattern | TASK-132 | `StaffService`: create/update with credentials (reuse `CredentialService`) |
 | 1 | `must_change_password` and `temp_password_expires_at` are set together | TASK-065 | `CredentialService`: temporary password, expiry, welcome email, resend credentials |
-| 1 | Block login when the temporary password has expired | TASK-041 | Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role |
+| 1 | Block login when the temporary password has expired | TASK-039 | Login page and login action (`it blocks login when the temporary password has expired`) |
 | 1 | Deactivating a staff profile deactivates the user | TASK-137 | Activate/deactivate staff |
 | 1 | Deactivating a staff profile revokes sessions | TASK-137 | Activate/deactivate staff |
 | 2 | Switching the current session clears the old row first, inside a transaction | TASK-055 | Academic sessions resource (single current session) |

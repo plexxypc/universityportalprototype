@@ -11,3 +11,5 @@ use Illuminate\Support\Facades\Route;
  * Do not add a Filament page or resource whose slug is "downloads".
  */
 Route::get('/staff/downloads/ping', [PingController::class, 'staff_downloads'])->name('staff.downloads.ping');
+
+Route::redirect('/staff/login', '/login')->name('staff.login');
