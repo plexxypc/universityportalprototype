@@ -275,7 +275,7 @@ DEMO_SEED_PASSWORD=       # used only by the seeder
 
 ## 10. Database overview
 
-Primary keys are unsigned big integers or ULIDs (choose one at project start and use it everywhere); `created_at`/`updated_at` on every table; money columns `*_kobo` unsigned bigint; enums stored as strings with application enum casting.
+Primary keys are unsigned big integers (ADR-026). ULIDs are not used. New clock columns, including `created_at` and `updated_at`, are `DATETIME`. Frozen framework columns stay `TIMESTAMP`: `users.email_verified_at`, `password_reset_tokens.created_at`, and `failed_jobs.failed_at`. Money columns are `*_kobo` unsigned bigint. Enums are stored as strings and cast to PHP backed enums.
 
 | Group | Tables (key columns) |
 |---|---|
@@ -292,9 +292,10 @@ Primary keys are unsigned big integers or ULIDs (choose one at project start and
 | System | `counters` (key, value) · `audit_logs` (actor_id, action, entity, entity_id, before, after, ip) · Laravel `jobs`, `sessions`, `cache`, `password_reset_tokens` |
 
 MySQL specifics:
-- No partial unique indexes: "exactly one current session / active semester" is enforced with a nullable unique flag column (`current_flag` = 1 or NULL) and set inside a transaction.
-- `CHECK` constraints (MySQL 8.0.16+) on money columns: non-negative, `paid_kobo <= total_kobo - adjustments_kobo`.
-- Unique: `students.matric_no`, `users.email`, `payments.reference`, `payment_events(provider, event_id)`.
+- No partial unique indexes. Exactly one current session, one active semester, and one active grading scheme use a nullable generated flag (`current_flag` or `active_flag` is 1 or NULL) on `academic_sessions`, `semesters`, and `grading_schemes`. The application writes the boolean and clears the previous row inside a transaction.
+- Money `CHECK` constraints reject a negative amount. A payment, fee-structure amount, invoice line, and adjustment must be at least 1 kobo. The invoice balance check is `paid_kobo + adjustments_kobo <= total_kobo`, because unsigned subtraction wraps.
+- Unique: `users.email`, `staff.staff_no`, `students.matric_no`, `invoices.number`, `payments.reference`, `receipts.number`, `receipts.payment_id` (one receipt per payment), and `payment_events (provider, event_key)`.
+- Every foreign key is `ON DELETE RESTRICT`, except `guardians.student_id`, which is `ON DELETE CASCADE` (ADR-027).
 - Atomic matric numbers: `counters` row per department+year read with `lockForUpdate()` inside the creating transaction.
 - Index foreign keys and frequent filters (matric_no, email, status, session/semester, invoice status).
 
