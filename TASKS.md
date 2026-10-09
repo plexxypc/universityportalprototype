@@ -70,7 +70,7 @@
 - [x] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
 - [x] TASK-038 Base policies and `visibleTo()` scopes for scoped models
 - [x] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
-- [x] TASK-040 Login rate limiting (IP + identifier). `X-Forwarded-For` is not trusted. Login limits use the socket address. See `docs/DEPLOYMENT.md`.
+- [ ] TASK-040 Login rate limiting (IP + identifier). `X-Forwarded-For` is not trusted. Login limits use the socket address. See `docs/DEPLOYMENT.md`.
 - [ ] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
 - [ ] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
 - [ ] TASK-043 Logout and session expiry handling
