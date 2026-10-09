@@ -144,4 +144,14 @@ class Student extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    /**
+     * Attendance marks for this student.
+     *
+     * @return HasMany<AttendanceRecord, $this>
+     */
+    public function attendanceRecords(): HasMany
+    {
+        return $this->hasMany(AttendanceRecord::class);
+    }
 }

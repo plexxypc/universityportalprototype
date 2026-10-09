@@ -69,4 +69,24 @@ class Course extends Model
     {
         return $this->hasMany(CourseRegistrationItem::class);
     }
+
+    /**
+     * Class meetings for this course.
+     *
+     * @return HasMany<AttendanceSession, $this>
+     */
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class);
+    }
+
+    /**
+     * Exam sittings for this course.
+     *
+     * @return HasMany<ExamTimetable, $this>
+     */
+    public function examTimetable(): HasMany
+    {
+        return $this->hasMany(ExamTimetable::class);
+    }
 }

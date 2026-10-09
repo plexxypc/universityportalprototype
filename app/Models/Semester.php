@@ -55,4 +55,24 @@ class Semester extends Model
     {
         return $this->hasMany(CourseRegistration::class);
     }
+
+    /**
+     * Class meetings in this semester.
+     *
+     * @return HasMany<AttendanceSession, $this>
+     */
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class);
+    }
+
+    /**
+     * Exam sittings in this semester.
+     *
+     * @return HasMany<ExamTimetable, $this>
+     */
+    public function examTimetable(): HasMany
+    {
+        return $this->hasMany(ExamTimetable::class);
+    }
 }

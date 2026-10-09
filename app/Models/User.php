@@ -88,4 +88,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(InvoiceAdjustment::class, 'created_by');
     }
+
+    /**
+     * Class meetings this account created.
+     *
+     * @return HasMany<AttendanceSession, $this>
+     */
+    public function attendanceSessions(): HasMany
+    {
+        return $this->hasMany(AttendanceSession::class, 'created_by');
+    }
 }
