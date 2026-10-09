@@ -69,4 +69,14 @@ class Programme extends Model
     {
         return $this->hasMany(FeeStructure::class);
     }
+
+    /**
+     * Announcements aimed at this programme.
+     *
+     * @return HasMany<Announcement, $this>
+     */
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class);
+    }
 }

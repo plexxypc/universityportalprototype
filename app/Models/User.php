@@ -98,4 +98,48 @@ class User extends Authenticatable
     {
         return $this->hasMany(AttendanceSession::class, 'created_by');
     }
+
+    /**
+     * Announcements this account wrote.
+     *
+     * @return HasMany<Announcement, $this>
+     */
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class, 'author_id');
+    }
+
+    /**
+     * In-app notifications for this account.
+     *
+     * The Notifiable trait would point this at Laravel's database-notification
+     * table. This portal never uses that channel. NotificationService writes
+     * these rows, and the relation uses notifications.user_id.
+     *
+     * @return HasMany<Notification, $this>
+     */
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(Notification::class);
+    }
+
+    /**
+     * Emails recorded for this account.
+     *
+     * @return HasMany<EmailOutbox, $this>
+     */
+    public function emails(): HasMany
+    {
+        return $this->hasMany(EmailOutbox::class);
+    }
+
+    /**
+     * Audit rows that name this account as the actor.
+     *
+     * @return HasMany<AuditLog, $this>
+     */
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'actor_id');
+    }
 }

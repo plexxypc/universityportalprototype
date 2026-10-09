@@ -243,6 +243,8 @@
 
 ## Phase 19: Hardening
 
+`audit_logs` is append-only in application code: only the audit service inserts, and nothing updates or deletes. Revisit database-level protection once the production host is chosen.
+
 - [ ] TASK-160 Responsive pass at 375px, 768px and 1440px across every screen
 - [ ] TASK-161 Accessibility pass (keyboard, focus, labels, contrast, axe checks)
 - [ ] TASK-162 Security review against SECURITY.md (headers/CSP, policies, uploads, import SSRF, Livewire property tampering)

@@ -28,4 +28,14 @@ class Faculty extends Model
     {
         return $this->hasMany(Department::class);
     }
+
+    /**
+     * Announcements aimed at this faculty.
+     *
+     * @return HasMany<Announcement, $this>
+     */
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class);
+    }
 }

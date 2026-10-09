@@ -49,4 +49,14 @@ class Department extends Model
     {
         return $this->hasMany(Course::class);
     }
+
+    /**
+     * Announcements aimed at this department.
+     *
+     * @return HasMany<Announcement, $this>
+     */
+    public function announcements(): HasMany
+    {
+        return $this->hasMany(Announcement::class);
+    }
 }
