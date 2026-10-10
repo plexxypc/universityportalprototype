@@ -84,6 +84,7 @@
 - [ ] TASK-046 `AuditService` and audit helper used by every service
   - Phase 3 carry-over: remove secrets from audit `before` and `after`.
   - Phase 4 carry-over: with X-Forwarded-For untrusted, request()->ip() is the platform proxy on Render, so the audit_logs ip column needs a trustworthy source once the production host publishes proxy ranges.
+  - Phase 4 carry-over: audit the creation and re-arm of the bootstrap Super Admin.
 - [ ] TASK-047 `MailService` with outbox recording, `SendOutboxEmail` job, retry rules; Brevo mailer configuration and `log` mailer
   - Phase 3 carry-over: redact a credentials email when it is sent, when attempts are exhausted, or when credentials are re-issued.
   - Phase 3 carry-over: keep the password out of the subject, `last_error`, and application logs.

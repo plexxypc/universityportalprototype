@@ -95,6 +95,10 @@ services:
         value: "false"
       - key: DEMO_SEED_PASSWORD
         sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH
+        sync: false
       - key: RUN_MIGRATIONS
         sync: false
       - key: LOG_CHANNEL

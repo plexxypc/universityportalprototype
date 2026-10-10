@@ -58,6 +58,8 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `AWS_BUCKET` | Spaces or S3 bucket. Leave empty for this deploy | *(empty)* | No |
 | `AWS_USE_PATH_STYLE_ENDPOINT` | Path-style S3 addressing. Unused for this deploy | `false` | No |
 | `DEMO_SEED_PASSWORD` | Password used only by a later seeder. Leave empty. This deploy does not seed data | *(empty)* | Yes |
+| `BOOTSTRAP_SUPER_ADMIN_EMAIL` | Email of the first Super Admin. Leave empty until you are ready to create that account (section 10) | `admin@example.com` | No |
+| `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH` | Bcrypt hash from `php artisan portal:hash-password`. Leave empty until section 10. Delete it after the first password change | `$2y$12$<paste the hash>` | Yes |
 | `RUN_MIGRATIONS` | When `true`, the entrypoint runs `php artisan migrate --force` before the web server starts. `true` for the first successful deploy, then `false` | `true` | No |
 | `LOG_CHANNEL` | Log destination. The image default `stderr` is what App Platform can collect. Keep it | `stderr` | No |
 | `LOG_LEVEL` | Log verbosity. The image default is enough | `info` | No |
@@ -228,7 +230,7 @@ If Aiven’s default is already “allow all”, leave it that way for the demo 
 - [ ] `RUN_MIGRATIONS` is then set to `false`, and a redeploy still passes `/up`.
 - [ ] No secret was committed, and the data in Aiven is fictional.
 
-This checklist does not create a super admin or load seed data. Those commands are later tasks. Live Remita or Interswitch credentials stay out of this demo.
+This checklist does not load seed data. The first Super Admin is section 10, after `/health` is ok. Live Remita or Interswitch credentials stay out of this demo.
 
 ## 8. Troubleshooting
 
@@ -383,3 +385,34 @@ The file does not set `PORT`.
 - [ ] `https://<your-service>.onrender.com/up` returns HTTP 200, and `/health` returns HTTP 200 with `"database": "ok"` and `"heartbeat": "ok"`.
 - [ ] The service was opened at `/up` until it answered, before anyone treats it as awake.
 - [ ] No secret was committed.
+- [ ] The first Super Admin was created with section 10, then both bootstrap variables were removed.
+
+## 10. First Super Admin
+
+Do this after `/health` reports the database ok and migrations have run. The password is never a command argument, so it cannot land in shell history.
+
+On your machine, from this repository, with `BCRYPT_ROUNDS` matching the live site (12 in `.env.example`):
+
+```powershell
+php artisan portal:hash-password
+```
+
+The command asks for the password twice, without showing it, and prints one bcrypt hash. Copy that hash into the host dashboard as `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH` and mark it secret. Set `BOOTSTRAP_SUPER_ADMIN_EMAIL` to the address you will sign in with. Leave both empty until this step. Do not commit either value.
+
+Deploy. `docker/entrypoint.sh` runs `php artisan create-super-admin --no-interaction` only when `APP_ENV` is `production` and both variables are set. The account is Active, must change the password, and the temporary password expires 24 hours after creation. The role is Super Admin with no faculty and no department. The display name is Super Admin. Sign in at `/login`, then change the password.
+
+Delete both variables and redeploy. While they are still set and any Super Admin role assignment exists, including a deactivated user, every boot logs this line and does not create another account:
+
+```text
+Bootstrap variables are still set; remove BOOTSTRAP_SUPER_ADMIN_EMAIL and BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH.
+```
+
+That line does not include the email or the hash. If the same email still has `must_change_password` true, that boot also stores the hash again and sets `temp_password_expires_at` to 24 hours from now. After the password has been changed, the bootstrap leaves the account alone.
+
+A duplicate email, a hash this application rejects, or a database error does not stop the web server. The entrypoint logs one warning and continues:
+
+```text
+Warning: Super Admin bootstrap did not finish. The web server will still start.
+```
+
+The warning does not include the email or the hash. When a shell is available, `php artisan create-super-admin` asks for the name, email, and a hidden password instead of reading those variables. It still refuses to create a second Super Admin.

@@ -161,6 +161,7 @@ it('stores a return path only for a plain get page', function () {
     $page = Request::create('/student', 'GET');
     $post = Request::create('/student', 'POST');
     $livewire = Request::create(EndpointResolver::updatePath(), 'POST');
+    $legacy_livewire = Request::create('/livewire/update', 'POST');
     $asset = Request::create('/build/app.css', 'GET');
     $probe = Request::create('/favicon.ico', 'GET');
     $health = Request::create('/health', 'GET');
@@ -169,6 +170,8 @@ it('stores a return path only for a plain get page', function () {
         ->and(SafeReturnPath::shouldRemember($post))->toBeFalse()
         ->and(SafeReturnPath::shouldRemember($livewire))->toBeFalse()
         ->and(SafeReturnPath::fromRequest($livewire))->toBeNull()
+        ->and(SafeReturnPath::shouldRemember($legacy_livewire))->toBeFalse()
+        ->and(SafeReturnPath::fromRequest($legacy_livewire))->toBeNull()
         ->and(SafeReturnPath::shouldRemember($asset))->toBeFalse()
         ->and(SafeReturnPath::shouldRemember($probe))->toBeFalse()
         ->and(SafeReturnPath::shouldRemember($health))->toBeFalse()

@@ -31,9 +31,11 @@ final class PortalPassword implements ValidationRule
     }
 
     /**
-     * Whether this password may be stored.
+     * Whether the password meets the length, character, email, and common-password rules.
+     *
+     * The matric number and the current password are checked separately.
      */
-    private function accepts(string $password): bool
+    public static function allows(string $password, string $email = ''): bool
     {
         $length = strlen($password);
 
@@ -45,7 +47,21 @@ final class PortalPassword implements ValidationRule
             return false;
         }
 
-        if ($this->containsIdentity($password) || $this->isCommon($password)) {
+        $normalised_email = mb_strtolower(trim($email));
+
+        if ($normalised_email !== '' && str_contains(mb_strtolower($password), $normalised_email)) {
+            return false;
+        }
+
+        return ! self::isCommon($password);
+    }
+
+    /**
+     * Whether this password may be stored for the signed-in user.
+     */
+    private function accepts(string $password): bool
+    {
+        if (! self::allows($password, $this->user->email) || $this->containsMatric($password)) {
             return false;
         }
 
@@ -53,33 +69,26 @@ final class PortalPassword implements ValidationRule
     }
 
     /**
-     * Whether the password contains the email or the matric number.
+     * Whether the password contains the matric number.
      */
-    private function containsIdentity(string $password): bool
+    private function containsMatric(string $password): bool
     {
-        $haystack = mb_strtolower($password);
-        $email = mb_strtolower($this->user->email);
-
-        if ($email !== '' && str_contains($haystack, $email)) {
-            return true;
-        }
-
         $this->user->loadMissing('student');
         $matric = $this->user->student?->matric_no;
 
         return is_string($matric)
             && $matric !== ''
-            && str_contains($haystack, mb_strtolower($matric));
+            && str_contains(mb_strtolower($password), mb_strtolower($matric));
     }
 
     /**
      * Whether the lowercased password is on the local common-password list.
      */
-    private function isCommon(string $password): bool
+    private static function isCommon(string $password): bool
     {
         $candidate = mb_strtolower($password);
 
-        foreach ($this->commonPasswords() as $common) {
+        foreach (self::commonPasswords() as $common) {
             if ($candidate === $common) {
                 return true;
             }
@@ -93,7 +102,7 @@ final class PortalPassword implements ValidationRule
      *
      * @return list<string>
      */
-    private function commonPasswords(): array
+    private static function commonPasswords(): array
     {
         $path = resource_path('auth/common-passwords.txt');
         $contents = is_file($path) ? file_get_contents($path) : false;
