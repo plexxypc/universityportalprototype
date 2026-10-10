@@ -315,6 +315,7 @@ Phase 3 carry-over: database-level append-only protection for `audit_logs` waits
   - Phase 3 migrations have run on the live Aiven database. The first Super Admin exists and the bootstrap variables were removed. The demo seeder is Phase 18 and has not run.
 - [ ] TASK-173 Configure the payment provider's callback (and notification, if used) URLs to the deployed domain, or confirm `PAYMENT_PROVIDER=demo`
 - [ ] TASK-174 Verify Brevo sender and send a test email from Settings
+  - Phase 5 carry-over: re-verify the provider error mapping (402, 429, 5xx) against the chosen provider's documentation.
 - [ ] TASK-175 Run the TEST_PLAN smoke test on the deployed URL
 - [ ] TASK-176 Confirm the Aiven free service is running (not powered off) and the app is awake the day before and the morning of the demo
 - [ ] TASK-177 Rehearse the demo script twice; capture screenshots/video as a fallback
