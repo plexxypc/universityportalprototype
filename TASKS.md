@@ -102,6 +102,7 @@
   - Phase 3 carry-over: while `institution_settings` is empty, reads fall back to `config/portal.php`.
 - [ ] TASK-055 Academic sessions resource (single current session)
   - Phase 3 carry-over: session names match `2026/2027`.
+  - Phase 4 carry-over: TEST_PLAN section 2. Reject a tampered Livewire id on this screen. It is the first screen that takes an id.
 - [ ] TASK-056 Semesters resource (single active semester, registration and add/drop deadlines)
   - Phase 3 carry-over: the active semester belongs to the current session.
 - [ ] TASK-057 Faculties, departments and programmes resources with scope rules
@@ -129,6 +130,7 @@
 - [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
   - Phase 4 carry-over: authorised document download uses the Document policy.
+  - Phase 4 carry-over: TEST_PLAN section 2. A document download must reject another user's record id. No download route exists yet.
 - [ ] TASK-071 Import engine: CSV and Excel parsers with size/row limits
 - [ ] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, no cross-host redirects)
 - [ ] TASK-073 Import wizard steps 1–2 (Livewire): choose source and preview
@@ -201,6 +203,7 @@
   - Phase 4 carry-over: lecturer screens show only name, matric number, programme and level.
 - [ ] TASK-113 Results CSV upload with validation and row errors
 - [ ] TASK-114 Workflow: submit → approve → publish, with role checks and locking on publish
+  - Phase 4 carry-over: TEST_PLAN section 2. Only an Exam Officer or Super Admin can publish results, and only a Super Admin can edit the grading scheme. No publish route exists yet. The scheme screen is TASK-060.
 - [ ] TASK-115 Amendment process for published results (audited, re-publish)
 - [ ] TASK-116 GPA, CGPA, total units, classification and academic standing (via `GradingService`)
 - [ ] TASK-117 Student results page by session/semester and result statement PDF
@@ -263,6 +266,7 @@
 
 - [ ] TASK-149 Audit log viewer: filter by actor, entity, action, date; export
   - Phase 3 carry-over: only a Super Admin can read audit logs.
+  - Phase 4 carry-over: TEST_PLAN section 2. The audit viewer must reject every role except Super Admin. No viewer route exists yet.
 - [ ] TASK-150 User management page and role/permission view
 - [ ] TASK-151 Backup and export (ZIP of CSV/JSON of core tables)
 - [ ] TASK-152 Settings status panel (database, queue, mail, payment configuration)
