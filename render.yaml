@@ -59,8 +59,14 @@ services:
         value: hello@example.com
       - key: MAIL_FROM_NAME
         value: University Portal
-      - key: BREVO_API_KEY
+      - key: MAIL_API_URL
+        value: https://api.brevo.com
+      - key: MAIL_API_KEY
         sync: false
+      - key: MAIL_API_TIMEOUT
+        value: "10"
+      - key: MAIL_DAILY_LIMIT
+        value: "250"
       - key: PAYMENT_PROVIDER
         value: demo
       - key: REMITA_ENV

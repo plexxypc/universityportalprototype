@@ -79,6 +79,13 @@ return [
             'transport' => 'array',
         ],
 
+        'brevo' => [
+            'transport' => 'brevo',
+            'api_url' => env('MAIL_API_URL'),
+            'key' => env('MAIL_API_KEY'),
+            'timeout' => (int) env('MAIL_API_TIMEOUT', 10),
+        ],
+
         'failover' => [
             'transport' => 'failover',
             'mailers' => [
@@ -114,5 +121,18 @@ return [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Daily send cap
+    |--------------------------------------------------------------------------
+    |
+    | No default. Unset means the cap is off for the log mailer and for tests.
+    | A production send through the real adapter refuses to run when this is
+    | unset. Counting sent rows is the scheduler's job.
+    |
+    */
+
+    'daily_limit' => env('MAIL_DAILY_LIMIT'),
 
 ];

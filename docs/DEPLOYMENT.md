@@ -40,7 +40,10 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `MAIL_MAILER` | Mail transport. Keep `log` until Brevo is configured | `log` | No |
 | `MAIL_FROM_ADDRESS` | From address stored for later mail | `hello@example.com` | No |
 | `MAIL_FROM_NAME` | From name stored for later mail | `University Portal` | No |
-| `BREVO_API_KEY` | Brevo API key. Leave empty while `MAIL_MAILER=log` | *(empty)* | Yes |
+| `MAIL_API_URL` | HTTPS host for the mail adapter. The app adds `/v3/smtp/email`. Not a secret | `https://api.brevo.com` | No |
+| `MAIL_API_KEY` | Mail API key. Leave empty while `MAIL_MAILER=log` | *(empty)* | Yes |
+| `MAIL_API_TIMEOUT` | HTTP timeout in seconds for the mail adapter | `10` | No |
+| `MAIL_DAILY_LIMIT` | Documented daily cap. The scheduler enforces it later. Production refuses a real-adapter send when this is unset | `250` | No |
 | `PAYMENT_PROVIDER` | Active payment adapter. Keep the demo gateway for this deploy | `demo` | No |
 | `REMITA_ENV` | Remita environment. Stay on the demo environment | `demo` | No |
 | `REMITA_MERCHANT_ID` | Remita merchant id. Leave empty while the provider is `demo` | *(empty)* | Yes |
@@ -220,7 +223,7 @@ If Aiven’s default is already “allow all”, leave it that way for the demo 
 - [ ] The instance price was read in the create form, and a spending alert was set, before deploy.
 - [ ] `APP_URL` is `https://pending.example.com` for the first deploy.
 - [ ] `SESSION_DRIVER=database`, `SESSION_SECURE_COOKIE=true`, `CACHE_STORE=database`, `QUEUE_CONNECTION=database`.
-- [ ] `MAIL_MAILER=log`, `PAYMENT_PROVIDER=demo`, `FILESYSTEM_DISK=local`. Remita, Interswitch, Brevo, and Spaces secrets are empty.
+- [ ] `MAIL_MAILER=log`, `MAIL_API_URL=https://api.brevo.com`, `PAYMENT_PROVIDER=demo`, `FILESYSTEM_DISK=local`. `MAIL_API_KEY`, Remita, Interswitch, and Spaces secrets are empty.
 - [ ] `RUN_MIGRATIONS=true` for this first deploy only.
 - [ ] The web service uses the repository Dockerfile at `docker/Dockerfile`, HTTP port `8080`, health check path `/up`, and one instance with at least 1 GiB of memory.
 - [ ] The deploy finishes, the runtime log contains `Database CA certificate written`, and `https://<your-app>/up` returns HTTP 200.
@@ -331,7 +334,7 @@ These rows differ from App Platform:
 
 Changing a variable requires a new deploy. The entrypoint caches config at startup.
 
-If the blueprint form requires a value for an unused secret (`BREVO_API_KEY`, the Remita and Interswitch secrets, the Spaces keys, `DEMO_SEED_PASSWORD`), enter a single hyphen. Those features stay on the demo settings in section 1, so the hyphen is not used. Leave the field empty when the form allows it.
+If the blueprint form requires a value for an unused secret (`MAIL_API_KEY`, the Remita and Interswitch secrets, the Spaces keys, `DEMO_SEED_PASSWORD`), enter a single hyphen. Those features stay on the demo settings in section 1, so the hyphen is not used. Leave the field empty when the form allows it. `MAIL_API_URL` is not a secret; set it to `https://api.brevo.com`.
 
 ### Health check
 

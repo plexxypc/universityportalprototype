@@ -39,11 +39,13 @@ use App\Policies\ResultPolicy;
 use App\Policies\StudentPolicy;
 use App\Support\DatabaseTls;
 use App\Support\EnvironmentGuard;
+use App\Support\Mail\BrevoTransport;
 use App\Support\Rbac\Permissions;
 use Filament\Auth\Http\Controllers\LogoutController as FilamentLogoutController;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
@@ -76,12 +78,29 @@ class AppServiceProvider extends ServiceProvider
 
         Permissions::registerGates();
         $this->registerPolicies();
+        $this->registerMailTransport();
 
         Livewire::addPersistentMiddleware([
             EnsureActive::class,
             EnsurePasswordChanged::class,
             EnsurePortalArea::class,
         ]);
+    }
+
+    /**
+     * Register the Brevo HTTPS transport. Log and array stay Laravel's own.
+     */
+    private function registerMailTransport(): void
+    {
+        Mail::extend('brevo', function (): BrevoTransport {
+            $timeout = (int) config('mail.mailers.brevo.timeout');
+
+            return new BrevoTransport(
+                api_url: (string) config('mail.mailers.brevo.api_url'),
+                api_key: (string) config('mail.mailers.brevo.key'),
+                timeout_seconds: $timeout > 0 ? $timeout : 10,
+            );
+        });
     }
 
     /**

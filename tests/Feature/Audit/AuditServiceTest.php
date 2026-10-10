@@ -168,6 +168,38 @@ it('removes nested secrets and leaves the original arrays unchanged', function (
         ->and($log->after)->toBe(['status' => 'Active']);
 });
 
+it('removes a nested secrets key', function () {
+    $secret = 'nested-secrets-payload';
+    $before = [
+        'label' => 'kept',
+        'wrapper' => [
+            'secrets' => [
+                'temporary_password' => $secret,
+            ],
+            'note' => 'also-kept',
+        ],
+    ];
+
+    $log = DB::transaction(fn (): AuditLog => app(AuditService::class)->record(
+        actor_id: null,
+        action: AuditService::ACTION_LOGIN,
+        entity: AuditService::ENTITY_USERS,
+        entity_id: null,
+        before: $before,
+        after: null,
+        ip: null,
+    ));
+
+    $log->refresh();
+    $leaked = audit_snapshot_contains($log->before, $secret);
+    $key_removed = ! array_key_exists('secrets', $log->before['wrapper'] ?? []);
+
+    expect($leaked)->toBeFalse()
+        ->and($key_removed)->toBeTrue()
+        ->and($log->before['label'] ?? null)->toBe('kept')
+        ->and(data_get($log->before, 'wrapper.note'))->toBe('also-kept');
+});
+
 it('rolls the audit row back with the surrounding transaction', function () {
     $threw = false;
 

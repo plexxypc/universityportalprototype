@@ -198,6 +198,7 @@ it('has the communications and audit tables', function () {
             'subject',
             'body_html',
             'body_text',
+            'secrets',
             'status',
             'attempts',
             'last_error',

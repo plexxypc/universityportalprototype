@@ -49,6 +49,7 @@ final class AuditService
         'password_hash',
         'hash',
         'secret',
+        'secrets',
         'api_key',
         'brevo_api_key',
         'body_html',
