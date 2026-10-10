@@ -43,7 +43,7 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `MAIL_API_URL` | HTTPS host for the mail adapter. The app adds `/v3/smtp/email`. Not a secret | `https://api.brevo.com` | No |
 | `MAIL_API_KEY` | Mail API key. Leave empty while `MAIL_MAILER=log` | *(empty)* | Yes |
 | `MAIL_API_TIMEOUT` | HTTP timeout in seconds for the mail adapter | `10` | No |
-| `MAIL_DAILY_LIMIT` | Documented daily cap. The scheduler enforces it later. Production refuses a real-adapter send when this is unset | `250` | No |
+| `MAIL_DAILY_LIMIT` | Daily send cap. `outbox:send` enforces it. Production refuses a real-adapter send when this is unset | `250` | No |
 | `PAYMENT_PROVIDER` | Active payment adapter. Keep the demo gateway for this deploy | `demo` | No |
 | `REMITA_ENV` | Remita environment. Stay on the demo environment | `demo` | No |
 | `REMITA_MERCHANT_ID` | Remita merchant id. Leave empty while the provider is `demo` | *(empty)* | Yes |
@@ -261,7 +261,7 @@ Migrations run before nginx starts. A database error during `RUN_MIGRATIONS=true
 - The initial delay is shorter than startup. Config cache plus the first migration can take longer than a few seconds. Raise the delay (**verify in the provider dashboard**) and redeploy.
 - The instance is out of memory. A 512 MiB plan is too small for this container. Move to a plan with at least 1 GiB and redeploy.
 - The build failed, so no container is listening. Read the build log. The Dockerfile path must be `docker/Dockerfile` and the source directory must be the repository root.
-- `/health` returns 503 when the database probe fails or the scheduler heartbeat is older than two minutes. That is a degraded status for you to read. Keep the platform health check on `/up`.
+- `/health` is for monitoring. It returns HTTP 503 when the snapshot is degraded: the database probe fails, the scheduler heartbeat is older than two minutes, the queue is `backlog` or `failing`, or mail is `unconfigured` or `misconfigured`. That status is for you to read. Keep the platform health check on `/up`.
 
 ### Queue worker not running
 
@@ -271,7 +271,7 @@ The worker is a supervisord program in this same container. It runs:
 
 There is no separate App Platform worker component to create. A second component would be a second copy of the whole stack.
 
-`/health` does not prove the worker is consuming jobs. The heartbeat only shows that `portal:heartbeat` ran (once at container start, then every minute from the scheduler).
+`/health` reports `queue` as `ok`, `backlog`, or `failing`, and `mail` as `log`, `brevo`, `unconfigured`, or `misconfigured`. It does not include counts. The heartbeat still only shows that `portal:heartbeat` ran (once at container start, then every minute from the scheduler). `backlog` means a queued job has been waiting more than 10 minutes. `failing` means a row was written to `failed_jobs` in the last 24 hours.
 
 In the runtime logs, confirm a `queue:work` process started and is still running. If the container is restarting, the worker restarts with it and will exit again until the boot error is fixed. `QUEUE_CONNECTION` must be `database`. The `jobs` table is created by the first migration, so a boot with `RUN_MIGRATIONS=false` against an empty database leaves the worker unable to query that table. Set `RUN_MIGRATIONS=true`, deploy once, then set it back to `false`.
 
@@ -338,7 +338,7 @@ If the blueprint form requires a value for an unused secret (`MAIL_API_KEY`, the
 
 ### Health check
 
-Set the health check path to `/up`. Render sends `GET /up` and expects a successful response. `/up` answers when PHP is up. `/health` can return HTTP 503 while MySQL is down, so a database blip would restart the instance. After deploy, open `/health` yourself.
+Set the health check path to `/up`. `render.yaml` sets `healthCheckPath: /up` and that value must stay on `/up`. Render sends `GET /up` and expects a successful response. `/up` answers when PHP is up. `/health` is for monitoring and returns HTTP 503 when the snapshot is degraded (database, heartbeat, queue backlog or failing jobs, or mail unconfigured or misconfigured), so a database blip would restart the instance if the platform checked `/health`. After deploy, open `/health` yourself.
 
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Render waits for the health check during the deploy (the platform limit is on the order of 15 minutes). **Verify in the provider dashboard** whether an initial-delay field is shown. If it is, set it to at least 60 seconds.
 

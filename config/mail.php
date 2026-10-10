@@ -135,4 +135,16 @@ return [
 
     'daily_limit' => env('MAIL_DAILY_LIMIT'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Scheduler batch
+    |--------------------------------------------------------------------------
+    |
+    | How many due rows outbox:send dispatches in one minute. This is not a
+    | vendor quota. The daily cap is MAIL_DAILY_LIMIT.
+    |
+    */
+
+    'outbox_batch' => 25,
+
 ];

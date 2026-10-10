@@ -13,8 +13,8 @@ use Throwable;
 /**
  * Coarse status for the public health endpoint.
  *
- * The heartbeat shows that the scheduler command ran recently. It does not
- * show that the queue worker is consuming jobs.
+ * The heartbeat shows that the scheduler command ran recently. queue and mail
+ * are status words only: no counts, no key, and no from-address.
  */
 final class HealthService
 {
@@ -33,6 +33,8 @@ final class HealthService
      *     status: string,
      *     database: string,
      *     heartbeat: string,
+     *     queue: string,
+     *     mail: string,
      *     mail_driver: string,
      *     payment_provider: string,
      *     environment: string,
@@ -49,6 +51,8 @@ final class HealthService
             $heartbeat = $database !== 'ok' && $this->heartbeatUsesDatabase()
                 ? 'stale'
                 : $this->heartbeatStatus();
+            $queue = $database === 'ok' ? $this->queueStatus() : 'failing';
+            $mail = $this->mailStatus($database === 'ok');
         } finally {
             $this->probe = null;
 
@@ -57,17 +61,68 @@ final class HealthService
             }
         }
 
-        $degraded = $database !== 'ok' || $heartbeat !== 'ok';
+        $degraded = $database !== 'ok'
+            || $heartbeat !== 'ok'
+            || $queue === 'backlog'
+            || $queue === 'failing'
+            || $mail === 'unconfigured'
+            || $mail === 'misconfigured';
 
         return [
             'status' => $degraded ? 'degraded' : 'ok',
             'database' => $database,
             'heartbeat' => $heartbeat,
-            'mail_driver' => (string) config('mail.default'),
+            'queue' => $queue,
+            'mail' => $mail,
+            'mail_driver' => self::mailDriverLabel(),
             'payment_provider' => (string) config('portal.payment_provider'),
             'environment' => (string) app()->environment(),
             'version' => $this->version(),
         ];
+    }
+
+    /**
+     * Payload for an unexpected /health failure. It does not query MySQL.
+     *
+     * @return array{
+     *     status: string,
+     *     database: string,
+     *     heartbeat: string,
+     *     queue: string,
+     *     mail: string,
+     *     mail_driver: string,
+     *     payment_provider: string,
+     *     environment: string,
+     *     version: string|null
+     * }
+     */
+    public function degradedFallback(): array
+    {
+        return [
+            'status' => 'degraded',
+            'database' => 'unreachable',
+            'heartbeat' => 'stale',
+            'queue' => 'failing',
+            'mail' => $this->mailStatus(false),
+            'mail_driver' => self::mailDriverLabel(),
+            'payment_provider' => (string) config('portal.payment_provider'),
+            'environment' => (string) app()->environment(),
+            'version' => $this->version(),
+        ];
+    }
+
+    /**
+     * Mailer name safe to publish. Anything else is unconfigured.
+     */
+    public static function mailDriverLabel(): string
+    {
+        $mailer = (string) config('mail.default');
+
+        if (in_array($mailer, ['log', 'array', 'brevo'], true)) {
+            return $mailer;
+        }
+
+        return 'unconfigured';
     }
 
     /**
@@ -242,6 +297,147 @@ final class HealthService
         }
 
         return trim($version);
+    }
+
+    /**
+     * Queue word: failing wins over backlog. No depths are returned.
+     */
+    private function queueStatus(): string
+    {
+        try {
+            if ($this->hasRecentFailure()) {
+                return 'failing';
+            }
+
+            if ($this->hasBacklog()) {
+                return 'backlog';
+            }
+        } catch (Throwable) {
+            return 'failing';
+        }
+
+        return 'ok';
+    }
+
+    /**
+     * A failed_jobs row in the last 24 hours.
+     */
+    private function hasRecentFailure(): bool
+    {
+        $table = $this->safeIdentifier(config('queue.failed.table'));
+
+        if ($table === null) {
+            return true;
+        }
+
+        $statement = $this->openProbe()->prepare(
+            'select 1 from `'.$table.'` where unix_timestamp(`failed_at`) >= ? limit 1',
+        );
+        $statement->execute([now()->subHours(24)->getTimestamp()]);
+
+        return $statement->fetchColumn() !== false;
+    }
+
+    /**
+     * A jobs row whose available_at is more than 10 minutes ago.
+     */
+    private function hasBacklog(): bool
+    {
+        $table = $this->safeIdentifier(config('queue.connections.database.table'));
+
+        if ($table === null) {
+            return true;
+        }
+
+        $statement = $this->openProbe()->prepare(
+            'select 1 from `'.$table.'` where `available_at` < ? limit 1',
+        );
+        $statement->execute([now()->subMinutes(10)->getTimestamp()]);
+
+        return $statement->fetchColumn() !== false;
+    }
+
+    /**
+     * Mail word. An open circuit breaker is misconfigured.
+     *
+     * The array mailer is reported as log. The key and the from-address are not read into the result.
+     */
+    private function mailStatus(bool $database_ok): string
+    {
+        if ($database_ok && $this->circuitPaused()) {
+            return 'misconfigured';
+        }
+
+        $mailer = (string) config('mail.default');
+
+        if ($mailer === 'log' || $mailer === 'array') {
+            return 'log';
+        }
+
+        if ($mailer === 'brevo' && $this->brevoConfigured()) {
+            return 'brevo';
+        }
+
+        return 'unconfigured';
+    }
+
+    /**
+     * Whether the mail circuit-breaker flag is set. Read through the probe.
+     */
+    private function circuitPaused(): bool
+    {
+        return $this->databaseCacheValue(MailService::CIRCUIT_PAUSE_KEY) === true;
+    }
+
+    /**
+     * HTTPS host and a non-empty key, without returning either value.
+     */
+    private function brevoConfigured(): bool
+    {
+        $url = config('mail.mailers.brevo.api_url');
+        $key = config('mail.mailers.brevo.key');
+        $parts = is_string($url) ? parse_url($url) : false;
+        $https = is_array($parts) && ($parts['scheme'] ?? '') === 'https' && ($parts['host'] ?? '') !== '';
+
+        return $https && is_string($key) && $key !== '';
+    }
+
+    /**
+     * One value from the database cache, or null when it is missing.
+     */
+    private function databaseCacheValue(string $key): mixed
+    {
+        $table = $this->safeIdentifier(config('cache.stores.database.table'));
+
+        if ($table === null) {
+            return null;
+        }
+
+        $statement = $this->openProbe()->prepare(
+            'select `value`, `expiration` from `'.$table.'` where `key` = ? limit 1',
+        );
+        $statement->execute([(string) config('cache.prefix').$key]);
+        $row = $statement->fetch(PDO::FETCH_ASSOC);
+
+        if (! is_array($row) || (int) $row['expiration'] <= now()->getTimestamp()) {
+            return null;
+        }
+
+        $value = unserialize((string) $row['value'], ['allowed_classes' => false]);
+
+        return $value === false ? null : $value;
+    }
+
+    /**
+     * A MySQL identifier, or null when the configured name is not safe.
+     */
+    private function safeIdentifier(mixed $name): ?string
+    {
+        if (! is_string($name) || preg_match('/^[A-Za-z0-9_]+$/', $name) !== 1) {
+            return null;
+        }
+
+        return $name;
     }
 
     /**

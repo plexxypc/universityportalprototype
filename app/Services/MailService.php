@@ -27,7 +27,7 @@ use InvalidArgumentException;
  * Records outbox rows and sends one row through Laravel's mailer.
  *
  * The job carries only the outbox id. This service does not dispatch a
- * second job. Later retries are `outbox:send` in TASK-049.
+ * second job. `outbox:send` dispatches later retries. The job is the only sender.
  */
 final class MailService
 {
@@ -36,6 +36,8 @@ final class MailService
     public const string CIRCUIT_STREAK_KEY = 'mail-send-failure-streak';
 
     public const string CIRCUIT_PAUSE_KEY = 'mail-send-paused';
+
+    public const string DAILY_LIMIT_KEY = 'mail-daily-limit-reached';
 
     private const int LOCK_SECONDS = 30;
 
@@ -163,6 +165,109 @@ final class MailService
     }
 
     /**
+     * Dispatch due queued rows, and fail rows that have used every attempt.
+     *
+     * This method does not call the mailer. A row whose send lock is already
+     * held is skipped. At the daily cap, further rows stay queued.
+     */
+    public function dispatchDue(int $batch_size): OutboxDispatchResult
+    {
+        $batch_size = max(1, $batch_size);
+        $paused = $this->circuitIsPaused();
+        $cap = $this->dailyCap();
+        $sent = $cap === null ? 0 : $this->sentToday();
+        $dispatched = 0;
+        $skipped = 0;
+        $exhausted = 0;
+        $limit_reached = false;
+
+        EmailOutbox::query()
+            ->where('status', EmailStatus::Queued)
+            ->where('attempts', '>=', MailError::MAX_ATTEMPTS)
+            ->orderBy('id')
+            ->chunkById(100, function ($rows) use (&$exhausted, &$skipped): bool {
+                foreach ($rows as $row) {
+                    $this->deliver($row->id);
+                    $row->refresh();
+
+                    if ($row->status === EmailStatus::Failed) {
+                        $exhausted++;
+                    } else {
+                        $skipped++;
+                    }
+                }
+
+                return true;
+            });
+
+        if (! $paused) {
+            EmailOutbox::query()
+                ->where('status', EmailStatus::Queued)
+                ->where('attempts', '<', MailError::MAX_ATTEMPTS)
+                ->orderBy('id')
+                ->chunkById(100, function ($rows) use (
+                    &$dispatched,
+                    &$skipped,
+                    &$limit_reached,
+                    $batch_size,
+                    $cap,
+                    $sent,
+                ): bool {
+                    foreach ($rows as $row) {
+                        if ($dispatched >= $batch_size) {
+                            return false;
+                        }
+
+                        if (! $this->isDue($row)) {
+                            continue;
+                        }
+
+                        if ($cap !== null && ($sent + $dispatched) >= $cap) {
+                            $limit_reached = true;
+
+                            return false;
+                        }
+
+                        if (! $this->dispatchOne($row->id)) {
+                            $skipped++;
+
+                            continue;
+                        }
+
+                        $dispatched++;
+                    }
+
+                    return true;
+                });
+        }
+
+        if ($cap !== null && ($sent + $dispatched) >= $cap) {
+            $this->rememberDailyLimit();
+            $limit_reached = true;
+        } else {
+            Cache::store('database')->forget(self::DAILY_LIMIT_KEY);
+        }
+
+        return new OutboxDispatchResult($dispatched, $skipped, $exhausted, $limit_reached);
+    }
+
+    /**
+     * Whether the staff banner should say the daily cap was reached.
+     */
+    public function dailyLimitReached(): bool
+    {
+        return Cache::store('database')->get(self::DAILY_LIMIT_KEY) === true;
+    }
+
+    /**
+     * Whether the circuit breaker is holding mail.
+     */
+    public function sendingIsPaused(): bool
+    {
+        return $this->circuitIsPaused();
+    }
+
+    /**
      * Record an unexpected failure without the exception text.
      */
     public function recordUnexpectedFailure(int $email_outbox_id): void
@@ -191,17 +296,23 @@ final class MailService
             return;
         }
 
-        if ($this->circuitIsPaused()) {
-            return;
-        }
-
         if ($row->attempts >= MailError::MAX_ATTEMPTS) {
             $this->markFailed($row, MailError::PROVIDER_UNAVAILABLE, true);
 
             return;
         }
 
+        if ($this->circuitIsPaused()) {
+            return;
+        }
+
         if (! $this->isDue($row)) {
+            return;
+        }
+
+        if ($this->dailyCapReached()) {
+            $this->rememberDailyLimit();
+
             return;
         }
 
@@ -534,6 +645,86 @@ final class MailService
         $limit = config('mail.daily_limit');
 
         return $limit !== null && $limit !== '';
+    }
+
+    /**
+     * Dispatch one row when its send lock is free.
+     *
+     * The lock is released before the job is queued so the worker can hold it
+     * across the provider call. ShouldBeUnique drops a second dispatch.
+     */
+    private function dispatchOne(int $email_outbox_id): bool
+    {
+        $cache = Cache::store('database');
+
+        if (! $cache instanceof Repository) {
+            return false;
+        }
+
+        $store = $cache->getStore();
+
+        if (! $store instanceof LockProvider) {
+            return false;
+        }
+
+        $lock = $store->lock(self::LOCK_PREFIX.$email_outbox_id, self::LOCK_SECONDS);
+
+        if (! $lock->get()) {
+            return false;
+        }
+
+        $lock->release();
+        SendOutboxEmail::dispatch($email_outbox_id);
+
+        return true;
+    }
+
+    /**
+     * Sent rows whose sent_at falls on the current Africa/Lagos day.
+     */
+    private function sentToday(): int
+    {
+        $start = now()->startOfDay()->format('Y-m-d H:i:s');
+        $end = now()->endOfDay()->format('Y-m-d H:i:s');
+
+        return EmailOutbox::query()
+            ->where('status', EmailStatus::Sent)
+            ->whereBetween('sent_at', [$start, $end])
+            ->count();
+    }
+
+    /**
+     * Daily cap from configuration. Null means the cap is off.
+     */
+    private function dailyCap(): ?int
+    {
+        $limit = config('mail.daily_limit');
+
+        if ($limit === null || $limit === '' || ! is_numeric($limit)) {
+            return null;
+        }
+
+        return max(0, (int) $limit);
+    }
+
+    /**
+     * Whether today's sent rows have already filled the cap.
+     */
+    private function dailyCapReached(): bool
+    {
+        $cap = $this->dailyCap();
+
+        return $cap !== null && $this->sentToday() >= $cap;
+    }
+
+    /**
+     * Remember that the cap was reached until the end of the Lagos day.
+     */
+    private function rememberDailyLimit(): void
+    {
+        $seconds = (int) now()->diffInSeconds(now()->endOfDay());
+
+        Cache::store('database')->put(self::DAILY_LIMIT_KEY, true, max($seconds, 1));
     }
 
     private function isDue(EmailOutbox $row): bool

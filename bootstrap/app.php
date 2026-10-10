@@ -8,6 +8,7 @@ use App\Http\Middleware\EnsurePortalArea;
 use App\Http\Middleware\NoStoreResponse;
 use App\Models\User;
 use App\Services\AuthService;
+use App\Services\HealthService;
 use App\Support\SessionReturn;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
@@ -116,16 +117,8 @@ return Application::configure(basePath: dirname(__DIR__))
                 return null;
             }
 
-            $version = config('portal.version');
-
-            return response()->json([
-                'status' => 'degraded',
-                'database' => 'unreachable',
-                'heartbeat' => 'stale',
-                'mail_driver' => (string) config('mail.default'),
-                'payment_provider' => (string) config('portal.payment_provider'),
-                'environment' => (string) app()->environment(),
-                'version' => is_string($version) && trim($version) !== '' ? trim($version) : null,
-            ], 503)->header('Cache-Control', 'no-store, private');
+            return response()
+                ->json(app(HealthService::class)->degradedFallback(), 503)
+                ->header('Cache-Control', 'no-store, private');
         });
     })->create();

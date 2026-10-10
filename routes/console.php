@@ -12,3 +12,6 @@ Artisan::command('inspire', function () {
 
 // Shows that the scheduler ran recently. It does not show that the queue worker is consuming jobs.
 Schedule::command('portal:heartbeat')->everyMinute();
+
+// Dispatches due outbox rows. The job is the only sender.
+Schedule::command('outbox:send')->everyMinute()->withoutOverlapping();
