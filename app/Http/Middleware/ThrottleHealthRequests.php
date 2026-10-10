@@ -16,8 +16,8 @@ use Throwable;
  *
  * The default cache store is the database. Using it here made a missing
  * driver or a slow connection into an HTML error page before the health
- * check could answer. TrustProxies has already run, so ip() is the
- * forwarded client when the load balancer sent X-Forwarded-For.
+ * check could answer. X-Forwarded-For is not trusted, so ip() is the
+ * immediate peer. On Render that peer is the platform proxy.
  */
 final class ThrottleHealthRequests
 {

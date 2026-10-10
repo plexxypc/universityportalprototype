@@ -2,10 +2,21 @@
 
 declare(strict_types=1);
 
+use App\Http\Middleware\EnsureActive;
+use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsurePortalArea;
+use App\Http\Middleware\NoStoreResponse;
+use App\Models\User;
+use App\Services\AuthService;
+use App\Support\SessionReturn;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\AuthenticateSession;
+use Illuminate\Session\TokenMismatchException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -24,19 +35,76 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // The host load balancer terminates TLS. Trust its forwarded headers
-        // so the app sees HTTPS and the real client address.
+        // Filament's Authenticate implements AuthenticatesRequests, so the
+        // router would run it before these checks and answer 403 first.
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsureActive::class);
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsurePasswordChanged::class);
+        $middleware->prependToPriorityList(AuthenticatesRequests::class, EnsurePortalArea::class);
+
+        // The staff panel already checks this hash. The portal routes need it too,
+        // so a password change can keep the current browser signed in.
+        $middleware->web(append: [
+            AuthenticateSession::class,
+            NoStoreResponse::class,
+        ]);
+
+        $middleware->redirectGuestsTo(fn (): string => route('login'));
+        $middleware->redirectUsersTo(function (Request $request): string {
+            $user = $request->user();
+
+            if (! $user instanceof User) {
+                return route('login');
+            }
+
+            $auth = app(AuthService::class);
+            $home = $auth->homePath($user);
+
+            if ($home === null) {
+                $auth->logout($request);
+
+                return route('login');
+            }
+
+            return $home;
+        });
+
+        // Trust the platform proxy for scheme, host, and port so HTTPS and
+        // generated URLs stay correct. Do not trust X-Forwarded-For: a client
+        // can forge it, and neither Render nor App Platform publishes a
+        // stable proxy range. Login limits use the socket address instead.
         $middleware->trustProxies(
             at: '*',
-            headers: Request::HEADER_X_FORWARDED_FOR
-                | Request::HEADER_X_FORWARDED_HOST
+            headers: Request::HEADER_X_FORWARDED_HOST
                 | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO
-                | Request::HEADER_X_FORWARDED_PREFIX
-                | Request::HEADER_X_FORWARDED_AWS_ELB,
+                | Request::HEADER_X_FORWARDED_PREFIX,
         );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->dontFlash([
+            'current_password',
+            'password',
+            'password_confirmation',
+        ]);
+
+        // An ended session returns to the login page. Livewire must not see
+        // HTTP 419, which the client turns into a "page expired" dialog.
+        $exceptions->render(function (AuthenticationException $exception, Request $request) {
+            if ($request->is('health')) {
+                return null;
+            }
+
+            return SessionReturn::redirect($request);
+        });
+
+        $exceptions->render(function (TokenMismatchException $exception, Request $request) {
+            if ($request->is('health')) {
+                return null;
+            }
+
+            return SessionReturn::redirect($request);
+        });
+
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->is('health') || $request->expectsJson(),
         );

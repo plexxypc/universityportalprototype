@@ -8,3 +8,6 @@ parameters:
 
     paths:
         - app
+
+    # Read casts() so enum columns are the enum, not the varchar from the migration.
+    parseModelCastsMethod: true

@@ -231,8 +231,37 @@ render_nginx_config() {
     sed "s/__PORT__/${PORT}/g" /var/www/html/docker/nginx.conf.template > /tmp/nginx.conf
 }
 
+# Never let a bootstrap failure stop nginx. One warning line, no secrets.
+run_super_admin_bootstrap() {
+    app_env=$(printf '%s' "${APP_ENV:-production}" | tr -d '[:space:]')
+
+    if [ "$app_env" != "production" ]; then
+        return 0
+    fi
+
+    if [ -z "${BOOTSTRAP_SUPER_ADMIN_EMAIL:-}" ] || [ -z "${BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH:-}" ]; then
+        return 0
+    fi
+
+    set +e
+    php artisan create-super-admin --no-interaction
+    status=$?
+    set -e
+
+    if [ "$status" -ne 0 ]; then
+        printf '%s\n' 'Warning: Super Admin bootstrap did not finish. The web server will still start.' >&2
+    fi
+
+    return 0
+}
+
 if [ "${1:-}" = "--write-database-ca" ]; then
     write_database_ca
+    exit 0
+fi
+
+if [ "${1:-}" = "--bootstrap-super-admin" ]; then
+    run_super_admin_bootstrap
     exit 0
 fi
 
@@ -255,5 +284,7 @@ fi
 # One write at startup so /health is not stale before the first scheduled minute.
 # This shows the scheduler command ran. It does not show that the queue worker is consuming jobs.
 php artisan portal:heartbeat --no-interaction
+
+run_super_admin_bootstrap
 
 exec "$@"

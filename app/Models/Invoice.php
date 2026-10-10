@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\InvoiceStatus;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\InvoiceFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -27,10 +31,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'paid_kobo',
     'status',
 ])]
-class Invoice extends Model
+class Invoice extends Model implements VisibleToUser
 {
     /** @use HasFactory<InvoiceFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the status.
@@ -92,5 +98,16 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Invoices follow the fees cell and the student's payments cell.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['fees', 'payments'],
+            kind: VisibilityKind::StudentId,
+        );
     }
 }

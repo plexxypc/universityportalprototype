@@ -34,6 +34,7 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `DB_PASSWORD` | Database password from that same panel | `<paste from the Aiven console>` | Yes |
 | `DB_SSL_CA` | Aiven CA certificate, pasted as PEM text. See section 3 | `-----BEGIN CERTIFICATE-----<paste the downloaded CA>-----END CERTIFICATE-----` | No |
 | `SESSION_DRIVER` | Where login sessions are stored | `database` | No |
+| `SESSION_SECURE_COOKIE` | Send the session cookie only over HTTPS. HttpOnly and SameSite=lax stay on in every environment. Set this on the live HTTPS site | `true` | No |
 | `CACHE_STORE` | Cache backend. The scheduler heartbeat uses this | `database` | No |
 | `QUEUE_CONNECTION` | Queue backend the in-container worker consumes | `database` | No |
 | `MAIL_MAILER` | Mail transport. Keep `log` until Brevo is configured | `log` | No |
@@ -57,6 +58,8 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `AWS_BUCKET` | Spaces or S3 bucket. Leave empty for this deploy | *(empty)* | No |
 | `AWS_USE_PATH_STYLE_ENDPOINT` | Path-style S3 addressing. Unused for this deploy | `false` | No |
 | `DEMO_SEED_PASSWORD` | Password used only by a later seeder. Leave empty. This deploy does not seed data | *(empty)* | Yes |
+| `BOOTSTRAP_SUPER_ADMIN_EMAIL` | Email of the first Super Admin. Leave empty until you are ready to create that account (section 10) | `admin@example.com` | No |
+| `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH` | Bcrypt hash from `php artisan portal:hash-password`. Leave empty until section 10. Delete it after the first password change | `$2y$12$<paste the hash>` | Yes |
 | `RUN_MIGRATIONS` | When `true`, the entrypoint runs `php artisan migrate --force` before the web server starts. `true` for the first successful deploy, then `false` | `true` | No |
 | `LOG_CHANNEL` | Log destination. The image default `stderr` is what App Platform can collect. Keep it | `stderr` | No |
 | `LOG_LEVEL` | Log verbosity. The image default is enough | `info` | No |
@@ -171,7 +174,11 @@ App Platform uses its own health check. The `HEALTHCHECK` instruction in the Doc
 
 `/up` is the liveness probe. It answers when PHP is up. `/health` is a deeper JSON check (database and scheduler heartbeat) and can return HTTP 503 while MySQL is down. Use `/up` for the platform probe so a database blip does not restart the instance. After deploy, open `/health` yourself.
 
-`bootstrap/app.php` trusts every connecting address (`at: '*'`), and it honours `X-Forwarded-For`, `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Port`, and `X-Forwarded-Prefix`. App Platform and Render terminate TLS at their own proxy and do not publish a stable proxy address, so a fixed proxy list is not practical. The risk is that a client-supplied `X-Forwarded-For` becomes the address the app uses for rate limits. Revisit this when login throttling is built (TASK-040).
+`bootstrap/app.php` trusts every connecting address (`at: '*'`). It honours `X-Forwarded-Host`, `X-Forwarded-Proto`, `X-Forwarded-Port`, and `X-Forwarded-Prefix`, so the app sees HTTPS behind App Platform or Render. It does not honour `X-Forwarded-For`. A client can forge that header, and neither host publishes a stable proxy range, so the app does not treat it as the client address.
+
+Login limits use the socket address (`REMOTE_ADDR`), not `X-Forwarded-For`. On Render that address is the platform proxy, shared by every visitor to the instance. The identifier limit is 10 failures in 15 minutes and is the control that still belongs to one account. The other limit is 5 failures per minute for one identifier from one socket address. `/health` uses `$request->ip()`, which is that same socket address while `X-Forwarded-For` stays untrusted.
+
+What remains uncertain on Render: the platform does not publish a proxy range, and it is not verified from this repository whether Render overwrites or appends `X-Forwarded-For`. Until a production host publishes ranges, do not trust that header. The same gap applies to `audit_logs` when that column is written (TASK-046).
 
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Give the health check an initial delay of at least 60 seconds. On the first deploy, a longer delay is safer. **Verify in the provider dashboard** the initial-delay field name.
 
@@ -212,7 +219,7 @@ If Aiven’s default is already “allow all”, leave it that way for the demo 
 - [ ] `APP_ENV=production`, `APP_DEBUG=false`, `DB_CONNECTION=mysql`.
 - [ ] The instance price was read in the create form, and a spending alert was set, before deploy.
 - [ ] `APP_URL` is `https://pending.example.com` for the first deploy.
-- [ ] `SESSION_DRIVER=database`, `CACHE_STORE=database`, `QUEUE_CONNECTION=database`.
+- [ ] `SESSION_DRIVER=database`, `SESSION_SECURE_COOKIE=true`, `CACHE_STORE=database`, `QUEUE_CONNECTION=database`.
 - [ ] `MAIL_MAILER=log`, `PAYMENT_PROVIDER=demo`, `FILESYSTEM_DISK=local`. Remita, Interswitch, Brevo, and Spaces secrets are empty.
 - [ ] `RUN_MIGRATIONS=true` for this first deploy only.
 - [ ] The web service uses the repository Dockerfile at `docker/Dockerfile`, HTTP port `8080`, health check path `/up`, and one instance with at least 1 GiB of memory.
@@ -223,7 +230,7 @@ If Aiven’s default is already “allow all”, leave it that way for the demo 
 - [ ] `RUN_MIGRATIONS` is then set to `false`, and a redeploy still passes `/up`.
 - [ ] No secret was committed, and the data in Aiven is fictional.
 
-This checklist does not create a super admin or load seed data. Those commands are later tasks. Live Remita or Interswitch credentials stay out of this demo.
+This checklist does not load seed data. The first Super Admin is section 10, after `/health` is ok. Live Remita or Interswitch credentials stay out of this demo.
 
 ## 8. Troubleshooting
 
@@ -378,3 +385,34 @@ The file does not set `PORT`.
 - [ ] `https://<your-service>.onrender.com/up` returns HTTP 200, and `/health` returns HTTP 200 with `"database": "ok"` and `"heartbeat": "ok"`.
 - [ ] The service was opened at `/up` until it answered, before anyone treats it as awake.
 - [ ] No secret was committed.
+- [ ] The first Super Admin was created with section 10, then both bootstrap variables were removed.
+
+## 10. First Super Admin
+
+Do this after `/health` reports the database ok and migrations have run. The password is never a command argument, so it cannot land in shell history.
+
+On your machine, from this repository, with `BCRYPT_ROUNDS` matching the live site (12 in `.env.example`):
+
+```powershell
+php artisan portal:hash-password
+```
+
+The command asks for the password twice, without showing it, and prints one bcrypt hash. Copy that hash into the host dashboard as `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH` and mark it secret. Set `BOOTSTRAP_SUPER_ADMIN_EMAIL` to the address you will sign in with. Leave both empty until this step. Do not commit either value.
+
+Deploy. `docker/entrypoint.sh` runs `php artisan create-super-admin --no-interaction` only when `APP_ENV` is `production` and both variables are set. The account is Active, must change the password, and the temporary password expires 24 hours after creation. The role is Super Admin with no faculty and no department. The display name is Super Admin. Sign in at `/login`, then change the password.
+
+Delete both variables and redeploy. While they are still set and any Super Admin role assignment exists, including a deactivated user, every boot logs this line and does not create another account:
+
+```text
+Bootstrap variables are still set; remove BOOTSTRAP_SUPER_ADMIN_EMAIL and BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH.
+```
+
+That line does not include the email or the hash. If the same email still has `must_change_password` true, that boot also stores the hash again and sets `temp_password_expires_at` to 24 hours from now. After the password has been changed, the bootstrap leaves the account alone.
+
+A duplicate email, a hash this application rejects, or a database error does not stop the web server. The entrypoint logs one warning and continues:
+
+```text
+Warning: Super Admin bootstrap did not finish. The web server will still start.
+```
+
+The warning does not include the email or the hash. When a shell is available, `php artisan create-super-admin` asks for the name, email, and a hidden password instead of reading those variables. It still refuses to create a second Super Admin.

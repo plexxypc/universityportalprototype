@@ -6,6 +6,10 @@ namespace App\Models;
 
 use App\Enums\Gender;
 use App\Enums\StudentStatus;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -37,10 +41,12 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
     'address',
     'import_batch_id',
 ])]
-class Student extends Model
+class Student extends Model implements VisibleToUser
 {
     /** @use HasFactory<StudentFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast gender, date of birth, and status.
@@ -174,5 +180,19 @@ class Student extends Model
     public function results(): HasMany
     {
         return $this->hasMany(Result::class);
+    }
+
+    /**
+     * Students follow the student_records cell.
+     *
+     * A lecturer sees a student only when that student has an Approved
+     * registration item for a course and semester the lecturer is assigned.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['student_records'],
+            kind: VisibilityKind::Student,
+        );
     }
 }

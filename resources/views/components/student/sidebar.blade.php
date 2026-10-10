@@ -19,4 +19,10 @@
             </a>
         @endforeach
     </nav>
+    <form method="POST" action="{{ route('logout') }}" class="px-space-12 pb-space-16">
+        @csrf
+        <button type="submit" class="flex min-h-11 w-full items-center rounded-control px-space-12 text-body font-semibold text-text hover:bg-primary-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
+            Sign out
+        </button>
+    </form>
 </aside>

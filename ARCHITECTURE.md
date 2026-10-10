@@ -127,21 +127,24 @@ university-portal/
 **Matric-number login.**
 ```
 Login form (identifier + password)
-  → LoginRequest: rate limit by IP + identifier (RateLimiter)
-  → if identifier contains "@": find user by email
-    else: find student by matric_no → its user
-  → Auth::attempt only if user exists and status = active; generic "Invalid credentials" on any failure
-  → regenerate session; set last_login_at
-  → middleware EnsurePasswordChanged: if must_change_password (or temp password expired → login blocked)
-        redirect to /change-password
-  → redirect by role: student → /student, staff → /staff (Filament panel)
+  → AuthService is the only authenticator
+  → failures only: 5 per minute for the identifier and the socket address, and 10 per 15 minutes for the identifier
+  → the limiter stores an HMAC of the identifier, not the identifier; X-Forwarded-For is not used
+  → if the identifier contains "@": find the user by email
+    else: find the student by matric_no → that user
+  → sign in only when the user is Active, has a portal area, and the temporary password has not expired
+  → every refusal uses the same "Invalid credentials." message: unknown user, wrong password, deactivated, suspended, expired temporary password, locked out, no role
+  → regenerate the session; set last_login_at
+  → EnsurePasswordChanged sends must_change_password to /change-password
+  → a student goes to /student; any staff role goes to /staff; a person with both may still open /student
+  → /staff/login redirects to /login; the panel has no login of its own
 ```
 
 **Credentials issued by admins** (`CredentialService`): generate a 12-character random password with a cryptographically secure generator, store only the hash, set `must_change_password = true` and `temp_password_expires_at = now() + 7 days`, enqueue the welcome email containing the plaintext once, and redact the password from the stored outbox body after sending.
 
 **Password reset.** Laravel's password broker, with the notification overridden to go through `MailService` so reset emails use the branded template and appear in the outbox. Tokens are single-use and expire in 60 minutes; the response never reveals whether an account exists.
 
-**Sessions.** `database` session driver (works across multiple app servers). Session cookie: HttpOnly, Secure, SameSite=Lax. Changing the password invalidates other sessions.
+**Sessions.** `database` session driver (works across multiple app servers). Session cookie: HttpOnly, Secure, SameSite=Lax. There is no remember-me checkbox. Changing the password deletes that user's other session rows, rotates `remember_token`, and refreshes the current session's stored password hash so this browser stays signed in.
 
 ## 7. Authorisation design
 

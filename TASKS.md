@@ -67,12 +67,11 @@
 
 ## Phase 4: Authentication and authorisation [AUTH-1..7]
 
-- [ ] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
-- [ ] TASK-038 Base policies and `visibleTo()` scopes for scoped models
-- [ ] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
-- [ ] TASK-040 Login rate limiting (IP + identifier). `bootstrap/app.php` currently trusts every proxy (`at: '*'`). Revisit that when this throttle is built, because a client-supplied `X-Forwarded-For` is the address the limiter would count. See `docs/DEPLOYMENT.md`.
+- [x] TASK-037 `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin
+- [x] TASK-038 Base policies and `visibleTo()` scopes for scoped models
+- [x] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
+- [x] TASK-040 Login rate limiting (IP + identifier). `X-Forwarded-For` is not trusted. Login limits use the socket address. See `docs/DEPLOYMENT.md`.
 - [ ] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
-  - Phase 3 carry-over: block login when the temporary password has expired.
 - [ ] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
 - [ ] TASK-043 Logout and session expiry handling
 - [ ] TASK-044 `create-super-admin` Artisan command
@@ -84,6 +83,8 @@
 
 - [ ] TASK-046 `AuditService` and audit helper used by every service
   - Phase 3 carry-over: remove secrets from audit `before` and `after`.
+  - Phase 4 carry-over: with X-Forwarded-For untrusted, request()->ip() is the platform proxy on Render, so the audit_logs ip column needs a trustworthy source once the production host publishes proxy ranges.
+  - Phase 4 carry-over: audit the creation and re-arm of the bootstrap Super Admin.
 - [ ] TASK-047 `MailService` with outbox recording, `SendOutboxEmail` job, retry rules; Brevo mailer configuration and `log` mailer
   - Phase 3 carry-over: redact a credentials email when it is sent, when attempts are exhausted, or when credentials are re-issued.
   - Phase 3 carry-over: keep the password out of the subject, `last_error`, and application logs.
@@ -101,6 +102,7 @@
   - Phase 3 carry-over: while `institution_settings` is empty, reads fall back to `config/portal.php`.
 - [ ] TASK-055 Academic sessions resource (single current session)
   - Phase 3 carry-over: session names match `2026/2027`.
+  - Phase 4 carry-over: TEST_PLAN section 2. Reject a tampered Livewire id on this screen. It is the first screen that takes an id.
 - [ ] TASK-056 Semesters resource (single active semester, registration and add/drop deadlines)
   - Phase 3 carry-over: the active semester belongs to the current session.
 - [ ] TASK-057 Faculties, departments and programmes resources with scope rules
@@ -124,8 +126,11 @@
 - [ ] TASK-067 Student list: search, filters (faculty, department, programme, level, status), pagination
 - [ ] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
 - [ ] TASK-069 Edit student; suspend/reactivate; level promotion (single and bulk)
+  - Phase 4 carry-over: suspending or reactivating a student must also update `users.status` (login checks the user, not the student row).
 - [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
+  - Phase 4 carry-over: authorised document download uses the Document policy.
+  - Phase 4 carry-over: TEST_PLAN section 2. A document download must reject another user's record id. No download route exists yet.
 - [ ] TASK-071 Import engine: CSV and Excel parsers with size/row limits
 - [ ] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, no cross-host redirects)
 - [ ] TASK-073 Import wizard steps 1–2 (Livewire): choose source and preview
@@ -195,8 +200,10 @@
   - Phase 3 carry-over: a result score's component belongs to the result's scheme.
   - Phase 3 carry-over: `scheme_version` matches the linked scheme row.
 - [ ] TASK-112 Lecturer results entry UI per assigned course
+  - Phase 4 carry-over: lecturer screens show only name, matric number, programme and level.
 - [ ] TASK-113 Results CSV upload with validation and row errors
 - [ ] TASK-114 Workflow: submit → approve → publish, with role checks and locking on publish
+  - Phase 4 carry-over: TEST_PLAN section 2. Only an Exam Officer or Super Admin can publish results, and only a Super Admin can edit the grading scheme. No publish route exists yet. The scheme screen is TASK-060.
 - [ ] TASK-115 Amendment process for published results (audited, re-publish)
 - [ ] TASK-116 GPA, CGPA, total units, classification and academic standing (via `GradingService`)
 - [ ] TASK-117 Student results page by session/semester and result statement PDF
@@ -259,6 +266,7 @@
 
 - [ ] TASK-149 Audit log viewer: filter by actor, entity, action, date; export
   - Phase 3 carry-over: only a Super Admin can read audit logs.
+  - Phase 4 carry-over: TEST_PLAN section 2. The audit viewer must reject every role except Super Admin. No viewer route exists yet.
 - [ ] TASK-150 User management page and role/permission view
 - [ ] TASK-151 Backup and export (ZIP of CSV/JSON of core tables)
 - [ ] TASK-152 Settings status panel (database, queue, mail, payment configuration)

@@ -6,13 +6,13 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 
 | Step | Rule | Task | Task description |
 |---|---|---|---|
-| 1 | Which roles require a faculty, which require a department, and which must leave both empty | TASK-037 | `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin |
+| 1 | Which roles require a faculty, which require a department, and which must leave both empty | TASK-037 | `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin (`it enforces which roles require a faculty, a department, or neither`) |
 | 1 | Lecturer scope is `course_assignments` | TASK-136 | Lecturer–course assignments per semester |
 | 1, 2 | When a role assignment sets both scope ids, the department belongs to that faculty | TASK-135 | Role assignment with faculty/department scope |
 | 1 | Phone normalised to `+234` | TASK-075 | Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table |
 | 1 | `staff_no` pattern | TASK-132 | `StaffService`: create/update with credentials (reuse `CredentialService`) |
 | 1 | `must_change_password` and `temp_password_expires_at` are set together | TASK-065 | `CredentialService`: temporary password, expiry, welcome email, resend credentials |
-| 1 | Block login when the temporary password has expired | TASK-041 | Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role |
+| 1 | Block login when the temporary password has expired | TASK-039 | Login page and login action (`it blocks login when the temporary password has expired`) |
 | 1 | Deactivating a staff profile deactivates the user | TASK-137 | Activate/deactivate staff |
 | 1 | Deactivating a staff profile revokes sessions | TASK-137 | Activate/deactivate staff |
 | 2 | Switching the current session clears the old row first, inside a transaction | TASK-055 | Academic sessions resource (single current session) |

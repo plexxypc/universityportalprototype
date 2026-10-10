@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\AttendanceStatus;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\AttendanceRecordFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,10 +26,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'student_id',
     'status',
 ])]
-class AttendanceRecord extends Model
+class AttendanceRecord extends Model implements VisibleToUser
 {
     /** @use HasFactory<AttendanceRecordFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the mark.
@@ -57,5 +63,18 @@ class AttendanceRecord extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
+    }
+
+    /**
+     * Attendance follows the attendance cell.
+     *
+     * A lecturer sees marks for a meeting whose course and semester are assigned.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['attendance'],
+            kind: VisibilityKind::Attendance,
+        );
     }
 }
