@@ -37,7 +37,10 @@
                 <p class="text-body font-semibold text-text">Ada Okonkwo</p>
                 <p class="text-small font-normal text-muted tabular-nums">CSC/2026/001</p>
                 <button type="button" role="menuitem" class="mt-space-12 flex min-h-11 w-full items-center text-body font-semibold text-text">Profile</button>
-                <button type="button" role="menuitem" class="flex min-h-11 w-full items-center text-body font-semibold text-text">Sign out</button>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" role="menuitem" class="flex min-h-11 w-full items-center text-body font-semibold text-text">Sign out</button>
+                </form>
             </div>
         </div>
     </div>

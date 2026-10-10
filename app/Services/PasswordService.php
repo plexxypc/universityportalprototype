@@ -7,9 +7,7 @@ namespace App\Services;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Str;
 
 /**
  * Change the signed-in user's password.
@@ -18,6 +16,11 @@ use Illuminate\Support\Str;
  */
 final class PasswordService
 {
+    /**
+     * Remember the authenticator that ends the other sessions.
+     */
+    public function __construct(private readonly AuthService $auth) {}
+
     /**
      * Failed attempts on the change-password page for one user.
      */
@@ -33,9 +36,8 @@ final class PasswordService
     /**
      * Store the new password and keep only this browser signed in.
      *
-     * The session is regenerated first. Other session rows are then deleted,
-     * excluding the new session id. The current session's password hash is
-     * refreshed last.
+     * The session is regenerated first. Other sessions are then ended.
+     * The current session's password hash is refreshed last.
      */
     public function change(Request $request, User $user, #[\SensitiveParameter] string $password): void
     {
@@ -43,16 +45,10 @@ final class PasswordService
             'password' => $password,
             'must_change_password' => false,
             'temp_password_expires_at' => null,
-            'remember_token' => Str::random(60),
         ])->save();
 
         $request->session()->regenerate();
-
-        DB::table((string) config('session.table', 'sessions'))
-            ->where('user_id', $user->getAuthIdentifier())
-            ->where('id', '!=', $request->session()->getId())
-            ->delete();
-
+        $this->auth->signOutOtherSessions($request, $user);
         $this->refreshPasswordHash($request, $user);
         RateLimiter::clear($this->throttleKey($user));
     }

@@ -10,8 +10,10 @@ use App\Models\Student;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 /**
  * The only authenticator.
@@ -114,6 +116,24 @@ final class AuthService
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+    }
+
+    /**
+     * End every other session for this user and rotate the remember token.
+     *
+     * The current session stays signed in. There is no screen for this yet.
+     * The change-password action calls it after regenerating the session.
+     */
+    public function signOutOtherSessions(Request $request, User $user): void
+    {
+        $user->forceFill([
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        DB::table((string) config('session.table', 'sessions'))
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('id', '!=', $request->session()->getId())
+            ->delete();
     }
 
     /**

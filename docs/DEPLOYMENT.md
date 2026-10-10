@@ -34,6 +34,7 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `DB_PASSWORD` | Database password from that same panel | `<paste from the Aiven console>` | Yes |
 | `DB_SSL_CA` | Aiven CA certificate, pasted as PEM text. See section 3 | `-----BEGIN CERTIFICATE-----<paste the downloaded CA>-----END CERTIFICATE-----` | No |
 | `SESSION_DRIVER` | Where login sessions are stored | `database` | No |
+| `SESSION_SECURE_COOKIE` | Send the session cookie only over HTTPS. HttpOnly and SameSite=lax stay on in every environment. Set this on the live HTTPS site | `true` | No |
 | `CACHE_STORE` | Cache backend. The scheduler heartbeat uses this | `database` | No |
 | `QUEUE_CONNECTION` | Queue backend the in-container worker consumes | `database` | No |
 | `MAIL_MAILER` | Mail transport. Keep `log` until Brevo is configured | `log` | No |
@@ -216,7 +217,7 @@ If Aiven’s default is already “allow all”, leave it that way for the demo 
 - [ ] `APP_ENV=production`, `APP_DEBUG=false`, `DB_CONNECTION=mysql`.
 - [ ] The instance price was read in the create form, and a spending alert was set, before deploy.
 - [ ] `APP_URL` is `https://pending.example.com` for the first deploy.
-- [ ] `SESSION_DRIVER=database`, `CACHE_STORE=database`, `QUEUE_CONNECTION=database`.
+- [ ] `SESSION_DRIVER=database`, `SESSION_SECURE_COOKIE=true`, `CACHE_STORE=database`, `QUEUE_CONNECTION=database`.
 - [ ] `MAIL_MAILER=log`, `PAYMENT_PROVIDER=demo`, `FILESYSTEM_DISK=local`. Remita, Interswitch, Brevo, and Spaces secrets are empty.
 - [ ] `RUN_MIGRATIONS=true` for this first deploy only.
 - [ ] The web service uses the repository Dockerfile at `docker/Dockerfile`, HTTP port `8080`, health check path `/up`, and one instance with at least 1 GiB of memory.

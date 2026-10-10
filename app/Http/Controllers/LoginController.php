@@ -6,6 +6,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\LoginRequest;
 use App\Services\AuthService;
+use App\Support\SafeReturnPath;
+use App\Support\SessionReturn;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 
@@ -42,6 +44,9 @@ class LoginController extends Controller
                 ->withErrors(['identifier' => AuthService::FAILURE_MESSAGE]);
         }
 
-        return redirect()->to($result->redirect_to);
+        $stored = $request->session()->pull(SessionReturn::INTENDED);
+        $return_to = SafeReturnPath::accept(is_string($stored) ? $stored : null);
+
+        return redirect()->to($return_to ?? $result->redirect_to);
     }
 }

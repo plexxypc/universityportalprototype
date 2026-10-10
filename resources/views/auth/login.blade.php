@@ -20,6 +20,9 @@
                 <p class="mt-space-4 text-center text-body font-normal text-muted">Sign in</p>
 
                 <x-card class="mt-space-24">
+                    @if (request()->query('expired') === '1')
+                        <p role="status" class="mb-space-16 text-body font-normal text-text">Your session has ended. Sign in to continue.</p>
+                    @endif
                     <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-space-16">
                         @csrf
                         <x-field

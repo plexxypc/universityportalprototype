@@ -7,12 +7,15 @@ use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
 use App\Models\User;
 use App\Services\AuthService;
+use App\Support\SessionReturn;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
+use Illuminate\Session\TokenMismatchException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -81,6 +84,24 @@ return Application::configure(basePath: dirname(__DIR__))
             'password',
             'password_confirmation',
         ]);
+
+        // An ended session returns to the login page. Livewire must not see
+        // HTTP 419, which the client turns into a "page expired" dialog.
+        $exceptions->render(function (AuthenticationException $exception, Request $request) {
+            if ($request->is('health')) {
+                return null;
+            }
+
+            return SessionReturn::redirect($request);
+        });
+
+        $exceptions->render(function (TokenMismatchException $exception, Request $request) {
+            if ($request->is('health')) {
+                return null;
+            }
+
+            return SessionReturn::redirect($request);
+        });
 
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->is('health') || $request->expectsJson(),

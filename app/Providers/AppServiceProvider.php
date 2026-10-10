@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Http\Controllers\StaffLogoutController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
@@ -37,6 +38,7 @@ use App\Policies\StudentPolicy;
 use App\Support\DatabaseTls;
 use App\Support\EnvironmentGuard;
 use App\Support\Rbac\Permissions;
+use Filament\Auth\Http\Controllers\LogoutController as FilamentLogoutController;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
@@ -50,7 +52,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Filament's logout route is registered after the application boots.
+        // Resolving its controller class runs AuthService instead.
+        $this->app->bind(FilamentLogoutController::class, StaffLogoutController::class);
     }
 
     /**
