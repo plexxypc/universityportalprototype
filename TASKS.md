@@ -75,6 +75,7 @@
 - [ ] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
 - [ ] TASK-043 Logout and session expiry handling
 - [ ] TASK-044 `create-super-admin` Artisan command
+  - A non-interactive failure logs one reason code and the exit code. The line does not include the email, the hash, the password, or a stack trace.
 - [ ] TASK-045 Auth tests: login by matric and email, invalid credentials, forced change, expired temporary password, deactivated user, route protection
 
 ## Phase 5: Audit, email and notifications [MAIL-1..4, ADMIN-2]

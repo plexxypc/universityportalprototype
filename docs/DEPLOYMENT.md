@@ -409,10 +409,23 @@ Bootstrap variables are still set; remove BOOTSTRAP_SUPER_ADMIN_EMAIL and BOOTST
 
 That line does not include the email or the hash. If the same email still has `must_change_password` true, that boot also stores the hash again and sets `temp_password_expires_at` to 24 hours from now. After the password has been changed, the bootstrap leaves the account alone.
 
-A duplicate email, a hash this application rejects, or a database error does not stop the web server. The entrypoint logs one warning and continues:
+A failed non-interactive bootstrap does not stop the web server. The entrypoint keeps one line and continues. That line has a reason code and the exit code. It has no stack trace, no email, no hash, and no password.
 
 ```text
-Warning: Super Admin bootstrap did not finish. The web server will still start.
+Super Admin bootstrap failed: tables_missing exit=1. run migrations first.
 ```
 
-The warning does not include the email or the hash. When a shell is available, `php artisan create-super-admin` asks for the name, email, and a hidden password instead of reading those variables. It still refuses to create a second Super Admin.
+| Code | What to do |
+| --- | --- |
+| `missing_variable` | Set both `BOOTSTRAP_SUPER_ADMIN_EMAIL` and `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH`. |
+| `invalid_email` | Set `BOOTSTRAP_SUPER_ADMIN_EMAIL` to one valid address. |
+| `hash_rejected` | Run `php artisan portal:hash-password` again and replace `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH`. |
+| `database_unreachable` | Check that the database is running and that the `DB_*` variables match it. |
+| `tables_missing` | Run migrations first. |
+| `super_admin_exists` | A Super Admin already exists, so nothing was created. Remove both bootstrap variables. This outcome exits 0 and still prints the reminder above. |
+| `duplicate_email` | That address is already a user. Use a different address, or remove that user before trying again. |
+| `unexpected_error` | Nothing was created. Fix the database, then deploy again. |
+
+The variable name must be exactly `RUN_MIGRATIONS`.
+
+When a shell is available, `php artisan create-super-admin` asks for the name, email, and a hidden password instead of reading those variables. It still refuses to create a second Super Admin.

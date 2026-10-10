@@ -43,6 +43,9 @@ function bootstrap_fake_php(int $exit_code): array
     file_put_contents($script, <<<'SH'
 #!/bin/sh
 printf '%s\n' "$*" >> "$PHP_ARGS_LOG"
+if [ -n "${PHP_FAKE_OUTPUT:-}" ]; then
+    printf '%s\n' "$PHP_FAKE_OUTPUT"
+fi
 if [ "$1" = "artisan" ] && [ "$2" = "create-super-admin" ]; then
     exit "$PHP_EXIT_CODE"
 fi
@@ -111,12 +114,131 @@ it('keeps booting when create-super-admin fails and does not print the secrets',
         $output = $process->getOutput().$process->getErrorOutput();
 
         expect($process->getExitCode())->toBe(0)
-            ->and($output)->toContain('Warning: Super Admin bootstrap did not finish. The web server will still start.')
-            ->and(substr_count($output, 'Warning: Super Admin bootstrap did not finish.'))->toBe(1)
+            ->and(trim($output))->toBe('Super Admin bootstrap failed: unexpected_error exit=1')
+            ->and(substr_count($output, 'Super Admin bootstrap failed:'))->toBe(1)
             ->and($output)->not->toContain($email)
             ->and($output)->not->toContain($hash)
             ->and((string) file_get_contents($fake['log']))->toContain('artisan create-super-admin --no-interaction')
             ->and((string) file_get_contents($fake['log']))->not->toContain($hash);
+    } finally {
+        if (is_file($fake['log'])) {
+            unlink($fake['log']);
+        }
+
+        $script = $fake['directory'].DIRECTORY_SEPARATOR.'php';
+
+        if (is_file($script)) {
+            unlink($script);
+        }
+
+        if (is_dir($fake['directory'])) {
+            rmdir($fake['directory']);
+        }
+    }
+});
+
+it('drops a stack trace that contains the email and keeps one reason line', function () {
+    $fake = bootstrap_fake_php(1);
+    $email = 'bootstrap-secret-email@example.test';
+    $hash = 'bootstrap-secret-hash-value';
+
+    try {
+        $process = run_super_admin_bootstrap_hook([
+            'PATH' => $fake['directory'].PATH_SEPARATOR.bootstrap_entrypoint_shell()['path'],
+            'APP_ENV' => 'production',
+            'BOOTSTRAP_SUPER_ADMIN_EMAIL' => $email,
+            'BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH' => $hash,
+            'PHP_ARGS_LOG' => $fake['log'],
+            'PHP_EXIT_CODE' => $fake['exit_code'],
+            'PHP_FAKE_OUTPUT' => 'SQLSTATE[42S02] '.$email.' '.$hash."\nStack trace:\n#0 SuperAdminService.php",
+        ]);
+
+        $output = $process->getOutput().$process->getErrorOutput();
+
+        expect($process->getExitCode())->toBe(0)
+            ->and(trim($output))->toBe('Super Admin bootstrap failed: unexpected_error exit=1')
+            ->and(str_contains($output, $email))->toBeFalse()
+            ->and(str_contains($output, $hash))->toBeFalse()
+            ->and(str_contains($output, 'Stack trace'))->toBeFalse();
+    } finally {
+        if (is_file($fake['log'])) {
+            unlink($fake['log']);
+        }
+
+        $script = $fake['directory'].DIRECTORY_SEPARATOR.'php';
+
+        if (is_file($script)) {
+            unlink($script);
+        }
+
+        if (is_dir($fake['directory'])) {
+            rmdir($fake['directory']);
+        }
+    }
+});
+
+it('forwards one safe bootstrap failure line', function () {
+    $fake = bootstrap_fake_php(1);
+    $email = 'bootstrap-secret-email@example.test';
+    $hash = 'bootstrap-secret-hash-value';
+    $line = 'Super Admin bootstrap failed: tables_missing exit=1. run migrations first.';
+
+    try {
+        $process = run_super_admin_bootstrap_hook([
+            'PATH' => $fake['directory'].PATH_SEPARATOR.bootstrap_entrypoint_shell()['path'],
+            'APP_ENV' => 'production',
+            'BOOTSTRAP_SUPER_ADMIN_EMAIL' => $email,
+            'BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH' => $hash,
+            'PHP_ARGS_LOG' => $fake['log'],
+            'PHP_EXIT_CODE' => $fake['exit_code'],
+            'PHP_FAKE_OUTPUT' => $line,
+        ]);
+
+        $output = $process->getOutput().$process->getErrorOutput();
+
+        expect($process->getExitCode())->toBe(0)
+            ->and(trim($output))->toBe($line)
+            ->and(str_contains($output, $email))->toBeFalse()
+            ->and(str_contains($output, $hash))->toBeFalse();
+    } finally {
+        if (is_file($fake['log'])) {
+            unlink($fake['log']);
+        }
+
+        $script = $fake['directory'].DIRECTORY_SEPARATOR.'php';
+
+        if (is_file($script)) {
+            unlink($script);
+        }
+
+        if (is_dir($fake['directory'])) {
+            rmdir($fake['directory']);
+        }
+    }
+});
+
+it('forwards a successful bootstrap message', function () {
+    $fake = bootstrap_fake_php(0);
+    $email = 'bootstrap-secret-email@example.test';
+    $hash = 'bootstrap-secret-hash-value';
+
+    try {
+        $process = run_super_admin_bootstrap_hook([
+            'PATH' => $fake['directory'].PATH_SEPARATOR.bootstrap_entrypoint_shell()['path'],
+            'APP_ENV' => 'production',
+            'BOOTSTRAP_SUPER_ADMIN_EMAIL' => $email,
+            'BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH' => $hash,
+            'PHP_ARGS_LOG' => $fake['log'],
+            'PHP_EXIT_CODE' => $fake['exit_code'],
+            'PHP_FAKE_OUTPUT' => 'Super Admin created.',
+        ]);
+
+        $output = $process->getOutput().$process->getErrorOutput();
+
+        expect($process->getExitCode())->toBe(0)
+            ->and($output)->toContain('Super Admin created.')
+            ->and(str_contains($output, $email))->toBeFalse()
+            ->and(str_contains($output, $hash))->toBeFalse();
     } finally {
         if (is_file($fake['log'])) {
             unlink($fake['log']);

@@ -9,7 +9,6 @@ use App\Enums\UserStatus;
 use App\Models\RoleAssignment;
 use App\Models\User;
 use App\Support\Rbac\RoleScopeValidator;
-use Illuminate\Database\QueryException;
 use Illuminate\Hashing\BcryptHasher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -42,6 +41,21 @@ final class SuperAdminService
      * 24-hour expiry are refreshed. After that change, nothing is written.
      */
     public function apply(
+        string $email,
+        string $name,
+        #[\SensitiveParameter] string $password_hash,
+    ): SuperAdminBootstrapResult {
+        try {
+            return $this->applyAccount($email, $name, $password_hash);
+        } catch (Throwable $exception) {
+            return $this->resultFromFailure($exception);
+        }
+    }
+
+    /**
+     * Decide the bootstrap outcome. A database exception propagates to apply().
+     */
+    private function applyAccount(
         string $email,
         string $name,
         #[\SensitiveParameter] string $password_hash,
@@ -83,6 +97,19 @@ final class SuperAdminService
         return $this->write(function () use ($email, $name, $password_hash): void {
             $this->create($email, $name, $password_hash);
         }, SuperAdminBootstrapResult::Created);
+    }
+
+    /**
+     * Map a database failure to a result. The exception text is discarded.
+     */
+    private function resultFromFailure(Throwable $exception): SuperAdminBootstrapResult
+    {
+        return match (SuperAdminBootstrapFailure::fromThrowable($exception)) {
+            SuperAdminBootstrapFailure::TablesMissing => SuperAdminBootstrapResult::TablesMissing,
+            SuperAdminBootstrapFailure::DatabaseUnreachable => SuperAdminBootstrapResult::DatabaseUnreachable,
+            SuperAdminBootstrapFailure::DuplicateEmail => SuperAdminBootstrapResult::EmailTaken,
+            default => SuperAdminBootstrapResult::Failed,
+        };
     }
 
     /**
@@ -134,23 +161,11 @@ final class SuperAdminService
     }
 
     /**
-     * Run a write and hide database details from the caller.
+     * Run a write. The caller turns a database exception into a result code.
      */
     private function write(callable $callback, SuperAdminBootstrapResult $success): SuperAdminBootstrapResult
     {
-        try {
-            $callback();
-        } catch (QueryException $exception) {
-            $state = $exception->errorInfo[0] ?? null;
-
-            if ($state === '23000' || $state === 23000) {
-                return SuperAdminBootstrapResult::EmailTaken;
-            }
-
-            return SuperAdminBootstrapResult::Failed;
-        } catch (Throwable) {
-            return SuperAdminBootstrapResult::Failed;
-        }
+        $callback();
 
         return $success;
     }

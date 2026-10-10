@@ -15,5 +15,7 @@ enum SuperAdminBootstrapResult
     case EmailTaken;
     case InvalidHash;
     case Rejected;
+    case TablesMissing;
+    case DatabaseUnreachable;
     case Failed;
 }
