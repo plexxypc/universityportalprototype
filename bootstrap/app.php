@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
+use App\Http\Middleware\NoStoreResponse;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Support\SessionReturn;
@@ -44,6 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // so a password change can keep the current browser signed in.
         $middleware->web(append: [
             AuthenticateSession::class,
+            NoStoreResponse::class,
         ]);
 
         $middleware->redirectGuestsTo(fn (): string => route('login'));

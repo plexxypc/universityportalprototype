@@ -229,3 +229,12 @@ it('shows a friendly message when the session has ended', function () {
         ->assertOk()
         ->assertSee('Your session has ended. Sign in to continue.');
 });
+
+it('tells the browser not to store a private page', function () {
+    $student = logout_student();
+
+    $this->actingAs($student->user)
+        ->get('/student')
+        ->assertOk()
+        ->assertHeader('Cache-Control', 'no-store, private');
+});
