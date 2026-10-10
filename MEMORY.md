@@ -3,8 +3,8 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Saturday, 10 October 2026 (Phase 4, TASK-045)
-**Demo date:** Wednesday, 07 October 2026
+**Last updated:** Saturday, 10 October 2026 (Phase 4, TASK-045 manual gate)
+**Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
 
@@ -285,3 +285,4 @@ Start Phase 4, authentication and authorisation, with TASK-037 on a new branch f
 | 10 Oct 2026 | TASK-043 and TASK-044. Logout, expired-session return paths, and the Super Admin bootstrap. `composer check` on `127.0.0.1` / `university_portal_testing` passed (458 tests, 2329 assertions). TASK-043 is `d9d1316`. Not pushed. TASKS.md left unticked. Next task is TASK-045. |
 | 10 Oct 2026 | Browser check on `http://127.0.0.1:8000`. Student sign-out on a phone-width window and on desktop, then Back, stays off the private page. Staff sign-out lands on `/login`. Deleting the session row sends the next page to `/login?expired=1` with "Your session has ended. Sign in to continue." `/login?redirect=https://example.com` still opens the user's own home. `portal:hash-password` asks twice and prints only the hash. Signed-in pages send `Cache-Control: no-store, private`. |
 | 10 Oct 2026 | TASK-045. Auth suite, route coverage from the registered routes, log safety, and the no-role area test. `composer check` on `127.0.0.1` / `university_portal_testing` passed (467 tests, 2409 assertions). TASKS.md left unticked. |
+| 10 Oct 2026 | Phase 4 manual gate on `http://127.0.0.1:8000`. Lockout, deactivated login, student `/staff`, staff `/student`, forced password change, other-session sign-out, deactivation sign-out, Back after sign-out, and the log search all passed. TASKS.md left unticked. |
