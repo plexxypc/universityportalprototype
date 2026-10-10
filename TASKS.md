@@ -86,15 +86,17 @@
   - Phase 3 carry-over: remove secrets from audit `before` and `after`.
   - Phase 4 carry-over: with X-Forwarded-For untrusted, request()->ip() is the platform proxy on Render, so the audit_logs ip column needs a trustworthy source once the production host publishes proxy ranges.
   - Phase 4 carry-over: audit the creation and re-arm of the bootstrap Super Admin.
-  - Phase 4 carry-over: audit a successful login, a failed login (an unknown identifier has no entity id, and the identifier is not stored), a lockout, a logout, a password change, and a password reset. Do not store the password or the reset token. Role changes, credential re-issues, and student status changes are already required by SECURITY.md.
+  - Phase 4 carry-over: audit a successful login; audit lockout start (once), not each failed attempt, and never store the typed identifier; a logout, a password change, and a password reset. Do not store the password or the reset token. Role changes, credential re-issues, and student status changes are already required by SECURITY.md.
 - [ ] TASK-047 `MailService` with outbox recording, `SendOutboxEmail` job, retry rules; Brevo mailer configuration and `log` mailer
   - Phase 3 carry-over: redact a credentials email when it is sent, when attempts are exhausted, or when credentials are re-issued.
   - Phase 3 carry-over: keep the password out of the subject, `last_error`, and application logs.
 - [ ] TASK-048 Email templates: base layout plus welcome/credentials, password reset, admission, registration confirmation, payment confirmation/receipt, result published, announcement, timetable published
 - [ ] TASK-049 Scheduler: `outbox:send` every minute with batch limit and daily-limit awareness
 - [ ] TASK-050 Staff outbox page (Filament): list, filter, view, retry failed, send queued, **send test email**
+  - retry is unavailable for credentials and reset emails
 - [ ] TASK-051 Password reset flow through `MailService`
   - The response never says whether an account exists. The token is single-use and expires in 60 minutes. A successful reset signs out the user's other sessions.
+  - reset pages send Cache-Control no-store and no-referrer
 - [ ] TASK-052 `NotificationService` and bell with unread count (staff and student layouts)
   - Phase 3 carry-over: limit notification `type` to the known types.
 - [ ] TASK-053 Tests: template rendering (no unresolved placeholders), outbox status transitions, provider failure and retry, redaction of temporary passwords
