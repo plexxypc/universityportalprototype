@@ -132,6 +132,7 @@
 - [ ] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
 - [ ] TASK-069 Edit student; suspend/reactivate; level promotion (single and bulk)
   - Phase 4 carry-over: suspending or reactivating a student must also update `users.status` (login checks the user, not the student row).
+  - Phase 5 carry-over: audit the users.status change through the audit helper in the same transaction (action auth.status_changed).
 - [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
   - Phase 4 carry-over: authorised document download uses the Document policy.
@@ -246,6 +247,7 @@
 - [ ] TASK-136 Lecturer–course assignments per semester
 - [ ] TASK-137 Activate/deactivate staff
   - Phase 3 carry-over: deactivating a staff profile revokes that user's sessions.
+  - Phase 5 carry-over: audit the users.status change through the audit helper in the same transaction (action auth.status_changed).
 - [ ] TASK-138 Staff tests
 
 **GATE (Milestone B):** Journeys 5 and 6 pass on the deployed URL.
