@@ -97,6 +97,7 @@
 - [ ] TASK-051 Password reset flow through `MailService`
   - The response never says whether an account exists. The token is single-use and expires in 60 minutes. A successful reset signs out the user's other sessions.
   - reset pages send Cache-Control no-store and no-referrer
+  - the reset link carries only the token; the reset page asks the user to enter their email or matric number with the new password, so the email never appears in the URL.
 - [ ] TASK-052 `NotificationService` and bell with unread count (staff and student layouts)
   - Phase 3 carry-over: limit notification `type` to the known types.
 - [ ] TASK-053 Tests: template rendering (no unresolved placeholders), outbox status transitions, provider failure and retry, redaction of temporary passwords
