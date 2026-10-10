@@ -297,6 +297,20 @@ it('redirects each signed-in user to their own area', function () {
     $this->actingAs($both)->get('/student')->assertOk()->assertSee('Student portal');
 });
 
+it('signs out a user with no role from both areas', function () {
+    $user = User::factory()->create([
+        'email' => 'norole@example.com',
+        'password' => access_password(),
+        'status' => UserStatus::Active,
+    ]);
+
+    $this->actingAs($user)->get('/student')->assertRedirect(route('login'));
+    $this->assertGuest();
+
+    $this->actingAs($user)->get('/staff')->assertRedirect(route('login'));
+    $this->assertGuest();
+});
+
 it('signs out a deactivated user on the next page request', function () {
     $student = access_student();
     $this->actingAs($student->user);

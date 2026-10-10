@@ -6,7 +6,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 
 | Step | Rule | Task | Task description |
 |---|---|---|---|
-| 1 | Which roles require a faculty, which require a department, and which must leave both empty | TASK-037 | `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin |
+| 1 | Which roles require a faculty, which require a department, and which must leave both empty | TASK-037 | `Role` enum, `Permissions` map (PRD §5 matrix), `role_assignments` scopes, `Gate::before` for Super Admin (`it enforces which roles require a faculty, a department, or neither`) |
 | 1 | Lecturer scope is `course_assignments` | TASK-136 | Lecturer–course assignments per semester |
 | 1, 2 | When a role assignment sets both scope ids, the department belongs to that faculty | TASK-135 | Role assignment with faculty/department scope |
 | 1 | Phone normalised to `+234` | TASK-075 | Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table |
