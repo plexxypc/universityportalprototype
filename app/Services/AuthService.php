@@ -8,6 +8,7 @@ use App\Enums\Role;
 use App\Enums\UserStatus;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,11 @@ use Illuminate\Support\Str;
  */
 final class AuthService
 {
+    /**
+     * Remember the audit helper. It does not open a transaction.
+     */
+    public function __construct(private readonly Audit $audits) {}
+
     /**
      * Shown for every failed sign-in, including a lockout. The text does not say why.
      */
@@ -64,6 +70,7 @@ final class AuthService
         if ($locked || ! $user instanceof User || ! $password_matches || ! $this->maySignIn($user)) {
             if (! $locked) {
                 $this->recordFailure($normalised, $address);
+                $this->auditIdentifierLockout($request, $user, $normalised);
             }
 
             return LoginResult::failed();
@@ -74,12 +81,30 @@ final class AuthService
         if ($destination === null) {
             $this->discardSignedInSession($request, $user);
             $this->recordFailure($normalised, $address);
+            $this->auditIdentifierLockout($request, $user, $normalised);
 
             return LoginResult::failed();
         }
 
+        $previous_login = $user->last_login_at?->toDateTimeString();
+        $user_id = $user->id;
+
+        DB::transaction(function () use ($request, $user, $previous_login, $user_id): void {
+            $this->completeSignIn($request, $user);
+            $user->refresh();
+
+            $this->audits->record(
+                $user_id,
+                AuditService::ACTION_LOGIN,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                ['last_login_at' => $previous_login],
+                ['last_login_at' => $user->last_login_at?->toDateTimeString()],
+                $this->audits->ipFromRequest($request),
+            );
+        });
+
         $this->clearFailures($normalised, $address);
-        $this->completeSignIn($request, $user);
 
         return LoginResult::succeeded($destination);
     }
@@ -106,16 +131,41 @@ final class AuthService
     }
 
     /**
-     * End this session.
+     * End this session and record auth.logout when a user is signed in.
      *
      * The same method serves the portal logout and a middleware sign-out.
      * It does not record why the session ended.
      */
     public function logout(Request $request): void
     {
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return;
+        }
+
+        $user_id = $user->id;
+        $ip = $this->audits->ipFromRequest($request);
+
+        DB::transaction(function () use ($request, $user_id, $ip): void {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            $this->audits->record(
+                $user_id,
+                AuditService::ACTION_LOGOUT,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                null,
+                null,
+                $ip,
+            );
+        });
     }
 
     /**
@@ -258,6 +308,38 @@ final class AuthService
     {
         return RateLimiter::tooManyAttempts($this->pairKey($normalised, $address), self::PAIR_MAX_ATTEMPTS)
             || RateLimiter::tooManyAttempts($this->identifierKey($normalised), self::IDENTIFIER_MAX_ATTEMPTS);
+    }
+
+    /**
+     * Write auth.lockout once, on the failure that reaches the identifier cap.
+     *
+     * An identifier that matches no account writes nothing. The pair limit
+     * writes nothing. The typed identifier and its HMAC are not stored.
+     */
+    private function auditIdentifierLockout(Request $request, ?User $user, string $normalised): void
+    {
+        if (! $user instanceof User) {
+            return;
+        }
+
+        if (RateLimiter::attempts($this->identifierKey($normalised)) !== self::IDENTIFIER_MAX_ATTEMPTS) {
+            return;
+        }
+
+        $user_id = $user->id;
+        $ip = $this->audits->ipFromRequest($request);
+
+        DB::transaction(function () use ($user_id, $ip): void {
+            $this->audits->record(
+                null,
+                AuditService::ACTION_LOCKOUT,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                null,
+                null,
+                $ip,
+            );
+        });
     }
 
     /**

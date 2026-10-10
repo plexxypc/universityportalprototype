@@ -8,6 +8,7 @@ use App\Enums\Role;
 use App\Enums\UserStatus;
 use App\Models\RoleAssignment;
 use App\Models\User;
+use App\Support\Audit;
 use App\Support\Rbac\RoleScopeValidator;
 use Illuminate\Hashing\BcryptHasher;
 use Illuminate\Support\Facades\DB;
@@ -21,7 +22,10 @@ use Throwable;
  */
 final class SuperAdminService
 {
-    public function __construct(private readonly RoleScopeValidator $scopes) {}
+    public function __construct(
+        private readonly RoleScopeValidator $scopes,
+        private readonly Audit $audits,
+    ) {}
 
     /**
      * Whether any Super Admin role assignment exists, including a deactivated user.
@@ -146,6 +150,20 @@ final class SuperAdminService
                 'faculty_id' => null,
                 'department_id' => null,
             ]);
+
+            $this->audits->record(
+                null,
+                AuditService::ACTION_BOOTSTRAP_CREATED,
+                AuditService::ENTITY_USERS,
+                $user->id,
+                null,
+                [
+                    'status' => UserStatus::Active->value,
+                    'must_change_password' => true,
+                    'role' => Role::SuperAdmin->value,
+                ],
+                null,
+            );
         });
     }
 
@@ -154,10 +172,32 @@ final class SuperAdminService
      */
     private function rearm(User $user, #[\SensitiveParameter] string $password_hash): void
     {
-        $user->forceFill([
-            'password' => $password_hash,
-            'temp_password_expires_at' => now()->addHours(24),
-        ])->save();
+        $previous_expiry = $user->temp_password_expires_at?->toDateTimeString();
+        $expires_at = now()->addHours(24);
+        $user_id = $user->id;
+
+        DB::transaction(function () use ($user, $password_hash, $expires_at, $previous_expiry, $user_id): void {
+            $user->forceFill([
+                'password' => $password_hash,
+                'temp_password_expires_at' => $expires_at,
+            ])->save();
+
+            $this->audits->record(
+                null,
+                AuditService::ACTION_BOOTSTRAP_REARMED,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                [
+                    'must_change_password' => true,
+                    'temp_password_expires_at' => $previous_expiry,
+                ],
+                [
+                    'must_change_password' => true,
+                    'temp_password_expires_at' => $expires_at->toDateTimeString(),
+                ],
+                null,
+            );
+        });
     }
 
     /**

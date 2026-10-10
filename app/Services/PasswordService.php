@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
@@ -19,7 +21,10 @@ final class PasswordService
     /**
      * Remember the authenticator that ends the other sessions.
      */
-    public function __construct(private readonly AuthService $auth) {}
+    public function __construct(
+        private readonly AuthService $auth,
+        private readonly Audit $audits,
+    ) {}
 
     /**
      * Failed attempts on the change-password page for one user.
@@ -36,20 +41,40 @@ final class PasswordService
     /**
      * Store the new password and keep only this browser signed in.
      *
-     * The session is regenerated first. Other sessions are then ended.
-     * The current session's password hash is refreshed last.
+     * The password change and the audit row share one transaction.
+     * The session is regenerated, other sessions are ended, and the
+     * current session's password hash is refreshed before the audit row.
      */
     public function change(Request $request, User $user, #[\SensitiveParameter] string $password): void
     {
-        $user->forceFill([
-            'password' => $password,
-            'must_change_password' => false,
-            'temp_password_expires_at' => null,
-        ])->save();
+        $forced = $user->must_change_password;
+        $user_id = $user->id;
+        $ip = $this->audits->ipFromRequest($request);
 
-        $request->session()->regenerate();
-        $this->auth->signOutOtherSessions($request, $user);
-        $this->refreshPasswordHash($request, $user);
+        DB::transaction(function () use ($request, $user, $password, $forced, $user_id, $ip): void {
+            $user->forceFill([
+                'password' => $password,
+                'must_change_password' => false,
+                'temp_password_expires_at' => null,
+            ])->save();
+
+            $request->session()->regenerate();
+            $this->auth->signOutOtherSessions($request, $user);
+            $this->refreshPasswordHash($request, $user);
+
+            $this->audits->record(
+                $user_id,
+                $forced
+                    ? AuditService::ACTION_PASSWORD_FORCED_CHANGE
+                    : AuditService::ACTION_PASSWORD_CHANGED,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                ['must_change_password' => $forced],
+                ['must_change_password' => false],
+                $ip,
+            );
+        });
+
         RateLimiter::clear($this->throttleKey($user));
     }
 

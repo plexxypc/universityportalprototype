@@ -10,6 +10,7 @@ use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
 use App\Models\Applicant;
 use App\Models\AttendanceRecord;
+use App\Models\AuditLog;
 use App\Models\Course;
 use App\Models\CourseRegistration;
 use App\Models\Department;
@@ -23,6 +24,7 @@ use App\Models\Receipt;
 use App\Models\Result;
 use App\Models\Student;
 use App\Policies\AttendanceRecordPolicy;
+use App\Policies\AuditLogPolicy;
 use App\Policies\CoursePolicy;
 use App\Policies\CourseRegistrationPolicy;
 use App\Policies\DepartmentPolicy;
@@ -87,6 +89,7 @@ class AppServiceProvider extends ServiceProvider
      */
     private function registerPolicies(): void
     {
+        Gate::policy(AuditLog::class, AuditLogPolicy::class);
         Gate::policy(Student::class, StudentPolicy::class);
         Gate::policy(CourseRegistration::class, CourseRegistrationPolicy::class);
         Gate::policy(Invoice::class, InvoicePolicy::class);
