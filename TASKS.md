@@ -71,12 +71,12 @@
 - [x] TASK-038 Base policies and `visibleTo()` scopes for scoped models
 - [x] TASK-039 Login page and login action (matric number or email, generic errors, session regeneration)
 - [x] TASK-040 Login rate limiting (IP + identifier). `X-Forwarded-For` is not trusted. Login limits use the socket address. See `docs/DEPLOYMENT.md`.
-- [ ] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
-- [ ] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
-- [ ] TASK-043 Logout and session expiry handling
-- [ ] TASK-044 `create-super-admin` Artisan command
+- [x] TASK-041 Middleware: `EnsureActive`, `EnsurePasswordChanged`, role route groups, redirect by role
+- [x] TASK-042 Change-password page (forced first login and voluntary); clears flags; signs out other sessions
+- [x] TASK-043 Logout and session expiry handling
+- [x] TASK-044 `create-super-admin` Artisan command
   - A non-interactive failure logs one reason code and the exit code. The line does not include the email, the hash, the password, or a stack trace.
-- [ ] TASK-045 Auth tests: login by matric and email, invalid credentials, forced change, expired temporary password, deactivated user, route protection
+- [x] TASK-045 Auth tests: login by matric and email, invalid credentials, forced change, expired temporary password, deactivated user, route protection
 
 ## Phase 5: Audit, email and notifications [MAIL-1..4, ADMIN-2]
 
@@ -86,6 +86,7 @@
   - Phase 3 carry-over: remove secrets from audit `before` and `after`.
   - Phase 4 carry-over: with X-Forwarded-For untrusted, request()->ip() is the platform proxy on Render, so the audit_logs ip column needs a trustworthy source once the production host publishes proxy ranges.
   - Phase 4 carry-over: audit the creation and re-arm of the bootstrap Super Admin.
+  - Phase 4 carry-over: audit a successful login, a failed login (an unknown identifier has no entity id, and the identifier is not stored), a lockout, a logout, a password change, and a password reset. Do not store the password or the reset token. Role changes, credential re-issues, and student status changes are already required by SECURITY.md.
 - [ ] TASK-047 `MailService` with outbox recording, `SendOutboxEmail` job, retry rules; Brevo mailer configuration and `log` mailer
   - Phase 3 carry-over: redact a credentials email when it is sent, when attempts are exhausted, or when credentials are re-issued.
   - Phase 3 carry-over: keep the password out of the subject, `last_error`, and application logs.
@@ -93,6 +94,7 @@
 - [ ] TASK-049 Scheduler: `outbox:send` every minute with batch limit and daily-limit awareness
 - [ ] TASK-050 Staff outbox page (Filament): list, filter, view, retry failed, send queued, **send test email**
 - [ ] TASK-051 Password reset flow through `MailService`
+  - The response never says whether an account exists. The token is single-use and expires in 60 minutes. A successful reset signs out the user's other sessions.
 - [ ] TASK-052 `NotificationService` and bell with unread count (staff and student layouts)
   - Phase 3 carry-over: limit notification `type` to the known types.
 - [ ] TASK-053 Tests: template rendering (no unresolved placeholders), outbox status transitions, provider failure and retry, redaction of temporary passwords
@@ -305,7 +307,8 @@ Phase 3 carry-over: database-level append-only protection for `audit_logs` waits
 ## Phase 20: Deployment and demo readiness
 
 - [ ] TASK-171 Set production environment variables on the host (no secrets in repo)
-- [ ] TASK-172 Run migrations and seeder on the Aiven database; run `create-super-admin`
+- [x] TASK-172 Run migrations and seeder on the Aiven database; run `create-super-admin`
+  - Phase 3 migrations have run on the live Aiven database. The first Super Admin exists and the bootstrap variables were removed. The demo seeder is Phase 18 and has not run.
 - [ ] TASK-173 Configure the payment provider's callback (and notification, if used) URLs to the deployed domain, or confirm `PAYMENT_PROVIDER=demo`
 - [ ] TASK-174 Verify Brevo sender and send a test email from Settings
 - [ ] TASK-175 Run the TEST_PLAN smoke test on the deployed URL
