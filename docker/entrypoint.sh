@@ -231,7 +231,8 @@ render_nginx_config() {
     sed "s/__PORT__/${PORT}/g" /var/www/html/docker/nginx.conf.template > /tmp/nginx.conf
 }
 
-# Never let a bootstrap failure stop nginx. One warning line, no secrets.
+# Never let a bootstrap failure stop nginx.
+# One reason line only. A stack trace is dropped because it can contain the email.
 run_super_admin_bootstrap() {
     app_env=$(printf '%s' "${APP_ENV:-production}" | tr -d '[:space:]')
 
@@ -244,12 +245,24 @@ run_super_admin_bootstrap() {
     fi
 
     set +e
-    php artisan create-super-admin --no-interaction
+    bootstrap_output=$(php artisan create-super-admin --no-interaction 2>&1)
     status=$?
     set -e
 
-    if [ "$status" -ne 0 ]; then
-        printf '%s\n' 'Warning: Super Admin bootstrap did not finish. The web server will still start.' >&2
+    if [ "$status" -eq 0 ]; then
+        if [ -n "$bootstrap_output" ]; then
+            printf '%s\n' "$bootstrap_output"
+        fi
+
+        return 0
+    fi
+
+    failure_line=$(printf '%s\n' "$bootstrap_output" | sed -n '1p' | tr -d '\r')
+
+    if printf '%s\n' "$failure_line" | grep -Eq '^Super Admin bootstrap failed: (missing_variable|invalid_email|hash_rejected|database_unreachable|tables_missing|super_admin_exists|duplicate_email|unexpected_error) exit=[0-9]+(\. run migrations first\.)?$'; then
+        printf '%s\n' "$failure_line" >&2
+    else
+        printf '%s\n' "Super Admin bootstrap failed: unexpected_error exit=${status}" >&2
     fi
 
     return 0

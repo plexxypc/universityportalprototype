@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Rules\PortalPassword;
+use App\Services\SuperAdminBootstrapFailure;
 use App\Services\SuperAdminBootstrapResult;
 use App\Services\SuperAdminService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Hash;
+use Throwable;
 
 /**
  * Create the bootstrap Super Admin, or refresh that account while it still
@@ -30,14 +32,27 @@ final class CreateSuperAdmin extends Command
 
     /**
      * Run the interactive prompt or the environment bootstrap.
+     *
+     * A non-interactive failure stays inside this method. Reporting the
+     * throwable would write the email into the log via the SQL bindings.
      */
     public function handle(SuperAdminService $admins): int
     {
-        if (! $this->input->isInteractive()) {
-            return $this->runFromEnvironment($admins);
-        }
+        try {
+            if (! $this->input->isInteractive()) {
+                return $this->runFromEnvironment($admins);
+            }
 
-        return $this->runInteractive($admins);
+            return $this->runInteractive($admins);
+        } catch (Throwable $exception) {
+            if ($this->input->isInteractive()) {
+                $this->error('Super Admin bootstrap could not finish. Nothing was created.');
+
+                return self::FAILURE;
+            }
+
+            return $this->failNonInteractive(SuperAdminBootstrapFailure::fromThrowable($exception));
+        }
     }
 
     /**
@@ -49,15 +64,47 @@ final class CreateSuperAdmin extends Command
         $password_hash = $this->environmentValue('BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH');
 
         if ($email === null || $password_hash === null) {
-            $this->error('BOOTSTRAP_SUPER_ADMIN_EMAIL and BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH are required. Nothing was created.');
-
-            return self::FAILURE;
+            return $this->failNonInteractive(SuperAdminBootstrapFailure::MissingVariable);
         }
 
-        return $this->report(
+        return $this->reportNonInteractive(
             $admins->apply($email, 'Super Admin', $password_hash),
             $admins,
         );
+    }
+
+    /**
+     * On failure, print one reason line and nothing else.
+     */
+    private function reportNonInteractive(SuperAdminBootstrapResult $result, SuperAdminService $admins): int
+    {
+        $failure = match ($result) {
+            SuperAdminBootstrapResult::Created,
+            SuperAdminBootstrapResult::Rearmed,
+            SuperAdminBootstrapResult::Unchanged => null,
+            SuperAdminBootstrapResult::EmailTaken => SuperAdminBootstrapFailure::DuplicateEmail,
+            SuperAdminBootstrapResult::InvalidHash => SuperAdminBootstrapFailure::HashRejected,
+            SuperAdminBootstrapResult::Rejected => SuperAdminBootstrapFailure::InvalidEmail,
+            SuperAdminBootstrapResult::TablesMissing => SuperAdminBootstrapFailure::TablesMissing,
+            SuperAdminBootstrapResult::DatabaseUnreachable => SuperAdminBootstrapFailure::DatabaseUnreachable,
+            SuperAdminBootstrapResult::Failed => SuperAdminBootstrapFailure::UnexpectedError,
+        };
+
+        if ($failure instanceof SuperAdminBootstrapFailure) {
+            return $this->failNonInteractive($failure);
+        }
+
+        return $this->report($result, $admins);
+    }
+
+    /**
+     * One plain line: reason code, exit code, and for a missing table the migration hint.
+     */
+    private function failNonInteractive(SuperAdminBootstrapFailure $failure): int
+    {
+        $this->line($failure->line(self::FAILURE));
+
+        return self::FAILURE;
     }
 
     /**
@@ -113,8 +160,14 @@ final class CreateSuperAdmin extends Command
             SuperAdminBootstrapResult::EmailTaken => 'A user with that email already exists. Nothing was created.',
             SuperAdminBootstrapResult::InvalidHash => 'The password hash was rejected. Nothing was created.',
             SuperAdminBootstrapResult::Rejected => 'The account details were rejected. Nothing was created.',
+            SuperAdminBootstrapResult::TablesMissing,
+            SuperAdminBootstrapResult::DatabaseUnreachable,
             SuperAdminBootstrapResult::Failed => 'Super Admin bootstrap could not finish. Nothing was created.',
         };
+
+        if (! $this->input->isInteractive() && $result === SuperAdminBootstrapResult::Unchanged) {
+            $message .= ' '.SuperAdminBootstrapFailure::SuperAdminExists->value.' exit='.self::SUCCESS;
+        }
 
         if ($result === SuperAdminBootstrapResult::Created || $result === SuperAdminBootstrapResult::Rearmed) {
             $this->info($message);

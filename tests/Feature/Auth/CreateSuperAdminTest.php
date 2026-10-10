@@ -154,7 +154,8 @@ it('rejects a duplicate email without printing the password', function () {
     bootstrap_watch_logs($password, $hash);
 
     $this->artisan('create-super-admin --no-interaction')
-        ->expectsOutputToContain('A user with that email already exists. Nothing was created.')
+        ->expectsOutputToContain('Super Admin bootstrap failed: duplicate_email exit=1')
+        ->doesntExpectOutputToContain('taken@example.test')
         ->doesntExpectOutputToContain($password)
         ->doesntExpectOutputToContain($hash)
         ->assertFailed();
