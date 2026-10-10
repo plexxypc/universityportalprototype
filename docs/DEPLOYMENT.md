@@ -197,7 +197,7 @@ APP_URL=https://pending.example.com
 
 That placeholder lets the container boot before App Platform has shown the real hostname. Email links and the secure session cookie use whatever `APP_URL` was at startup, so the placeholder is only for that first boot. When the dashboard shows the `ondigitalocean.app` hostname (**verify in the provider dashboard** where it appears), set `APP_URL` to `https://` plus that hostname and redeploy. The new deploy rebuilds the config cache with the real origin. A deploy with no `APP_URL` at all logs `APP_URL is missing` and the health check fails.
 
-**`RUN_MIGRATIONS`.** Set it to `true` for the first deploy so the entrypoint runs `php artisan migrate --force` once. When that deploy is healthy and the log shows the migrations finished, set `RUN_MIGRATIONS` to `false` and redeploy. Later restarts then skip migrate. When a future release adds migrations, set it back to `true` for one deploy, confirm they applied, then set it to `false` again.
+**`RUN_MIGRATIONS`.** Set it to `true` for the first deploy so the entrypoint runs `php artisan migrate --force` once. When that deploy is healthy and the log shows the migrations finished, set `RUN_MIGRATIONS` to `false` and redeploy. Later restarts then skip migrate. When a future release adds migrations, set it back to `true` for one deploy, confirm they applied, then set it to `false` again. The live database needs `RUN_MIGRATIONS=true` once after merging a branch with new migrations.
 
 Deploy one instance. A second instance would run a second queue worker and a second scheduler.
 
