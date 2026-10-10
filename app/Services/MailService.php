@@ -7,11 +7,14 @@ namespace App\Services;
 use App\Enums\EmailStatus;
 use App\Jobs\SendOutboxEmail;
 use App\Models\EmailOutbox;
+use App\Models\User;
+use App\Support\Audit;
 use App\Support\Mail\MailError;
 use App\Support\Mail\MailTransport;
 use App\Support\Mail\OutboundMessage;
 use App\Support\Mail\ProviderStatus;
 use App\Support\Mail\RenderedMail;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Cache\Repository;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Encryption\DecryptException;
@@ -22,6 +25,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\HtmlString;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Records outbox rows and sends one row through Laravel's mailer.
@@ -39,6 +43,8 @@ final class MailService
 
     public const string DAILY_LIMIT_KEY = 'mail-daily-limit-reached';
 
+    public const string TEST_THROTTLE_PREFIX = 'mail-test-send:';
+
     private const int LOCK_SECONDS = 30;
 
     private const int CIRCUIT_THRESHOLD = 3;
@@ -53,6 +59,7 @@ final class MailService
     public function __construct(
         private readonly OutboundMessage $messages,
         private readonly ProviderStatus $provider_status,
+        private readonly Audit $audit,
     ) {}
 
     /**
@@ -268,6 +275,165 @@ final class MailService
     }
 
     /**
+     * Queue a failed row again.
+     *
+     * Credentials and password reset cannot be retried. The secret is already
+     * gone, and the page tells the operator to re-issue or request a new link.
+     */
+    public function retry(EmailOutbox $row, User $actor, ?string $ip): void
+    {
+        $this->assertCanManage($actor);
+
+        DB::transaction(function () use ($row, $actor, $ip): void {
+            $locked = EmailOutbox::query()->lockForUpdate()->find($row->id);
+
+            if (! $locked instanceof EmailOutbox
+                || $locked->status !== EmailStatus::Failed
+                || $this->messages->isSecretTemplate($locked->template)) {
+                throw new AuthorizationException;
+            }
+
+            $before = [
+                'status' => $locked->status->value,
+                'template' => $locked->template,
+            ];
+            $locked->status = EmailStatus::Queued;
+            $locked->attempts = 0;
+            $locked->last_error = null;
+            $locked->sent_at = null;
+            $locked->save();
+
+            $this->audit->record(
+                $actor->id,
+                AuditService::ACTION_RETRIED,
+                AuditService::ENTITY_EMAIL_OUTBOX,
+                $locked->id,
+                $before,
+                [
+                    'status' => EmailStatus::Queued->value,
+                    'template' => $locked->template,
+                ],
+                $ip,
+            );
+
+            SendOutboxEmail::dispatch($locked->id)->afterCommit();
+        });
+    }
+
+    /**
+     * Dispatch a queued row now, including credentials and password reset.
+     *
+     * The rendered body is not returned. Backoff is skipped for this call.
+     * The daily cap and the circuit breaker still apply.
+     */
+    public function sendNow(EmailOutbox $row, User $actor, ?string $ip): bool
+    {
+        $this->assertCanManage($actor);
+
+        return DB::transaction(function () use ($row, $actor, $ip): bool {
+            $locked = EmailOutbox::query()->lockForUpdate()->find($row->id);
+
+            if (! $locked instanceof EmailOutbox
+                || $locked->status !== EmailStatus::Queued
+                || $locked->attempts >= MailError::MAX_ATTEMPTS) {
+                throw new AuthorizationException;
+            }
+
+            if ($this->circuitIsPaused() || $this->dailyCapReached()) {
+                if ($this->dailyCapReached()) {
+                    $this->rememberDailyLimit();
+                }
+
+                return false;
+            }
+
+            $before = [
+                'status' => $locked->status->value,
+                'template' => $locked->template,
+            ];
+
+            if (! $this->isDue($locked)) {
+                $locked->timestamps = false;
+                $locked->updated_at = now()->subHours(2);
+                $locked->save();
+            }
+
+            $this->audit->record(
+                $actor->id,
+                AuditService::ACTION_SENT_NOW,
+                AuditService::ENTITY_EMAIL_OUTBOX,
+                $locked->id,
+                $before,
+                [
+                    'status' => EmailStatus::Queued->value,
+                    'template' => $locked->template,
+                ],
+                $ip,
+            );
+
+            SendOutboxEmail::dispatch($locked->id)->afterCommit();
+
+            return true;
+        });
+    }
+
+    /**
+     * Queue a test email to the signed-in admin only.
+     *
+     * One send per 60 seconds. A submitted address is ignored by the caller.
+     */
+    public function sendTest(User $actor, ?string $ip): bool
+    {
+        $this->assertCanManage($actor);
+
+        $throttle_key = self::TEST_THROTTLE_PREFIX.$actor->id;
+
+        if (! Cache::store('database')->add($throttle_key, 1, 60)) {
+            return false;
+        }
+
+        try {
+            DB::transaction(function () use ($actor, $ip): void {
+                $row = $this->send(
+                    OutboundMessage::TEMPLATE_TEST,
+                    $actor->email,
+                    ['message' => 'This is a test from the portal.'],
+                    $actor->id,
+                );
+
+                $this->audit->record(
+                    $actor->id,
+                    AuditService::ACTION_TEST_QUEUED,
+                    AuditService::ENTITY_EMAIL_OUTBOX,
+                    $row->id,
+                    null,
+                    [
+                        'template' => OutboundMessage::TEMPLATE_TEST,
+                        'status' => EmailStatus::Queued->value,
+                    ],
+                    $ip,
+                );
+            });
+        } catch (Throwable $exception) {
+            Cache::store('database')->forget($throttle_key);
+
+            throw $exception;
+        }
+
+        return true;
+    }
+
+    /**
+     * Refuse anyone who is not an Active Super Admin.
+     */
+    private function assertCanManage(User $actor): void
+    {
+        if (! $actor->can('email_outbox.manage')) {
+            throw new AuthorizationException;
+        }
+    }
+
+    /**
      * Record an unexpected failure without the exception text.
      */
     public function recordUnexpectedFailure(int $email_outbox_id): void
@@ -280,7 +446,7 @@ final class MailService
             }
 
             $this->markFailed($row, MailError::OUTBOX_SEND_FAILED, true);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             // The fixed code is the only thing this path may record.
         }
     }

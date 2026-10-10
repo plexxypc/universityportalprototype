@@ -46,6 +46,8 @@ class EmailOutbox extends Model
      */
     protected $hidden = [
         'secrets',
+        'body_html',
+        'body_text',
     ];
 
     /**

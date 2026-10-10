@@ -30,7 +30,15 @@ final class AuditService
 
     public const string ACTION_BOOTSTRAP_REARMED = 'auth.bootstrap_rearmed';
 
+    public const string ACTION_RETRIED = 'mail.retried';
+
+    public const string ACTION_SENT_NOW = 'mail.sent_now';
+
+    public const string ACTION_TEST_QUEUED = 'mail.test_queued';
+
     public const string ENTITY_USERS = 'users';
+
+    public const string ENTITY_EMAIL_OUTBOX = 'email_outbox';
 
     /**
      * Keys removed from before and after, case-insensitively, as whole names.
