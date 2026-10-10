@@ -8,6 +8,7 @@ use App\Http\Controllers\LogoutController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Support\DesignPreviewTable;
+use App\Support\Mail\EmailTemplateRenderer;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome');
@@ -31,4 +32,10 @@ if (app()->environment('local')) {
     })->name('design-preview');
 
     Route::view('/design-preview/student', 'design-preview-student')->name('design-preview.student');
+
+    Route::get('/design-preview/emails', function (EmailTemplateRenderer $renderer) {
+        return view('design-preview-emails', [
+            'previews' => $renderer->previews(),
+        ]);
+    })->name('design-preview.emails');
 }

@@ -71,18 +71,16 @@ final class MailService
             throw new InvalidArgumentException(MailError::INVALID_RECIPIENT);
         }
 
+        $this->messages->assertSendable($template, $data);
         $subject = $this->messages->subject($template, $data);
         $secret = $this->messages->isSecretTemplate($template);
         $body_html = OutboundMessage::HELD_BODY;
         $body_text = OutboundMessage::HELD_BODY;
 
         if (! $secret) {
-            $stored = $this->messages->storedBody($data);
-
-            if ($stored === null) {
-                throw new InvalidArgumentException(MailError::OUTBOX_SEND_FAILED);
-            }
-
+            $stored = $template === OutboundMessage::TEMPLATE_TEST
+                ? $this->messages->storedBody($data)
+                : $this->messages->renderPublic($template, $data);
             $body_html = $stored->html;
             $body_text = $stored->text;
         }

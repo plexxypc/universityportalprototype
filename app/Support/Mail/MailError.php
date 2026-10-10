@@ -35,6 +35,14 @@ final class MailError
 
     public const string UNKNOWN_TEMPLATE = 'unknown_template';
 
+    public const string MISSING_TEMPLATE_DATA = 'missing_template_data';
+
+    public const string INVALID_TEMPLATE_DATA = 'invalid_template_data';
+
+    public const string INVALID_SUBJECT = 'invalid_subject';
+
+    public const string INVALID_APPLICATION_URL = 'invalid_application_url';
+
     public const int MAX_ATTEMPTS = 5;
 
     public const int CODE_LIMIT = 180;

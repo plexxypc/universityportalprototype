@@ -230,7 +230,8 @@ it('points the public allow-list at routes that are registered', function () {
 
 it('keeps the design preview routes inside the local guard', function () {
     expect(Route::has('design-preview'))->toBeFalse()
-        ->and(Route::has('design-preview.student'))->toBeFalse();
+        ->and(Route::has('design-preview.student'))->toBeFalse()
+        ->and(Route::has('design-preview.emails'))->toBeFalse();
 
     $source = file_get_contents(base_path('routes/web.php'));
 
@@ -240,10 +241,13 @@ it('keeps the design preview routes inside the local guard', function () {
     $guard = strpos($source, "environment('local')");
     $preview = strpos($source, "'/design-preview'");
     $student_preview = strpos($source, "'/design-preview/student'");
+    $email_preview = strpos($source, "'/design-preview/emails'");
 
     expect($guard)->toBeInt()
         ->and($preview)->toBeInt()
         ->and($student_preview)->toBeInt()
+        ->and($email_preview)->toBeInt()
         ->and($guard < $preview)->toBeTrue()
-        ->and($guard < $student_preview)->toBeTrue();
+        ->and($guard < $student_preview)->toBeTrue()
+        ->and($guard < $email_preview)->toBeTrue();
 });

@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Support\Mail;
 
+use App\Enums\EmailTemplate;
+use InvalidArgumentException;
+
 /**
- * Minimal templates until the branded set arrives.
+ * Subjects, secret payloads, and renders for outbox rows.
  *
  * Credential and reset payloads are not written into the stored body.
- * Other templates store the escaped render, and their secrets column stays null.
+ * Other branded templates store the escaped render. The test template
+ * keeps the short escaped message used by the send path.
  */
 final class OutboundMessage
 {
@@ -35,13 +39,14 @@ final class OutboundMessage
         'reset_token',
     ];
 
+    public function __construct(private readonly EmailTemplateRenderer $renderer) {}
+
     /**
      * Whether this template's render payload is a secret until send.
      */
     public function isSecretTemplate(string $template): bool
     {
-        return $template === self::TEMPLATE_CREDENTIALS
-            || $template === self::TEMPLATE_PASSWORD_RESET;
+        return EmailTemplate::tryFrom($template)?->isSecret() === true;
     }
 
     /**
@@ -49,21 +54,47 @@ final class OutboundMessage
      */
     public function isKnown(string $template): bool
     {
-        return $this->isSecretTemplate($template) || $template === self::TEMPLATE_TEST;
+        return EmailTemplate::tryFrom($template) !== null;
     }
 
     /**
-     * Subject stored on the row. Line breaks and secret values are removed.
+     * Refuse a branded template whose required keys are missing or blank.
+     *
+     * The test template keeps its existing message path. This runs before
+     * a row is inserted. The exception text is a fixed code.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function assertSendable(string $template, array $data): void
+    {
+        $case = EmailTemplate::tryFrom($template);
+
+        if ($case === null || $case === EmailTemplate::Test) {
+            return;
+        }
+
+        $this->renderer->assertRequired($case, $data);
+    }
+
+    /**
+     * Subject stored on the row. Line breaks and secret values are removed
+     * from the test template. Announcement titles that collapse are refused.
      *
      * @param  array<string, mixed>  $data
      */
     public function subject(string $template, array $data): string
     {
-        $subject = match ($template) {
-            self::TEMPLATE_CREDENTIALS => 'Your university portal account',
-            self::TEMPLATE_PASSWORD_RESET => 'Reset your university portal password',
-            default => (string) ($data['subject'] ?? self::FALLBACK_SUBJECT),
-        };
+        $case = EmailTemplate::tryFrom($template);
+
+        if ($case === EmailTemplate::Announcement) {
+            return $this->renderer->announcementSubject($data);
+        }
+
+        if ($case !== null && $case !== EmailTemplate::Test) {
+            return $this->renderer->fixedSubject($case);
+        }
+
+        $subject = (string) ($data['subject'] ?? self::FALLBACK_SUBJECT);
 
         return $this->sanitizeSubject($subject, $this->secretValues($data));
     }
@@ -76,28 +107,39 @@ final class OutboundMessage
      */
     public function secretPayload(string $template, array $data): array
     {
-        if ($template === self::TEMPLATE_CREDENTIALS) {
-            return [
-                'name' => $this->stringValue($data, 'name'),
-                'matric_no' => $this->stringValue($data, 'matric_no'),
-                'login_url' => $this->stringValue($data, 'login_url'),
-                'temporary_password' => $this->stringValue($data, 'temporary_password'),
-            ];
+        $case = EmailTemplate::tryFrom($template);
+
+        if ($case === null || ! $case->isSecret()) {
+            return [];
         }
 
-        return [
-            'name' => $this->stringValue($data, 'name'),
-            'reset_url' => $this->stringValue($data, 'reset_url'),
-            'token' => $this->stringValue($data, 'token'),
-        ];
+        return $this->renderer->secretPayload($case, $data);
     }
 
     /**
-     * Escaped body for a non-secret template, or null when it cannot be stored.
+     * Branded HTML and text stored on a non-secret row.
      *
      * @param  array<string, mixed>  $data
      */
-    public function storedBody(array $data): ?RenderedMail
+    public function renderPublic(string $template, array $data): RenderedMail
+    {
+        $case = EmailTemplate::tryFrom($template);
+
+        if ($case === null || $case === EmailTemplate::Test) {
+            throw new InvalidArgumentException(MailError::UNKNOWN_TEMPLATE);
+        }
+
+        return $this->renderer->render($case, $data);
+    }
+
+    /**
+     * Escaped body for the test template.
+     *
+     * User text is not scanned for placeholder markers.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function storedBody(array $data): RenderedMail
     {
         $message = $this->stringValue($data, 'message');
 
@@ -115,28 +157,17 @@ final class OutboundMessage
      */
     public function renderSecret(string $template, array $payload): ?RenderedMail
     {
-        if ($template === self::TEMPLATE_CREDENTIALS) {
-            $name = $this->stringValue($payload, 'name');
-            $matric = $this->stringValue($payload, 'matric_no');
-            $login_url = $this->stringValue($payload, 'login_url');
-            $password = $this->stringValue($payload, 'temporary_password');
+        $case = EmailTemplate::tryFrom($template);
 
-            if (! $this->linkIsAllowed($login_url) || $password === '' || $matric === '') {
-                return null;
-            }
-
-            return $this->finish($name."\n".$matric."\n".$login_url."\n".$password, $name."\n".$matric."\n".$login_url."\n".$password);
-        }
-
-        $name = $this->stringValue($payload, 'name');
-        $reset_url = $this->stringValue($payload, 'reset_url');
-        $token = $this->stringValue($payload, 'token');
-
-        if (! $this->linkIsAllowed($reset_url) || $token === '') {
+        if ($case === null || ! $case->isSecret()) {
             return null;
         }
 
-        return $this->finish($name."\n".$reset_url."\n".$token, $name."\n".$reset_url."\n".$token);
+        try {
+            return $this->renderer->render($case, $payload);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
     }
 
     /**
@@ -199,31 +230,11 @@ final class OutboundMessage
         return is_string($value) ? $value : '';
     }
 
-    private function linkIsAllowed(string $url): bool
-    {
-        $base = rtrim((string) config('app.url'), '/');
-
-        if ($base === '' || preg_match('/[\s\x00]/', $url) === 1) {
-            return false;
-        }
-
-        return str_starts_with($url, $base.'/');
-    }
-
-    private function finish(string $html_source, string $text): ?RenderedMail
+    private function finish(string $html_source, string $text): RenderedMail
     {
         $html = '<p>'.str_replace("\n", '</p><p>', $this->escape($html_source)).'</p>';
 
-        if ($this->hasUnresolvedPlaceholder($html) || $this->hasUnresolvedPlaceholder($text)) {
-            return null;
-        }
-
         return new RenderedMail($html, $text);
-    }
-
-    private function hasUnresolvedPlaceholder(string $value): bool
-    {
-        return str_contains($value, '{{') || str_contains($value, ':placeholder');
     }
 
     private function escape(string $value): string

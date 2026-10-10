@@ -69,7 +69,7 @@ function mail_use_brevo(string $api_key = 'configured-mail-key'): void
 /**
  * Queue a credentials email without printing the payload.
  */
-function mail_queue_credentials(string $password, string $matric, ?User $user = null): EmailOutbox
+function mail_queue_credentials(string $password, string $login_id, ?User $user = null): EmailOutbox
 {
     $user ??= User::factory()->create();
 
@@ -78,9 +78,9 @@ function mail_queue_credentials(string $password, string $matric, ?User $user = 
         'student@example.com',
         [
             'name' => 'Ada Lovelace',
-            'matric_no' => $matric,
-            'login_url' => rtrim((string) config('app.url'), '/').'/login',
+            'login_id' => $login_id,
             'temporary_password' => $password,
+            'expires_at' => '2026-10-17 14:30:00',
         ],
         $user->id,
     );
@@ -327,9 +327,9 @@ it('puts only the outbox id in the job payload', function () {
             $address,
             [
                 'name' => 'Ada Lovelace',
-                'matric_no' => 'MAT-2026-0007',
-                'login_url' => rtrim((string) config('app.url'), '/').'/login',
+                'login_id' => 'MAT-2026-0007',
                 'temporary_password' => $password,
+                'expires_at' => '2026-10-17 14:30:00',
             ],
             $user->id,
         );
@@ -378,9 +378,9 @@ it('keeps the response body out of the log, last_error, and failed jobs', functi
         $address,
         [
             'name' => 'Ada Lovelace',
-            'matric_no' => 'MAT-2026-0008',
-            'login_url' => rtrim((string) config('app.url'), '/').'/login',
+            'login_id' => 'MAT-2026-0008',
             'temporary_password' => 'Leak-secret-91',
+            'expires_at' => '2026-10-17 14:30:00',
         ],
         $user->id,
     );

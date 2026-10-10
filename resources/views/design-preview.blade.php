@@ -11,6 +11,7 @@
         </p>
         <p class="mt-space-12">
             <x-button variant="link" href="{{ url('/design-preview/student') }}">Student layout sample</x-button>
+            <x-button variant="link" href="{{ url('/design-preview/emails') }}">Email template sample</x-button>
         </p>
     </header>
 
