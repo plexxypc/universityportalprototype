@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\EmailTemplate;
 use App\Enums\Role;
 use App\Enums\UserStatus;
+use App\Services\MailService;
 use App\Support\Rbac\Permissions;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
+use Illuminate\Auth\Passwords\CanResetPassword;
+use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,10 +25,10 @@ use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['name', 'email', 'password', 'phone', 'status', 'must_change_password', 'temp_password_expires_at', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements CanResetPasswordContract, FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use CanResetPassword, HasFactory, Notifiable;
 
     /**
      * Staff roles plus Student when a students row exists. Null until loaded.
@@ -62,6 +66,27 @@ class User extends Authenticatable implements FilamentUser
             'temp_password_expires_at' => 'datetime',
             'last_login_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Send the reset link through the outbox.
+     *
+     * The token is a secret field on the password_reset template. This
+     * method does not use Laravel's mail notification.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        app(MailService::class)->send(
+            EmailTemplate::PasswordReset->value,
+            $this->email,
+            [
+                'name' => $this->name,
+                'token' => $token,
+            ],
+            $this->id,
+        );
     }
 
     /**

@@ -3,7 +3,7 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Sign in — {{ config('portal.institution.name') }}</title>
+        <title>Choose a new password — {{ config('portal.institution.name') }}</title>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="min-h-screen overflow-x-hidden bg-background font-sans text-text antialiased">
@@ -16,17 +16,14 @@
                     height="48"
                     class="mx-auto size-12"
                 >
-                <h1 class="mt-space-12 text-center text-h2 font-semibold text-text">{{ config('portal.institution.name') }}</h1>
-                <p class="mt-space-4 text-center text-body font-normal text-muted">Sign in</p>
+                <h1 class="mt-space-12 text-center text-h2 font-semibold text-text">Choose a new password</h1>
+                <p class="mt-space-4 text-center text-body font-normal text-muted">{{ config('portal.institution.name') }}</p>
 
                 <x-card class="mt-space-24">
                     @if (session('status'))
                         <p role="status" class="mb-space-16 text-body font-normal text-text">{{ session('status') }}</p>
                     @endif
-                    @if (request()->query('expired') === '1')
-                        <p role="status" class="mb-space-16 text-body font-normal text-text">Your session has ended. Sign in to continue.</p>
-                    @endif
-                    <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-space-16">
+                    <form method="POST" class="flex flex-col gap-space-16">
                         @csrf
                         <x-field
                             name="identifier"
@@ -43,20 +40,29 @@
 
                         <x-field
                             name="password"
-                            label="Password"
+                            label="New password"
                             :error="$errors->first('password')"
                             required
                         >
-                            <x-password-input name="password" />
+                            <x-password-input name="password" autocomplete="new-password" />
                         </x-field>
 
-                        <p class="text-body font-normal">
-                            <a href="{{ route('password.request') }}" class="font-semibold text-primary underline">Forgot password</a>
-                        </p>
+                        <x-field
+                            name="password_confirmation"
+                            label="Confirm new password"
+                            :error="$errors->first('password_confirmation')"
+                            required
+                        >
+                            <x-password-input name="password_confirmation" autocomplete="new-password" />
+                        </x-field>
 
-                        <x-button type="submit" class="w-full">Sign in</x-button>
+                        <x-button type="submit" class="w-full">Save password</x-button>
                     </form>
                 </x-card>
+
+                <p class="mt-space-16 text-center text-body font-normal">
+                    <a href="{{ route('password.request') }}" class="font-semibold text-primary underline">Request a new link</a>
+                </p>
             </div>
         </main>
     </body>

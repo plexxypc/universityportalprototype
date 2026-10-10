@@ -183,6 +183,8 @@ Login limits use the socket address (`REMOTE_ADDR`), not `X-Forwarded-For`. On R
 
 What remains uncertain on Render: the platform does not publish a proxy range, and it is not verified from this repository whether Render overwrites or appends `X-Forwarded-For`. Until a production host publishes ranges, do not trust that header. The same gap applies to `audit_logs` when that column is written (TASK-046).
 
+Password reset links put the token in the path (`/reset-password/{token}`). Keep that path out of access logs. The token lets someone set a new password, so a log line that stores the request URI stores the secret. Do not log that path, or replace the token segment before the line is written.
+
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Give the health check an initial delay of at least 60 seconds. On the first deploy, a longer delay is safer. **Verify in the provider dashboard** the initial-delay field name.
 
 **Instance size.** This container runs nginx, PHP-FPM (up to a few 128 MB workers), a queue worker limited to 96 MB, and the scheduler in one instance. A 512 MiB plan is too small for that set and is likely to be killed. For this health-page demo, choose the smallest listed plan that has at least 1 GiB of memory. **Verify in the provider dashboard** the current size names and prices. Production sizing is a separate choice and is described in `SYSTEM_OVERVIEW.md`. App Platform prices are not the Droplet prices in that document.

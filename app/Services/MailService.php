@@ -121,6 +121,19 @@ final class MailService
     }
 
     /**
+     * Clear secrets on this account's unsent rows for one template.
+     *
+     * This is the credentials re-issue path. Each queued row fails, its
+     * secret is removed, and redacted_at stays null. A sent row is left.
+     */
+    public function supersedeUnsent(int $user_id, string $template): void
+    {
+        DB::transaction(function () use ($user_id, $template): void {
+            $this->supersedeQueued($user_id, $template);
+        });
+    }
+
+    /**
      * Clear one row's secret and mark it failed.
      *
      * A sent row is left as it is. The secret was already cleared on send.

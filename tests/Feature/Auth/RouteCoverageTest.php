@@ -23,6 +23,10 @@ function route_coverage_named_public_routes(): array
     return [
         'login' => 'Portal login page.',
         'login.store' => 'Portal login action.',
+        'password.request' => 'Forgot-password form. The response does not reveal whether an account exists.',
+        'password.email' => 'Forgot-password action. Lookup and email run after the response.',
+        'password.reset' => 'Reset form. The link carries only the token.',
+        'password.reset.store' => 'Reset action. A success sends the person to the login page.',
         'staff.login' => 'The staff panel login redirects to the portal login.',
         'health' => 'Health probe. It does not start a session.',
         'webhooks.ping' => 'Provider notification ping. It sits outside the auth groups.',

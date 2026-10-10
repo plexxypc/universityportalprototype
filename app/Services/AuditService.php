@@ -26,6 +26,8 @@ final class AuditService
 
     public const string ACTION_PASSWORD_FORCED_CHANGE = 'auth.password_forced_change';
 
+    public const string ACTION_PASSWORD_RESET = 'auth.password_reset';
+
     public const string ACTION_BOOTSTRAP_CREATED = 'auth.bootstrap_created';
 
     public const string ACTION_BOOTSTRAP_REARMED = 'auth.bootstrap_rearmed';

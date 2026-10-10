@@ -398,7 +398,7 @@ it('shows the login form with the password toggle', function () {
         ->assertSee('type="password"', false)
         ->assertSee('Show password')
         ->assertSee(config('portal.institution.name'))
-        ->assertDontSee('Forgot password')
+        ->assertSee('Forgot password')
         ->assertDontSee('Sign up');
 });
 
