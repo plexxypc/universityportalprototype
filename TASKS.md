@@ -257,6 +257,7 @@
 
 - [ ] TASK-139 `AnnouncementService` with audience targeting (all, faculty, department, programme, level)
   - Phase 3 carry-over: publishing an announcement creates the notification and, when `send_email` is true, the outbox row.
+  - Phase 5 carry-over: announcements to many students need a bulk createForMany notification method.
 - [ ] TASK-140 Compose and list UI with optional email
 - [ ] TASK-141 Student announcement display and notifications
 - [ ] TASK-142 Announcement tests (targeting, scoped authors)
