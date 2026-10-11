@@ -157,6 +157,54 @@ it('rejects an unsafe notification link', function (string $link) {
     '//example.com/student',
 ]);
 
+it('does not render a stored unsafe link', function () {
+    $owner = notification_student();
+    $staff = notification_staff(Role::Lecturer);
+    $links = [
+        'https://example.com/student',
+        'javascript:alert(1)',
+        '//example.com/student',
+    ];
+
+    foreach ($links as $link) {
+        Notification::query()->create([
+            'user_id' => $owner->id,
+            'type' => NotificationType::Announcement,
+            'data' => [
+                'title' => 'Notice',
+                'message' => 'Read this',
+                'link' => $link,
+            ],
+            'read_at' => null,
+        ]);
+    }
+
+    Notification::query()->create([
+        'user_id' => $staff->id,
+        'type' => NotificationType::Announcement,
+        'data' => [
+            'title' => 'Staff notice',
+            'message' => 'Read this',
+            'link' => 'javascript:alert(1)',
+        ],
+        'read_at' => null,
+    ]);
+
+    $student_html = (string) $this->actingAs($owner)->get(route('student.notifications'))->assertOk()->getContent();
+    $staff_html = (string) $this->actingAs($staff)->get('/staff/notifications')->assertOk()->getContent();
+    $rendered = false;
+
+    foreach ($links as $link) {
+        if (str_contains($student_html, $link) || str_contains($staff_html, $link)) {
+            $rendered = true;
+        }
+    }
+
+    expect($rendered)->toBeFalse()
+        ->and(str_contains($student_html, 'Notice'))->toBeTrue()
+        ->and(str_contains($staff_html, 'Staff notice'))->toBeTrue();
+});
+
 it('marks all only the owner rows', function () {
     $owner = notification_student();
     $other = notification_student();
