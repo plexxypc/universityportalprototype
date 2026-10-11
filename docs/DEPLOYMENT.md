@@ -269,9 +269,9 @@ Migrations run before nginx starts. A database error during `RUN_MIGRATIONS=true
 
 The worker is a supervisord program in this same container. It runs:
 
-`php -d memory_limit=96M artisan queue:work --sleep=3 --tries=3 --max-time=3600 --memory=96 --timeout=90`
+`php -d memory_limit=128M artisan queue:work --sleep=3 --tries=3 --max-time=3600 --memory=96 --timeout=90`
 
-The scheduler uses the same `memory_limit=96M`. PHP-FPM allows 2 children (`pm.max_children = 2`, `pm.max_spare_servers = 1`), each with a 128 MB limit. Four children do not fit beside nginx, opcache, the worker, and the scheduler on a 512 MB instance.
+`--memory=96` is checked after a job finishes. The PHP limit is 128M so a job can finish and the worker can exit between jobs, instead of dying with a fatal error during the job. The scheduler stays at `memory_limit=96M`. PHP-FPM allows 2 children (`pm.max_children = 2`, `pm.max_spare_servers = 1`), each with a 128 MB limit. Four children do not fit beside nginx, opcache, the worker, and the scheduler on a 512 MB instance.
 
 There is no separate App Platform worker component to create. A second component would be a second copy of the whole stack.
 
