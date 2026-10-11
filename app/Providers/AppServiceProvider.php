@@ -37,13 +37,18 @@ use App\Policies\ProgrammePolicy;
 use App\Policies\ReceiptPolicy;
 use App\Policies\ResultPolicy;
 use App\Policies\StudentPolicy;
+use App\Support\Console\StderrLine;
 use App\Support\DatabaseTls;
 use App\Support\EnvironmentGuard;
+use App\Support\Health\QueueWorkerMarker;
 use App\Support\Mail\BrevoTransport;
+use App\Support\Mail\UniqueOutboxDispatch;
 use App\Support\Rbac\Permissions;
 use Filament\Auth\Http\Controllers\LogoutController as FilamentLogoutController;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Queue\Events\Looping;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
@@ -59,6 +64,7 @@ class AppServiceProvider extends ServiceProvider
         // Filament's logout route is registered after the application boots.
         // Resolving its controller class runs AuthService instead.
         $this->app->bind(FilamentLogoutController::class, StaffLogoutController::class);
+        $this->app->singleton(StderrLine::class);
     }
 
     /**
@@ -79,6 +85,7 @@ class AppServiceProvider extends ServiceProvider
         Permissions::registerGates();
         $this->registerPolicies();
         $this->registerMailTransport();
+        $this->registerQueueHealth();
 
         Livewire::addPersistentMiddleware([
             EnsureActive::class,
@@ -100,6 +107,20 @@ class AppServiceProvider extends ServiceProvider
                 api_key: (string) config('mail.mailers.brevo.key'),
                 timeout_seconds: $timeout > 0 ? $timeout : 10,
             );
+        });
+    }
+
+    /**
+     * Record worker loops, and count unique outbox dispatches that are dropped.
+     */
+    private function registerQueueHealth(): void
+    {
+        UniqueOutboxDispatch::listen();
+
+        Event::listen(function (Looping $event): void {
+            unset($event);
+
+            app(QueueWorkerMarker::class)->record();
         });
     }
 

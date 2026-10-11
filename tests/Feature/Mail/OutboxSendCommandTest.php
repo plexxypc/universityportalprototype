@@ -7,6 +7,7 @@ use App\Jobs\SendOutboxEmail;
 use App\Models\EmailOutbox;
 use App\Models\User;
 use App\Services\MailService;
+use App\Support\Console\StderrLine;
 use App\Support\Mail\MailError;
 use App\Support\Mail\OutboundMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,6 +30,22 @@ beforeEach(function () {
     Cache::store('database')->forget(MailService::CIRCUIT_PAUSE_KEY);
     Cache::store('database')->forget(MailService::CIRCUIT_STREAK_KEY);
 });
+
+/**
+ * Whether the unique lock for this outbox id is still held.
+ */
+if (! function_exists('outbox_unique_lock_held')) {
+    function outbox_unique_lock_held(int $email_outbox_id): bool
+    {
+        $suffix = ':'.$email_outbox_id;
+
+        return DB::table('cache_locks')->pluck('key')->contains(
+            fn (mixed $key): bool => is_string($key)
+                && str_contains($key, 'laravel_unique_job:')
+                && str_ends_with($key, $suffix),
+        );
+    }
+}
 
 /**
  * Whether the needle appears. A failure of the boolean does not print it.
@@ -68,8 +85,13 @@ it('dispatches only the batch size and leaves the rest queued', function () {
         'attempts' => 0,
     ]);
 
+    $stream = fopen('php://memory', 'w+');
+    expect($stream)->not->toBeFalse();
+    app(StderrLine::class)->useStream($stream);
+
     $exit = Artisan::call('outbox:send');
-    $output = Artisan::output();
+    rewind($stream);
+    $output = (string) stream_get_contents($stream);
     $leaked = outbox_text_has($output, 'batch-person@example.test')
         || outbox_text_has($output, 'Batch notice');
 
@@ -167,8 +189,13 @@ it('fails a credentials row that has used every attempt and clears the secret', 
         'updated_at' => now()->subHour(),
     ]);
 
+    $stream = fopen('php://memory', 'w+');
+    expect($stream)->not->toBeFalse();
+    app(StderrLine::class)->useStream($stream);
+
     $exit = Artisan::call('outbox:send');
-    $output = Artisan::output();
+    rewind($stream);
+    $output = (string) stream_get_contents($stream);
     $row->refresh();
     $raw = DB::table('email_outbox')->where('id', $row->id)->value('secrets');
     $leaked = outbox_text_has((string) $row->body_html, $password)
@@ -184,6 +211,63 @@ it('fails a credentials row that has used every attempt and clears the secret', 
         ->and($raw === null)->toBeTrue()
         ->and($leaked)->toBeFalse()
         ->and(Queue::pushed(SendOutboxEmail::class))->toHaveCount(0);
+});
+
+it('holds the unique lock for 180 seconds', function () {
+    expect((new SendOutboxEmail(1))->uniqueFor())->toBe(180);
+});
+
+it('leaves the outbox queued while an orphan unique lock is held', function () {
+    config(['queue.default' => 'database']);
+    $stream = fopen('php://memory', 'w+');
+    expect($stream)->not->toBeFalse();
+    app(StderrLine::class)->useStream($stream);
+
+    $row = EmailOutbox::factory()->create([
+        'recipient_email' => 'orphan-lock@example.test',
+        'template' => 'announcement',
+        'attempts' => 0,
+    ]);
+    SendOutboxEmail::dispatch($row->id);
+    DB::table('jobs')->delete();
+
+    $exit = Artisan::call('outbox:send');
+    rewind($stream);
+    $output = (string) stream_get_contents($stream);
+    $row->refresh();
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('dispatched=0')
+        ->and($output)->toContain('skipped=1')
+        ->and($output)->not->toContain('orphan-lock@example.test')
+        ->and(DB::table('jobs')->count())->toBe(0)
+        ->and(outbox_unique_lock_held($row->id))->toBeTrue()
+        ->and($row->status)->toBe(EmailStatus::Queued)
+        ->and($row->attempts)->toBe(0);
+});
+
+it('counts a dropped unique dispatch as skipped on stderr', function () {
+    Queue::fake();
+    $stream = fopen('php://memory', 'w+');
+    expect($stream)->not->toBeFalse();
+    app(StderrLine::class)->useStream($stream);
+
+    $row = EmailOutbox::factory()->create([
+        'recipient_email' => 'skipped-count@example.test',
+        'template' => 'announcement',
+        'attempts' => 0,
+    ]);
+    SendOutboxEmail::dispatch($row->id);
+
+    $exit = Artisan::call('outbox:send');
+    rewind($stream);
+    $output = (string) stream_get_contents($stream);
+
+    expect($exit)->toBe(0)
+        ->and($output)->toContain('dispatched=0')
+        ->and($output)->toContain('skipped=1')
+        ->and($output)->not->toContain('skipped-count@example.test')
+        ->and(Queue::pushed(SendOutboxEmail::class))->toHaveCount(1);
 });
 
 it('queues one job when the same row is dispatched twice', function () {

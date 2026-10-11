@@ -88,7 +88,8 @@ return [
     |
     | Names only. Credentials stay in the mail and payment settings and are
     | not read here. The heartbeat shows that the scheduler ran recently.
-    | It does not show that the queue worker is consuming jobs.
+    | The worker key shows that queue:work has looped. A missing value means
+    | the worker is stopped, including the first three minutes after a wake.
     | The rate limiter uses the file store so a database problem cannot
     | stop this endpoint from answering.
     |
@@ -102,6 +103,11 @@ return [
         'heartbeat_key' => 'health.scheduler_heartbeat',
         'heartbeat_recent_seconds' => 120,
         'heartbeat_store_seconds' => 600,
+        'worker_key' => 'health.queue_worker',
+        'worker_recent_seconds' => 180,
+        'worker_throttle_seconds' => 30,
+        'worker_store_seconds' => 600,
+        'outbox_backlog_seconds' => 900,
         'database_timeout_seconds' => 3,
         'rate_limit_per_minute' => 60,
         'rate_limit_store' => env('HEALTH_RATE_LIMIT_STORE', 'file'),
