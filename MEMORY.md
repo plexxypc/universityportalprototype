@@ -3,12 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Sunday, 11 October 2026 (Phase 5 wrap-up)
+**Last updated:** Sunday, 11 October 2026 (live outbox issue)
 **Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
 
-Phase 5 is complete on `phase-5-comms` (`c5a6d35`, same as `origin/phase-5-comms`). TASK-046 through TASK-053 are ticked. This wrap-up changes `TASKS.md` and `MEMORY.md` only. Phase 5 is not merged to `main` and is not deployed. `origin/main` is still pull request #8 (`7512863`). Local `main` is still `9aa094d`. Phase 4 remains on `phase-4-auth` (`d1ccc99`). The Auth suite is `tests/Feature/Auth`, and `composer test` runs it once.
+Phase 5 is complete on `phase-5-comms` (`c5a6d35`, same as `origin/phase-5-comms`). TASK-046 through TASK-053 are ticked. This wrap-up changes `TASKS.md` and `MEMORY.md` only. The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified. `origin/main` is still pull request #8 (`7512863`). Local `main` is still `9aa094d`. Phase 4 remains on `phase-4-auth` (`d1ccc99`). The Auth suite is `tests/Feature/Auth`, and `composer test` runs it once.
 
 `AuditService::record()` strips secret keys from `before` and `after`, case-insensitively down to depth 8, and inserts one row. It throws when the caller has no transaction open, and it does not open one. `App\Support\Audit` is the helper other services call. The stored address is `REMOTE_ADDR` only. `X-Forwarded-For` is not read, so on Render that column is still the platform proxy until an explicit proxy allow-list exists. Events written now are a successful login, the single attempt that starts an identifier lockout, a logout, a password change, a forced password change, a password reset, bootstrap creation, and bootstrap re-arm. There is no row per failed attempt, and the typed identifier, the password, and the reset token are not stored. `auth.status_changed` waits for TASK-069 and TASK-137, because those status changes do not exist yet. Role changes and credential re-issues wait for the services that perform them.
 
@@ -22,7 +22,7 @@ ADR-029 is accepted in `DECISIONS.md`. It supersedes the vendor sentence in ADR-
 
 Environment variables added for mail are `MAIL_API_URL`, `MAIL_API_KEY`, `MAIL_API_TIMEOUT`, and `MAIL_DAILY_LIMIT`. The unused `BREVO_API_KEY` name is gone from `.env.example`, `render.yaml`, `docs/DEPLOYMENT.md`, and `ARCHITECTURE.md`. `MAIL_MAILER`, `MAIL_FROM_ADDRESS`, and `MAIL_FROM_NAME` stay.
 
-The live database has not run the secrets migration. Local Docker (`127.0.0.1`, database `university_portal`) has `2026_10_10_191500_add_secrets_to_email_outbox_table` applied. Live email has not been tested, and the provider is unconfirmed. Brevo registration was blocked. The live host still has `MAIL_MAILER=log`. The live Super Admin address is `superadmin@example.com`, which is not a mailbox. Until a provider can deliver to a real address, that admin cannot reset a forgotten password on the live site: production refuses the reset template on the log mailer, and the bootstrap does not create or re-arm an admin once a Super Admin exists and has changed the forced password.
+The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified. Local Docker (`127.0.0.1`, database `university_portal`) has `2026_10_10_191500_add_secrets_to_email_outbox_table` applied. The provider is unconfirmed. Brevo registration was blocked. The live host still has `MAIL_MAILER=log`. The live Super Admin address is `superadmin@example.com`, which is not a mailbox. Until a provider can deliver to a real address, that admin cannot reset a forgotten password on the live site: production refuses the reset template on the log mailer, and the bootstrap does not create or re-arm an admin once a Super Admin exists and has changed the forced password.
 
 The sign-in card is `max-w-md` (28rem) and centered. `public/build` is gitignored, so `php artisan serve` uses the last `npm run build`. A build from 8 October had an empty `app.js` and no `max-w-md`, which stretched the local card and left the password show/hide control inert. Rebuilding restored both. The live logo at `/images/logo-placeholder.svg` returns 404 because `.dockerignore` excluded `**/*.svg`. The exception `!public/images/logo-placeholder.svg` puts that file in the image. The live site keeps the broken image until the next deploy. `tests/Unit/DockerignoreLogoTest.php` guards the exception.
 
@@ -34,7 +34,7 @@ ADR-028 is accepted in `DECISIONS.md`. It is the Phase 4 decision: one login pag
 
 TASK-038 adds policies and `visibleTo()` for the student-owned models and for Faculty, Department, Programme, and Course. An inactive user is granted nothing and sees no rows. Super Admin sees every row and is denied those two abilities. Documents are visible only to the owning student, the Registrar, and Super Admin. Draft results are visible only to Super Admin and to a lecturer assigned to that course. A lecturer sees a student only with an Approved registration item for an assigned course and semester. Other models wait for their features. Phase 3 is merged to `main` as pull request #7 (`9aa094d`). A Published result requires `published_at`. Academic standing thresholds wait for a new table in TASK-060. Decimal totals and grade-band edges are decided in TASK-059.
 
-**Live database:** The Phase 3 migrations have run on the live Aiven database. The secrets migration has not. `docs/DEPLOYMENT.md` still says to set `RUN_MIGRATIONS=true` for the one deploy that adds `email_outbox.secrets`, then set it back to `false`. The first Super Admin exists on the live site, and `BOOTSTRAP_SUPER_ADMIN_EMAIL` and `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH` were removed after that account was created. The first migrate did not run because the host variable was named `RUN_MIGRATION` instead of `RUN_MIGRATIONS`. The demo seeder is still Phase 18 and has not run. This machine's `.env` points at local Docker (`127.0.0.1`, database `university_portal`). That local database has the schema through `2026_10_10_191500_add_secrets_to_email_outbox_table`.
+**Live database:** The Phase 3 migrations have run on the live Aiven database. The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified. `docs/DEPLOYMENT.md` still says to set `RUN_MIGRATIONS=true` for the one deploy that adds `email_outbox.secrets`, then set it back to `false`. The first Super Admin exists on the live site, and `BOOTSTRAP_SUPER_ADMIN_EMAIL` and `BOOTSTRAP_SUPER_ADMIN_PASSWORD_HASH` were removed after that account was created. The first migrate did not run because the host variable was named `RUN_MIGRATION` instead of `RUN_MIGRATIONS`. The demo seeder is still Phase 18 and has not run. This machine's `.env` points at local Docker (`127.0.0.1`, database `university_portal`). That local database has the schema through `2026_10_10_191500_add_secrets_to_email_outbox_table`.
 
 The staff panel uses the design tokens, self-hosted Inter, and the institution name and logo from `config/portal.php`. Navigation groups follow the PRD module names and stay hidden until a page is assigned. Route areas are already limited by role. The staff theme imports Filament CSS from `vendor`, so the frontend CI job and the Docker asset stage install or copy that tree before `npm run build`. That copy is in `6c52a23` (`Fixed Frontend CI`).
 
@@ -69,7 +69,7 @@ The stack was changed from the earlier Next.js/Supabase draft to **Laravel + Fil
 - Phase 1 in the repository: TASK-008 through TASK-018
 - Phase 3 database foundation: TASK-026 through TASK-036, merged to `origin/main` as pull request #7 (`9aa094d`)
 - Phase 4 authentication and authorisation: TASK-037 through TASK-045, on `phase-4-auth` (`d1ccc99`). Pull request #8 (`7512863`) merged that branch through `e48cda6`
-- Phase 5 audit, email, and notifications: TASK-046 through TASK-053, on `phase-5-comms` (`c5a6d35`). Not merged and not deployed
+- Phase 5 audit, email, and notifications: TASK-046 through TASK-053, on `phase-5-comms` (`c5a6d35`). The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified.
 - Live demo on Render with Aiven MySQL: `https://universityportalprototype.onrender.com`
 
 ## Shared components
@@ -243,10 +243,11 @@ Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to p
 
 ## Known Issues
 
+- Live outbox rows stalled in Queued (11 Oct 2026): test rows from the Send test email button stayed Queued with attempts 0 on the live Render site even though the scheduler heartbeat was fresh; one row did send. Cause not yet known; under investigation. Do not rely on live email until fixed and verified.
 - The live `/health` payload reports `"payment_provider": "sandbox"`. The documented demo setting is `demo`.
-- Day-to-day work is on `phase-5-comms` (`c5a6d35`, same as `origin/phase-5-comms`). `origin/main` is pull request #8 (`7512863`) and does not include Phase 5. Local `main` is still `9aa094d`. The live Aiven database has the Phase 3 tables and does not have `email_outbox.secrets`. The design preview routes are not registered outside `local`.
+- Day-to-day work is on `phase-5-comms` (`c5a6d35`, same as `origin/phase-5-comms`). `origin/main` is pull request #8 (`7512863`) and does not include Phase 5. Local `main` is still `9aa094d`. The live Aiven database has the Phase 3 tables. The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified. The design preview routes are not registered outside `local`.
 - The live login page logo is broken. `/images/logo-placeholder.svg` returns 404 until the next deploy picks up the `.dockerignore` exception for `public/images/logo-placeholder.svg`.
-- Live email has not been tested. The provider is unconfirmed. The live Super Admin address `superadmin@example.com` cannot receive mail.
+- The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified. The provider is unconfirmed. The live Super Admin address `superadmin@example.com` cannot receive mail.
 - PHP 8.5.10 is on the user `PATH`. CI and `docker/Dockerfile` use PHP 8.4 because `composer.lock` requires 8.4.1 or newer. `ext-intl`, `ext-gd`, and `ext-pdo_mysql` are enabled. Composer 2.10.3 is `%LOCALAPPDATA%\Composer\composer.bat`.
 - Pest needs MySQL from `compose.dev.yaml` (`university_portal_testing`, user `portal`, password `portal`). Docker Desktop has to be running before `composer test` or `composer check`.
 - `/health` reports a scheduler heartbeat, a queue word (`ok`, `backlog`, or `failing`), and a mail word (`log`, `brevo`, `unconfigured`, or `misconfigured`). The body has no counts. The platform probe stays on `/up`.
@@ -276,7 +277,7 @@ Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to p
 
 ## Next Step
 
-Start Phase 6, university setup, with TASK-054 on a new branch from `phase-5-comms`. Do not treat the live site as having the secrets column or a working mailbox. Run migrations only against local Docker MySQL (`127.0.0.1`, `university_portal` / `university_portal_testing`). The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
+Start Phase 6, university setup, with TASK-054 on a new branch from `phase-5-comms`. The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified. Run migrations only against local Docker MySQL (`127.0.0.1`, `university_portal` / `university_portal_testing`). The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
 
 ## Session Log
 
@@ -321,3 +322,4 @@ Start Phase 6, university setup, with TASK-054 on a new branch from `phase-5-com
 | 10 Oct 2026 | Super Admin bootstrap failures now log one reason code and the exit code. The line and the application log omit the email, the hash, the password, and the stack trace. A missing `role_assignments` table reports `tables_missing`. `composer check` on `127.0.0.1` / `university_portal_testing` passed (478 tests, 2498 assertions). Not pushed. TASKS.md left unticked. |
 | 10 Oct 2026 | Phase 4 wrap-up. TASK-037 through TASK-045 are ticked. TASK-172 is ticked for the live migration and the first Super Admin. The demo seeder has not run. The live migrate failed once because the variable was `RUN_MIGRATION` instead of `RUN_MIGRATIONS`. No application code changed. `composer check` passed (478 tests, 2498 assertions). |
 | 11 Oct 2026 | Phase 5 wrap-up. TASK-046 through TASK-053 are ticked. No application code changed. The live database has not run the secrets migration. Live email has not been tested, and the provider is unconfirmed. `composer check` on `127.0.0.1` / `university_portal_testing` passed (593 tests, 3385 assertions). |
+| 11 Oct 2026 | Live outbox rows from the Send test email button stayed Queued with attempts 0 on the Render site. The scheduler heartbeat was fresh. One row did send. The secrets migration is applied on the live database (confirmed 11 Oct 2026), the live outbox page works, and automatic sending is unverified. No application code changed. |
