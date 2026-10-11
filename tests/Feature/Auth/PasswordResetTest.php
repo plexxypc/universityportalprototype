@@ -374,9 +374,11 @@ it('resets the password once and rejects the link after it is used or expired', 
 
     $user->refresh();
     $audit = AuditLog::query()->first();
-    $audit_text = json_encode($audit);
-    $leaked = password_reset_contains((string) $audit_text, $fresh_token)
-        || password_reset_contains((string) $audit_text, password_reset_new_password());
+    $audit_text = strtolower((string) json_encode($audit));
+    $leaked = password_reset_contains($audit_text, strtolower($fresh_token))
+        || password_reset_contains($audit_text, strtolower(password_reset_new_password()))
+        || password_reset_contains($audit_text, 'csc/2026/0048')
+        || password_reset_contains($audit_text, 'ada.once@example.com');
 
     expect($this->isAuthenticated())->toBeFalse()
         ->and(Hash::check(password_reset_new_password(), (string) $user->password))->toBeTrue()
@@ -631,6 +633,9 @@ it('rolls back the password and the audit row together', function () {
 
     expect(Hash::check('Portal-pass-1', (string) $student->user->fresh()->password))->toBeTrue()
         ->and(AuditLog::query()->count())->toBe(0);
+
+    password_reset_login($student->user->email, 'Portal-pass-1', '203.0.113.93')
+        ->assertRedirect('/student');
 });
 
 it('sends no-store and no-referrer and leaves Filament password reset off', function () {
