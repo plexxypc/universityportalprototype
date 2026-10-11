@@ -9,7 +9,15 @@ events {
 http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
-    access_log /dev/stdout;
+
+    map $request_uri $portal_log_uri {
+        default $request_uri;
+        ~^/reset-password/.+ /reset-password/[redacted];
+    }
+
+    log_format portal '$remote_addr - $remote_user [$time_local] "$request_method $portal_log_uri $server_protocol" $status $body_bytes_sent';
+
+    access_log /dev/stdout portal;
     sendfile on;
     keepalive_timeout 65;
     server_tokens off;

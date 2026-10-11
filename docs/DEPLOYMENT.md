@@ -183,7 +183,7 @@ Login limits use the socket address (`REMOTE_ADDR`), not `X-Forwarded-For`. On R
 
 What remains uncertain on Render: the platform does not publish a proxy range, and it is not verified from this repository whether Render overwrites or appends `X-Forwarded-For`. Until a production host publishes ranges, do not trust that header. The same gap applies to `audit_logs` when that column is written (TASK-046).
 
-Password reset links put the token in the path (`/reset-password/{token}`). Keep that path out of access logs. The token lets someone set a new password, so a log line that stores the request URI stores the secret. Do not log that path, or replace the token segment before the line is written.
+Password reset links put the token in the path (`/reset-password/{token}`). The container access log replaces that path with `/reset-password/[redacted]`. The masking covers only our container's access log. nginx's error log and the host platform's own request logs, if any, cannot be masked by us. Tokens are single-use and expire in 60 minutes.
 
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Give the health check an initial delay of at least 60 seconds. On the first deploy, a longer delay is safer. **Verify in the provider dashboard** the initial-delay field name.
 
