@@ -3,12 +3,14 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Sunday, 11 October 2026 (Phase 5 wrap-up)
+**Last updated:** Sunday, 11 October 2026 (outbox stall fix, not pushed)
 **Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
 
-Phase 5 is complete on `phase-5-comms` (`c5a6d35`, same as `origin/phase-5-comms`). TASK-046 through TASK-053 are ticked. This wrap-up changes `TASKS.md` and `MEMORY.md` only. Phase 5 is not merged to `main` and is not deployed. `origin/main` is still pull request #8 (`7512863`). Local `main` is still `9aa094d`. Phase 4 remains on `phase-4-auth` (`d1ccc99`). The Auth suite is `tests/Feature/Auth`, and `composer test` runs it once.
+`fix/outbox-stall` was created from `main` at `96f5857` (pull request #12). It is not pushed. `SendOutboxEmail` keeps its unique lock for 180 seconds. A dropped dispatch counts as skipped, and `outbox:send` writes those counts to stderr. `/health` can say `stopped` when the queue worker has not looped for three minutes, `failing` for a failed job in the last hour, and `backlog` when a due queued outbox row has been waiting more than 15 minutes. PHP-FPM allows 2 children. ADR-029 has an amendment dated 11 October 2026. TASKS.md was not ticked.
+
+Phase 5 is complete on `phase-5-comms` (`c5a6d35`, same as `origin/phase-5-comms`). TASK-046 through TASK-053 are ticked. Phase 5 is merged to `main` as pull request #12 (`96f5857`). Phase 4 remains on `phase-4-auth` (`d1ccc99`). The Auth suite is `tests/Feature/Auth`, and `composer test` runs it once.
 
 `AuditService::record()` strips secret keys from `before` and `after`, case-insensitively down to depth 8, and inserts one row. It throws when the caller has no transaction open, and it does not open one. `App\Support\Audit` is the helper other services call. The stored address is `REMOTE_ADDR` only. `X-Forwarded-For` is not read, so on Render that column is still the platform proxy until an explicit proxy allow-list exists. Events written now are a successful login, the single attempt that starts an identifier lockout, a logout, a password change, a forced password change, a password reset, bootstrap creation, and bootstrap re-arm. There is no row per failed attempt, and the typed identifier, the password, and the reset token are not stored. `auth.status_changed` waits for TASK-069 and TASK-137, because those status changes do not exist yet. Role changes and credential re-issues wait for the services that perform them.
 
