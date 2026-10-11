@@ -10,6 +10,8 @@ use App\Services\MailService;
 use App\Support\Mail\MailError;
 use App\Support\Mail\OutboundMessage;
 use Illuminate\Cache\DatabaseStore;
+use Illuminate\Contracts\Encryption\StringEncrypter;
+use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Mail\Events\MessageSending;
@@ -617,4 +619,155 @@ it('pauses sending after three consecutive 401 responses', function () {
         ->and($rows[3]->status)->toBe(EmailStatus::Queued)
         ->and($rows[3]->attempts)->toBe(0)
         ->and(count(Http::recorded()))->toBe(3);
+});
+
+it('pauses sending after three consecutive 403 responses', function () {
+    Queue::fake();
+    mail_use_brevo();
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.brevo.com/v3/smtp/email' => Http::sequence()
+            ->push('', 403)
+            ->push('', 403)
+            ->push('', 403)
+            ->push('', 201),
+    ]);
+
+    $password = 'Forbid-secret-91';
+    $rows = [
+        mail_queue_credentials($password, 'MAT-2026-0031'),
+        mail_queue_credentials('Forbid-secret-92', 'MAT-2026-0032'),
+        mail_queue_credentials('Forbid-secret-93', 'MAT-2026-0033'),
+        mail_queue_credentials('Forbid-secret-94', 'MAT-2026-0034'),
+    ];
+
+    app(MailService::class)->deliver($rows[0]->id);
+    app(MailService::class)->deliver($rows[1]->id);
+    app(MailService::class)->deliver($rows[2]->id);
+    app(MailService::class)->deliver($rows[3]->id);
+    $rows[0]->refresh();
+    $rows[3]->refresh();
+
+    $kept = is_array($rows[0]->secrets) && ($rows[0]->secrets['temporary_password'] ?? null) === $password;
+    $paused = Cache::store('database')->get(MailService::CIRCUIT_PAUSE_KEY) === true;
+    $error_is_fixed = $rows[0]->last_error === MailError::PROVIDER_AUTH;
+
+    expect($paused)->toBeTrue()
+        ->and($rows[0]->status)->toBe(EmailStatus::Queued)
+        ->and($rows[0]->attempts)->toBe(0)
+        ->and($error_is_fixed)->toBeTrue()
+        ->and($kept)->toBeTrue()
+        ->and($rows[3]->status)->toBe(EmailStatus::Queued)
+        ->and($rows[3]->attempts)->toBe(0)
+        ->and(count(Http::recorded()))->toBe(3);
+});
+
+it('does not count 422, 402, 429, or 500 toward the circuit breaker', function () {
+    Queue::fake();
+    mail_use_brevo();
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://api.brevo.com/v3/smtp/email' => Http::sequence()
+            ->push('', 422)
+            ->push('', 402)
+            ->push('', 429)
+            ->push('', 500)
+            ->push('', 403),
+    ]);
+
+    $password = 'Other-secret-91';
+    $rows = [
+        mail_queue_credentials($password, 'MAT-2026-0041'),
+        mail_queue_credentials('Other-secret-92', 'MAT-2026-0042'),
+        mail_queue_credentials('Other-secret-93', 'MAT-2026-0043'),
+        mail_queue_credentials('Other-secret-94', 'MAT-2026-0044'),
+        mail_queue_credentials('Other-secret-95', 'MAT-2026-0045'),
+    ];
+
+    foreach ($rows as $row) {
+        app(MailService::class)->deliver($row->id);
+        $row->refresh();
+    }
+
+    $cleared = $rows[0]->secrets === null;
+    $quota_kept = is_array($rows[1]->secrets) && ($rows[1]->secrets['temporary_password'] ?? null) === 'Other-secret-92';
+    $auth_kept = is_array($rows[4]->secrets) && ($rows[4]->secrets['temporary_password'] ?? null) === 'Other-secret-95';
+    $paused = Cache::store('database')->get(MailService::CIRCUIT_PAUSE_KEY) === true;
+    $streak = (int) Cache::store('database')->get(MailService::CIRCUIT_STREAK_KEY, 0);
+
+    expect($paused)->toBeFalse()
+        ->and($streak)->toBe(1)
+        ->and($rows[0]->status)->toBe(EmailStatus::Failed)
+        ->and($rows[0]->last_error === MailError::PROVIDER_REJECTED)->toBeTrue()
+        ->and($cleared)->toBeTrue()
+        ->and($rows[1]->status)->toBe(EmailStatus::Queued)
+        ->and($rows[1]->attempts)->toBe(0)
+        ->and($rows[1]->last_error === MailError::DAILY_LIMIT)->toBeTrue()
+        ->and($quota_kept)->toBeTrue()
+        ->and($rows[2]->status)->toBe(EmailStatus::Queued)
+        ->and($rows[2]->attempts)->toBe(1)
+        ->and($rows[3]->status)->toBe(EmailStatus::Queued)
+        ->and($rows[3]->attempts)->toBe(1)
+        ->and($rows[4]->status)->toBe(EmailStatus::Queued)
+        ->and($rows[4]->attempts)->toBe(0)
+        ->and($rows[4]->last_error === MailError::PROVIDER_AUTH)->toBeTrue()
+        ->and($auth_kept)->toBeTrue()
+        ->and(count(Http::recorded()))->toBe(5);
+});
+
+it('refuses a production brevo send when the daily limit is unset', function () {
+    Queue::fake();
+    mail_use_brevo();
+    app()['env'] = 'production';
+    config(['mail.daily_limit' => null]);
+    Http::preventStrayRequests();
+    Http::fake();
+
+    $password = 'Cap-secret-91';
+    $row = mail_queue_credentials($password, 'MAT-2026-0081');
+
+    try {
+        app(MailService::class)->deliver($row->id);
+        $row->refresh();
+
+        $kept = is_array($row->secrets) && ($row->secrets['temporary_password'] ?? null) === $password;
+        $called = count(Http::recorded()) > 0;
+        $error_is_fixed = $row->last_error === MailError::MAIL_UNCONFIGURED;
+
+        expect($called)->toBeFalse()
+            ->and($row->status)->toBe(EmailStatus::Queued)
+            ->and($row->attempts)->toBe(0)
+            ->and($error_is_fixed)->toBeTrue()
+            ->and($kept)->toBeTrue();
+    } finally {
+        app()['env'] = 'testing';
+    }
+});
+
+it('fails an unsent secret closed after the application key changes', function () {
+    Queue::fake();
+
+    $password = 'Key-secret-91';
+    $row = mail_queue_credentials($password, 'MAT-2026-0082');
+    $next = new Encrypter(random_bytes(32), 'AES-256-CBC');
+    app()->instance('encrypter', $next);
+    app()->instance(StringEncrypter::class, $next);
+
+    app(MailService::class)->deliver($row->id);
+
+    $stored = DB::table('email_outbox')->where('id', $row->id)->first();
+    $failed = $stored !== null && $stored->status === EmailStatus::Failed->value;
+    $code_is_fixed = $stored !== null && $stored->last_error === MailError::SECRET_UNREADABLE;
+    $cleared = $stored !== null && $stored->secrets === null;
+    $leaked = $stored !== null && (
+        mail_contains((string) $stored->last_error, $password)
+        || mail_contains((string) $stored->body_html, $password)
+        || mail_contains((string) $stored->body_text, $password)
+        || mail_contains((string) $stored->secrets, $password)
+    );
+
+    expect($failed)->toBeTrue()
+        ->and($code_is_fixed)->toBeTrue()
+        ->and($cleared)->toBeTrue()
+        ->and($leaked)->toBeFalse();
 });

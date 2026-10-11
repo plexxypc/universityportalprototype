@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Filament\Staff\Pages\EmailOutboxPage;
+use App\Filament\Staff\Pages\NotificationsPage;
 use App\Http\Middleware\AuthenticateStaffPanel;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -230,6 +232,66 @@ it('points the public allow-list at routes that are registered', function () {
         ->and(collect($uris)->contains(
             fn (string $uri): bool => str_contains($uri, '/livewire.min.js') || str_contains($uri, '/livewire.js'),
         ))->toBeTrue();
+});
+
+it('keeps phase 5 routes public with a reason or behind the right middleware', function () {
+    $public = route_coverage_named_public_routes();
+    $named_public = [
+        'password.request',
+        'password.email',
+        'password.reset',
+        'password.reset.store',
+        'health',
+    ];
+
+    foreach ($named_public as $name) {
+        $reason = $public[$name] ?? '';
+
+        expect(Route::has($name))->toBeTrue()
+            ->and($reason !== '')->toBeTrue();
+    }
+
+    $student = [
+        'student.notifications',
+        'student.notifications.read-all',
+        'student.notifications.read',
+    ];
+
+    foreach ($student as $name) {
+        $route = Route::getRoutes()->getByName($name);
+        $middleware = $route instanceof RegisteredRoute
+            ? array_map(strval(...), $route->gatherMiddleware())
+            : [];
+
+        expect($route)->toBeInstanceOf(RegisteredRoute::class)
+            ->and(array_key_exists($name, $public))->toBeFalse()
+            ->and(route_coverage_has_auth($middleware))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsureActive::class))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsurePasswordChanged::class))->toBeTrue()
+            ->and(in_array(EnsurePortalArea::class.':student', $middleware, true))->toBeTrue();
+    }
+
+    $staff_pages = [
+        NotificationsPage::class,
+        EmailOutboxPage::class,
+    ];
+
+    foreach ($staff_pages as $page) {
+        $name = $page::getRouteName();
+        $route = Route::getRoutes()->getByName($name);
+        $middleware = $route instanceof RegisteredRoute
+            ? array_map(strval(...), $route->gatherMiddleware())
+            : [];
+
+        expect(Route::has($name))->toBeTrue()
+            ->and($route)->toBeInstanceOf(RegisteredRoute::class)
+            ->and(array_key_exists($name, $public))->toBeFalse()
+            ->and(route_coverage_has_auth($middleware))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsureActive::class))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsurePasswordChanged::class))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, AuthenticateStaffPanel::class))->toBeTrue()
+            ->and(in_array(EnsurePortalArea::class.':staff', $middleware, true))->toBeTrue();
+    }
 });
 
 it('keeps the design preview routes inside the local guard', function () {

@@ -10,6 +10,7 @@ use App\Services\MailService;
 use App\Support\Mail\MailError;
 use App\Support\Mail\OutboundMessage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -193,6 +194,52 @@ it('queues one job when the same row is dispatched twice', function () {
     SendOutboxEmail::dispatch($row->id);
 
     expect(Queue::pushed(SendOutboxEmail::class))->toHaveCount(1);
+});
+
+it('counts the daily send limit on the lagos day', function () {
+    Queue::fake();
+    config([
+        'mail.daily_limit' => 1,
+        'mail.outbox_batch' => 25,
+        'app.timezone' => 'Africa/Lagos',
+    ]);
+
+    $previous_zone = date_default_timezone_get();
+    date_default_timezone_set('Africa/Lagos');
+    $now = Carbon::parse('2026-10-11 00:30:00', 'Africa/Lagos');
+    Carbon::setTestNow($now);
+
+    try {
+        EmailOutbox::factory()->sent()->create([
+            'sent_at' => Carbon::parse('2026-10-10 23:45:00', 'Africa/Lagos'),
+        ]);
+        EmailOutbox::factory()->create([
+            'attempts' => 0,
+            'template' => 'announcement',
+        ]);
+
+        $this->artisan('outbox:send')->assertSuccessful();
+        $dispatched_without_today = Queue::pushed(SendOutboxEmail::class)->count();
+
+        Queue::fake();
+        Cache::store('database')->forget(MailService::DAILY_LIMIT_KEY);
+        EmailOutbox::factory()->sent()->create([
+            'sent_at' => Carbon::parse('2026-10-11 00:05:00', 'Africa/Lagos'),
+        ]);
+        EmailOutbox::factory()->create([
+            'attempts' => 0,
+            'template' => 'announcement',
+        ]);
+
+        $this->artisan('outbox:send')->assertSuccessful();
+        $dispatched_on_the_lagos_day = Queue::pushed(SendOutboxEmail::class)->count();
+
+        expect($dispatched_without_today)->toBe(1)
+            ->and($dispatched_on_the_lagos_day)->toBe(0);
+    } finally {
+        Carbon::setTestNow();
+        date_default_timezone_set($previous_zone);
+    }
 });
 
 it('schedules outbox send every minute', function () {
