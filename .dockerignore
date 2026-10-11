@@ -40,3 +40,5 @@ phpstan.neon
 **/*.gif
 **/*.webp
 **/*.svg
+# The running app serves this file at /images/logo-placeholder.svg.
+!public/images/logo-placeholder.svg
