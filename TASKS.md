@@ -128,6 +128,7 @@
   - Phase 3 carry-over: set `users.name` from the student's three name parts.
   - Phase 3 carry-over: default a blank entry session to the current session.
 - [ ] TASK-065 `CredentialService`: temporary password, expiry, welcome email, **resend credentials**
+  - Phase 5 carry-over: the welcome email goes through MailService with the credentials template and login_id (matric number for students, email address for staff). Add a test that runs the REAL student-creation path and sweeps for the temporary password as in SecretHuntTest; resending credentials must supersede older unsent rows; there is currently no command or service that creates a student with a temporary password.
 - [ ] TASK-066 Single "Add student" form
 - [ ] TASK-067 Student list: search, filters (faculty, department, programme, level, status), pagination
 - [ ] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
