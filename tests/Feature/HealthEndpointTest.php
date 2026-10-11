@@ -2,8 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Services\MailService;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+beforeEach(function () {
+    DB::table('jobs')->delete();
+    DB::table('failed_jobs')->delete();
+    Cache::store('database')->forget(MailService::CIRCUIT_PAUSE_KEY);
+});
 
 it('returns the healthy shape and keeps the framework health route', function () {
     config(['portal.version' => 'abc123']);
@@ -15,6 +24,8 @@ it('returns the healthy shape and keeps the framework health route', function ()
         'status' => 'ok',
         'database' => 'ok',
         'heartbeat' => 'ok',
+        'queue' => 'ok',
+        'mail' => 'log',
         'mail_driver' => config('mail.default'),
         'payment_provider' => config('portal.payment_provider'),
         'environment' => 'testing',
@@ -34,6 +45,8 @@ it('returns degraded when the database check fails', function () {
         'status' => 'degraded',
         'database' => 'unreachable',
         'heartbeat' => 'ok',
+        'queue' => 'failing',
+        'mail' => 'log',
         'mail_driver' => config('mail.default'),
         'payment_provider' => config('portal.payment_provider'),
         'environment' => 'testing',
@@ -158,3 +171,114 @@ it('fails a blackholed database within a few seconds without changing the applic
         ->and(config('database.connections.mysql.options'))->toBe($options)
         ->and($response->getContent())->not->toContain('192.0.2.1');
 });
+
+it('reports queue and mail as status words and does not leak a key', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+
+    $secret = 'health-probe-secret-value';
+    config([
+        'mail.default' => $secret,
+        'mail.mailers.brevo.key' => $secret,
+        'mail.from.address' => 'hidden-from@example.test',
+    ]);
+
+    $response = $this->get('/health');
+    $body = (string) $response->getContent();
+    $leaked = str_contains($body, $secret) || str_contains($body, 'hidden-from@example.test');
+
+    expect($leaked)->toBeFalse()
+        ->and($response->json('mail_driver'))->toBe('unconfigured')
+        ->and($response->json('mail'))->toBe('unconfigured')
+        ->and(is_string($response->json('queue')))->toBeTrue();
+});
+
+it('reports a queue backlog without a count', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    health_insert_job(now()->subMinutes(11)->getTimestamp());
+    health_insert_job(now()->subMinutes(11)->getTimestamp());
+
+    $response = $this->get('/health')->assertStatus(503);
+
+    expect($response->json('queue'))->toBe('backlog')
+        ->and($response->json('status'))->toBe('degraded')
+        ->and(array_key_exists('count', $response->json()))->toBeFalse();
+});
+
+it('reports failing jobs ahead of a backlog', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    health_insert_job(now()->subMinutes(11)->getTimestamp());
+    health_insert_failure();
+
+    $response = $this->get('/health')->assertStatus(503);
+
+    expect($response->json('queue'))->toBe('failing');
+});
+
+it('reports mail misconfigured while the circuit breaker is open', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    Cache::store('database')->put(MailService::CIRCUIT_PAUSE_KEY, true, 60);
+
+    $response = $this->get('/health')->assertStatus(503);
+
+    expect($response->json('mail'))->toBe('misconfigured')
+        ->and($response->json('mail_driver'))->toBe('array');
+});
+
+it('reports brevo when the adapter has a host and a key', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    config([
+        'mail.default' => 'brevo',
+        'mail.mailers.brevo.api_url' => 'https://api.brevo.com',
+        'mail.mailers.brevo.key' => 'health-probe-secret-value',
+    ]);
+
+    $response = $this->get('/health');
+    $leaked = str_contains((string) $response->getContent(), 'health-probe-secret-value');
+
+    expect($leaked)->toBeFalse()
+        ->and($response->json('mail'))->toBe('brevo')
+        ->and($response->json('mail_driver'))->toBe('brevo');
+});
+
+it('reports brevo unconfigured when the key is missing', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    config([
+        'mail.default' => 'brevo',
+        'mail.mailers.brevo.api_url' => 'https://api.brevo.com',
+        'mail.mailers.brevo.key' => '',
+    ]);
+
+    $this->get('/health')
+        ->assertStatus(503)
+        ->assertJsonPath('mail', 'unconfigured');
+});
+
+/**
+ * Insert one waiting job. The payload is empty.
+ */
+function health_insert_job(int $available_at): void
+{
+    DB::table('jobs')->insert([
+        'queue' => 'default',
+        'payload' => '{}',
+        'attempts' => 0,
+        'reserved_at' => null,
+        'available_at' => $available_at,
+        'created_at' => now()->getTimestamp(),
+    ]);
+}
+
+/**
+ * Insert one failed job. The payload and exception text are fixed and empty of secrets.
+ */
+function health_insert_failure(): void
+{
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(),
+        'connection' => 'database',
+        'queue' => 'default',
+        'payload' => '{}',
+        'exception' => 'failed',
+        'failed_at' => now(),
+    ]);
+}

@@ -86,15 +86,18 @@
   - Phase 3 carry-over: remove secrets from audit `before` and `after`.
   - Phase 4 carry-over: with X-Forwarded-For untrusted, request()->ip() is the platform proxy on Render, so the audit_logs ip column needs a trustworthy source once the production host publishes proxy ranges.
   - Phase 4 carry-over: audit the creation and re-arm of the bootstrap Super Admin.
-  - Phase 4 carry-over: audit a successful login, a failed login (an unknown identifier has no entity id, and the identifier is not stored), a lockout, a logout, a password change, and a password reset. Do not store the password or the reset token. Role changes, credential re-issues, and student status changes are already required by SECURITY.md.
+  - Phase 4 carry-over: audit a successful login; audit lockout start (once), not each failed attempt, and never store the typed identifier; a logout, a password change, and a password reset. Do not store the password or the reset token. Role changes, credential re-issues, and student status changes are already required by SECURITY.md.
 - [ ] TASK-047 `MailService` with outbox recording, `SendOutboxEmail` job, retry rules; Brevo mailer configuration and `log` mailer
   - Phase 3 carry-over: redact a credentials email when it is sent, when attempts are exhausted, or when credentials are re-issued.
   - Phase 3 carry-over: keep the password out of the subject, `last_error`, and application logs.
 - [ ] TASK-048 Email templates: base layout plus welcome/credentials, password reset, admission, registration confirmation, payment confirmation/receipt, result published, announcement, timetable published
 - [ ] TASK-049 Scheduler: `outbox:send` every minute with batch limit and daily-limit awareness
 - [ ] TASK-050 Staff outbox page (Filament): list, filter, view, retry failed, send queued, **send test email**
+  - retry is unavailable for credentials and reset emails
 - [ ] TASK-051 Password reset flow through `MailService`
   - The response never says whether an account exists. The token is single-use and expires in 60 minutes. A successful reset signs out the user's other sessions.
+  - reset pages send Cache-Control no-store and no-referrer
+  - the reset link carries only the token; the reset page asks the user to enter their email or matric number with the new password, so the email never appears in the URL.
 - [ ] TASK-052 `NotificationService` and bell with unread count (staff and student layouts)
   - Phase 3 carry-over: limit notification `type` to the known types.
 - [ ] TASK-053 Tests: template rendering (no unresolved placeholders), outbox status transitions, provider failure and retry, redaction of temporary passwords
@@ -125,11 +128,13 @@
   - Phase 3 carry-over: set `users.name` from the student's three name parts.
   - Phase 3 carry-over: default a blank entry session to the current session.
 - [ ] TASK-065 `CredentialService`: temporary password, expiry, welcome email, **resend credentials**
+  - Phase 5 carry-over: the welcome email goes through MailService with the credentials template and login_id (matric number for students, email address for staff). Add a test that runs the REAL student-creation path and sweeps for the temporary password as in SecretHuntTest; resending credentials must supersede older unsent rows; there is currently no command or service that creates a student with a temporary password.
 - [ ] TASK-066 Single "Add student" form
 - [ ] TASK-067 Student list: search, filters (faculty, department, programme, level, status), pagination
 - [ ] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
 - [ ] TASK-069 Edit student; suspend/reactivate; level promotion (single and bulk)
   - Phase 4 carry-over: suspending or reactivating a student must also update `users.status` (login checks the user, not the student row).
+  - Phase 5 carry-over: audit the users.status change through the audit helper in the same transaction (action auth.status_changed).
 - [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
   - Phase 4 carry-over: authorised document download uses the Document policy.
@@ -244,6 +249,7 @@
 - [ ] TASK-136 Lecturer–course assignments per semester
 - [ ] TASK-137 Activate/deactivate staff
   - Phase 3 carry-over: deactivating a staff profile revokes that user's sessions.
+  - Phase 5 carry-over: audit the users.status change through the audit helper in the same transaction (action auth.status_changed).
 - [ ] TASK-138 Staff tests
 
 **GATE (Milestone B):** Journeys 5 and 6 pass on the deployed URL.
@@ -252,6 +258,7 @@
 
 - [ ] TASK-139 `AnnouncementService` with audience targeting (all, faculty, department, programme, level)
   - Phase 3 carry-over: publishing an announcement creates the notification and, when `send_email` is true, the outbox row.
+  - Phase 5 carry-over: announcements to many students need a bulk createForMany notification method.
 - [ ] TASK-140 Compose and list UI with optional email
 - [ ] TASK-141 Student announcement display and notifications
 - [ ] TASK-142 Announcement tests (targeting, scoped authors)
@@ -311,6 +318,7 @@ Phase 3 carry-over: database-level append-only protection for `audit_logs` waits
   - Phase 3 migrations have run on the live Aiven database. The first Super Admin exists and the bootstrap variables were removed. The demo seeder is Phase 18 and has not run.
 - [ ] TASK-173 Configure the payment provider's callback (and notification, if used) URLs to the deployed domain, or confirm `PAYMENT_PROVIDER=demo`
 - [ ] TASK-174 Verify Brevo sender and send a test email from Settings
+  - Phase 5 carry-over: re-verify the provider error mapping (402, 429, 5xx) against the chosen provider's documentation.
 - [ ] TASK-175 Run the TEST_PLAN smoke test on the deployed URL
 - [ ] TASK-176 Confirm the Aiven free service is running (not powered off) and the app is awake the day before and the morning of the demo
 - [ ] TASK-177 Rehearse the demo script twice; capture screenshots/video as a fallback

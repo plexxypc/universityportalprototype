@@ -8,8 +8,11 @@ use App\Enums\Role;
 use App\Enums\UserStatus;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\Audit;
+use Illuminate\Cache\DatabaseStore;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -23,6 +26,11 @@ use Illuminate\Support\Str;
  */
 final class AuthService
 {
+    /**
+     * Remember the audit helper. It does not open a transaction.
+     */
+    public function __construct(private readonly Audit $audits) {}
+
     /**
      * Shown for every failed sign-in, including a lockout. The text does not say why.
      */
@@ -64,6 +72,7 @@ final class AuthService
         if ($locked || ! $user instanceof User || ! $password_matches || ! $this->maySignIn($user)) {
             if (! $locked) {
                 $this->recordFailure($normalised, $address);
+                $this->auditIdentifierLockout($request, $user, $normalised);
             }
 
             return LoginResult::failed();
@@ -74,12 +83,30 @@ final class AuthService
         if ($destination === null) {
             $this->discardSignedInSession($request, $user);
             $this->recordFailure($normalised, $address);
+            $this->auditIdentifierLockout($request, $user, $normalised);
 
             return LoginResult::failed();
         }
 
+        $previous_login = $user->last_login_at?->toDateTimeString();
+        $user_id = $user->id;
+
+        DB::transaction(function () use ($request, $user, $previous_login, $user_id): void {
+            $this->completeSignIn($request, $user);
+            $user->refresh();
+
+            $this->audits->record(
+                $user_id,
+                AuditService::ACTION_LOGIN,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                ['last_login_at' => $previous_login],
+                ['last_login_at' => $user->last_login_at?->toDateTimeString()],
+                $this->audits->ipFromRequest($request),
+            );
+        });
+
         $this->clearFailures($normalised, $address);
-        $this->completeSignIn($request, $user);
 
         return LoginResult::succeeded($destination);
     }
@@ -106,16 +133,41 @@ final class AuthService
     }
 
     /**
-     * End this session.
+     * End this session and record auth.logout when a user is signed in.
      *
      * The same method serves the portal logout and a middleware sign-out.
      * It does not record why the session ended.
      */
     public function logout(Request $request): void
     {
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return;
+        }
+
+        $user_id = $user->id;
+        $ip = $this->audits->ipFromRequest($request);
+
+        DB::transaction(function () use ($request, $user_id, $ip): void {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            $this->audits->record(
+                $user_id,
+                AuditService::ACTION_LOGOUT,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                null,
+                null,
+                $ip,
+            );
+        });
     }
 
     /**
@@ -141,8 +193,9 @@ final class AuthService
      *
      * An identifier that contains "@" is an email. Anything else is a
      * matric number: whitespace is removed and letters are uppercased.
+     * Password reset uses this same method.
      */
-    private function normaliseIdentifier(string $identifier): string
+    public function normaliseIdentifier(string $identifier): string
     {
         $trimmed = trim($identifier);
 
@@ -159,8 +212,9 @@ final class AuthService
      * Resolve the account for this identifier.
      *
      * Email looks up users. A matric number looks up students and uses that user.
+     * Password reset uses this same method.
      */
-    private function findUser(string $normalised): ?User
+    public function findUser(string $normalised): ?User
     {
         if (str_contains($normalised, '@')) {
             return User::query()
@@ -239,9 +293,37 @@ final class AuthService
     }
 
     /**
+     * Spend one bcrypt check when there is no account hash to compare.
+     *
+     * Password reset calls this for a missing or inactive account so that
+     * path does the same hash work as a real check.
+     */
+    public function checkDummyPassword(): void
+    {
+        $this->passwordMatches(null, 'portal-login-dummy');
+    }
+
+    /**
+     * Clear the sign-in counters for this account.
+     *
+     * Lockout is not a column. It is the login rate-limiter keys for the
+     * normalised email and, when present, the matric number. Pair keys
+     * include the socket address, so every stored pair for those identifiers
+     * is removed from the database cache. Unknown identifiers are not touched.
+     */
+    public function clearSignInLockout(User $user, string $address): void
+    {
+        foreach ($this->signInIdentifiers($user) as $normalised) {
+            RateLimiter::clear($this->identifierKey($normalised));
+            RateLimiter::clear($this->pairKey($normalised, $address));
+            $this->clearStoredPairKeys($normalised);
+        }
+    }
+
+    /**
      * Socket address. A client-supplied X-Forwarded-For is ignored.
      */
-    private function clientAddress(Request $request): string
+    public function clientAddress(Request $request): string
     {
         $address = $request->server->get('REMOTE_ADDR');
 
@@ -258,6 +340,38 @@ final class AuthService
     {
         return RateLimiter::tooManyAttempts($this->pairKey($normalised, $address), self::PAIR_MAX_ATTEMPTS)
             || RateLimiter::tooManyAttempts($this->identifierKey($normalised), self::IDENTIFIER_MAX_ATTEMPTS);
+    }
+
+    /**
+     * Write auth.lockout once, on the failure that reaches the identifier cap.
+     *
+     * An identifier that matches no account writes nothing. The pair limit
+     * writes nothing. The typed identifier and its HMAC are not stored.
+     */
+    private function auditIdentifierLockout(Request $request, ?User $user, string $normalised): void
+    {
+        if (! $user instanceof User) {
+            return;
+        }
+
+        if (RateLimiter::attempts($this->identifierKey($normalised)) !== self::IDENTIFIER_MAX_ATTEMPTS) {
+            return;
+        }
+
+        $user_id = $user->id;
+        $ip = $this->audits->ipFromRequest($request);
+
+        DB::transaction(function () use ($user_id, $ip): void {
+            $this->audits->record(
+                null,
+                AuditService::ACTION_LOCKOUT,
+                AuditService::ENTITY_USERS,
+                $user_id,
+                null,
+                null,
+                $ip,
+            );
+        });
     }
 
     /**
@@ -297,9 +411,48 @@ final class AuthService
     /**
      * HMAC of the normalised identifier, keyed with the application key.
      */
-    private function identifierHmac(string $normalised): string
+    public function identifierHmac(string $normalised): string
     {
         return hash_hmac('sha256', $normalised, (string) config('app.key'));
+    }
+
+    /**
+     * Email and matric number, normalised the same way as login.
+     *
+     * @return list<string>
+     */
+    private function signInIdentifiers(User $user): array
+    {
+        $identifiers = [$this->normaliseIdentifier($user->email)];
+        $user->loadMissing('student');
+        $matric = $user->student?->matric_no;
+
+        if (is_string($matric) && $matric !== '') {
+            $identifiers[] = $this->normaliseIdentifier($matric);
+        }
+
+        return array_values(array_unique($identifiers));
+    }
+
+    /**
+     * Remove every address-specific sign-in counter for this identifier.
+     *
+     * The database cache is the production store. The key is the login pair
+     * prefix plus the HMAC. Other accounts use a different HMAC.
+     */
+    private function clearStoredPairKeys(string $normalised): void
+    {
+        $store = Cache::store()->getStore();
+
+        if (! $store instanceof DatabaseStore) {
+            return;
+        }
+
+        $prefix = $store->getPrefix().'login-pair:'.$this->identifierHmac($normalised).':';
+
+        DB::table((string) config('cache.stores.database.table', 'cache'))
+            ->where('key', 'like', $prefix.'%')
+            ->delete();
     }
 
     /**

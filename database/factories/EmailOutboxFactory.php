@@ -31,6 +31,7 @@ class EmailOutboxFactory extends Factory
             'subject' => 'A notice from the portal',
             'body_html' => '<p>Notice</p>',
             'body_text' => 'Notice',
+            'secrets' => null,
             'status' => EmailStatus::Queued,
             'attempts' => 0,
             'last_error' => null,

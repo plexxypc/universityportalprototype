@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
+use App\Filament\Staff\Pages\NotificationsPage;
 use App\Filament\StaffPanelTheme;
 use App\Http\Middleware\AuthenticateStaffPanel;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
+use App\Models\User;
+use App\Services\NotificationService;
 use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -90,6 +93,21 @@ class StaffPanelProvider extends PanelProvider
                 EnsurePortalArea::class.':staff',
                 AuthenticateStaffPanel::class,
             ], isPersistent: true)
+            ->renderHook(
+                PanelsRenderHook::USER_MENU_BEFORE,
+                function (): string {
+                    $user = auth()->user();
+
+                    if (! $user instanceof User) {
+                        return '';
+                    }
+
+                    return view('filament.staff.notification-bell', [
+                        'unread_count' => app(NotificationService::class)->unreadCount($user),
+                        'href' => NotificationsPage::getUrl(),
+                    ])->render();
+                },
+            )
             ->renderHook(
                 PanelsRenderHook::BODY_END,
                 fn (): string => filled(session('toast'))

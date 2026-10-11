@@ -40,7 +40,10 @@ Leave `DB_URL` unset. Set the `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`
 | `MAIL_MAILER` | Mail transport. Keep `log` until Brevo is configured | `log` | No |
 | `MAIL_FROM_ADDRESS` | From address stored for later mail | `hello@example.com` | No |
 | `MAIL_FROM_NAME` | From name stored for later mail | `University Portal` | No |
-| `BREVO_API_KEY` | Brevo API key. Leave empty while `MAIL_MAILER=log` | *(empty)* | Yes |
+| `MAIL_API_URL` | HTTPS host for the mail adapter. The app adds `/v3/smtp/email`. Not a secret | `https://api.brevo.com` | No |
+| `MAIL_API_KEY` | Mail API key. Leave empty while `MAIL_MAILER=log` | *(empty)* | Yes |
+| `MAIL_API_TIMEOUT` | HTTP timeout in seconds for the mail adapter | `10` | No |
+| `MAIL_DAILY_LIMIT` | Daily send cap. `outbox:send` enforces it. Production refuses a real-adapter send when this is unset | `250` | No |
 | `PAYMENT_PROVIDER` | Active payment adapter. Keep the demo gateway for this deploy | `demo` | No |
 | `REMITA_ENV` | Remita environment. Stay on the demo environment | `demo` | No |
 | `REMITA_MERCHANT_ID` | Remita merchant id. Leave empty while the provider is `demo` | *(empty)* | Yes |
@@ -180,6 +183,8 @@ Login limits use the socket address (`REMOTE_ADDR`), not `X-Forwarded-For`. On R
 
 What remains uncertain on Render: the platform does not publish a proxy range, and it is not verified from this repository whether Render overwrites or appends `X-Forwarded-For`. Until a production host publishes ranges, do not trust that header. The same gap applies to `audit_logs` when that column is written (TASK-046).
 
+Password reset links put the token in the path (`/reset-password/{token}`). The container access log replaces that path with `/reset-password/[redacted]`. The masking covers only our container's access log. nginx's error log and the host platform's own request logs, if any, cannot be masked by us. Tokens are single-use and expire in 60 minutes.
+
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Give the health check an initial delay of at least 60 seconds. On the first deploy, a longer delay is safer. **Verify in the provider dashboard** the initial-delay field name.
 
 **Instance size.** This container runs nginx, PHP-FPM (up to a few 128 MB workers), a queue worker limited to 96 MB, and the scheduler in one instance. A 512 MiB plan is too small for that set and is likely to be killed. For this health-page demo, choose the smallest listed plan that has at least 1 GiB of memory. **Verify in the provider dashboard** the current size names and prices. Production sizing is a separate choice and is described in `SYSTEM_OVERVIEW.md`. App Platform prices are not the Droplet prices in that document.
@@ -194,7 +199,7 @@ APP_URL=https://pending.example.com
 
 That placeholder lets the container boot before App Platform has shown the real hostname. Email links and the secure session cookie use whatever `APP_URL` was at startup, so the placeholder is only for that first boot. When the dashboard shows the `ondigitalocean.app` hostname (**verify in the provider dashboard** where it appears), set `APP_URL` to `https://` plus that hostname and redeploy. The new deploy rebuilds the config cache with the real origin. A deploy with no `APP_URL` at all logs `APP_URL is missing` and the health check fails.
 
-**`RUN_MIGRATIONS`.** Set it to `true` for the first deploy so the entrypoint runs `php artisan migrate --force` once. When that deploy is healthy and the log shows the migrations finished, set `RUN_MIGRATIONS` to `false` and redeploy. Later restarts then skip migrate. When a future release adds migrations, set it back to `true` for one deploy, confirm they applied, then set it to `false` again.
+**`RUN_MIGRATIONS`.** Set it to `true` for the first deploy so the entrypoint runs `php artisan migrate --force` once. When that deploy is healthy and the log shows the migrations finished, set `RUN_MIGRATIONS` to `false` and redeploy. Later restarts then skip migrate. When a future release adds migrations, set it back to `true` for one deploy, confirm they applied, then set it to `false` again. The live database needs `RUN_MIGRATIONS=true` once after merging a branch with new migrations.
 
 Deploy one instance. A second instance would run a second queue worker and a second scheduler.
 
@@ -220,7 +225,7 @@ If Aiven’s default is already “allow all”, leave it that way for the demo 
 - [ ] The instance price was read in the create form, and a spending alert was set, before deploy.
 - [ ] `APP_URL` is `https://pending.example.com` for the first deploy.
 - [ ] `SESSION_DRIVER=database`, `SESSION_SECURE_COOKIE=true`, `CACHE_STORE=database`, `QUEUE_CONNECTION=database`.
-- [ ] `MAIL_MAILER=log`, `PAYMENT_PROVIDER=demo`, `FILESYSTEM_DISK=local`. Remita, Interswitch, Brevo, and Spaces secrets are empty.
+- [ ] `MAIL_MAILER=log`, `MAIL_API_URL=https://api.brevo.com`, `PAYMENT_PROVIDER=demo`, `FILESYSTEM_DISK=local`. `MAIL_API_KEY`, Remita, Interswitch, and Spaces secrets are empty.
 - [ ] `RUN_MIGRATIONS=true` for this first deploy only.
 - [ ] The web service uses the repository Dockerfile at `docker/Dockerfile`, HTTP port `8080`, health check path `/up`, and one instance with at least 1 GiB of memory.
 - [ ] The deploy finishes, the runtime log contains `Database CA certificate written`, and `https://<your-app>/up` returns HTTP 200.
@@ -258,7 +263,7 @@ Migrations run before nginx starts. A database error during `RUN_MIGRATIONS=true
 - The initial delay is shorter than startup. Config cache plus the first migration can take longer than a few seconds. Raise the delay (**verify in the provider dashboard**) and redeploy.
 - The instance is out of memory. A 512 MiB plan is too small for this container. Move to a plan with at least 1 GiB and redeploy.
 - The build failed, so no container is listening. Read the build log. The Dockerfile path must be `docker/Dockerfile` and the source directory must be the repository root.
-- `/health` returns 503 when the database probe fails or the scheduler heartbeat is older than two minutes. That is a degraded status for you to read. Keep the platform health check on `/up`.
+- `/health` is for monitoring. It returns HTTP 503 when the snapshot is degraded: the database probe fails, the scheduler heartbeat is older than two minutes, the queue is `backlog` or `failing`, or mail is `unconfigured` or `misconfigured`. That status is for you to read. Keep the platform health check on `/up`.
 
 ### Queue worker not running
 
@@ -268,7 +273,7 @@ The worker is a supervisord program in this same container. It runs:
 
 There is no separate App Platform worker component to create. A second component would be a second copy of the whole stack.
 
-`/health` does not prove the worker is consuming jobs. The heartbeat only shows that `portal:heartbeat` ran (once at container start, then every minute from the scheduler).
+`/health` reports `queue` as `ok`, `backlog`, or `failing`, and `mail` as `log`, `brevo`, `unconfigured`, or `misconfigured`. It does not include counts. The heartbeat still only shows that `portal:heartbeat` ran (once at container start, then every minute from the scheduler). `backlog` means a queued job has been waiting more than 10 minutes. `failing` means a row was written to `failed_jobs` in the last 24 hours.
 
 In the runtime logs, confirm a `queue:work` process started and is still running. If the container is restarting, the worker restarts with it and will exit again until the boot error is fixed. `QUEUE_CONNECTION` must be `database`. The `jobs` table is created by the first migration, so a boot with `RUN_MIGRATIONS=false` against an empty database leaves the worker unable to query that table. Set `RUN_MIGRATIONS=true`, deploy once, then set it back to `false`.
 
@@ -331,11 +336,11 @@ These rows differ from App Platform:
 
 Changing a variable requires a new deploy. The entrypoint caches config at startup.
 
-If the blueprint form requires a value for an unused secret (`BREVO_API_KEY`, the Remita and Interswitch secrets, the Spaces keys, `DEMO_SEED_PASSWORD`), enter a single hyphen. Those features stay on the demo settings in section 1, so the hyphen is not used. Leave the field empty when the form allows it.
+If the blueprint form requires a value for an unused secret (`MAIL_API_KEY`, the Remita and Interswitch secrets, the Spaces keys, `DEMO_SEED_PASSWORD`), enter a single hyphen. Those features stay on the demo settings in section 1, so the hyphen is not used. Leave the field empty when the form allows it. `MAIL_API_URL` is not a secret; set it to `https://api.brevo.com`.
 
 ### Health check
 
-Set the health check path to `/up`. Render sends `GET /up` and expects a successful response. `/up` answers when PHP is up. `/health` can return HTTP 503 while MySQL is down, so a database blip would restart the instance. After deploy, open `/health` yourself.
+Set the health check path to `/up`. `render.yaml` sets `healthCheckPath: /up` and that value must stay on `/up`. Render sends `GET /up` and expects a successful response. `/up` answers when PHP is up. `/health` is for monitoring and returns HTTP 503 when the snapshot is degraded (database, heartbeat, queue backlog or failing jobs, or mail unconfigured or misconfigured), so a database blip would restart the instance if the platform checked `/health`. After deploy, open `/health` yourself.
 
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Render waits for the health check during the deploy (the platform limit is on the order of 15 minutes). **Verify in the provider dashboard** whether an initial-delay field is shown. If it is, set it to at least 60 seconds.
 
@@ -429,3 +434,40 @@ Super Admin bootstrap failed: tables_missing exit=1. run migrations first.
 The variable name must be exactly `RUN_MIGRATIONS`.
 
 When a shell is available, `php artisan create-super-admin` asks for the name, email, and a hidden password instead of reading those variables. It still refuses to create a second Super Admin.
+
+## 11. Live email test
+
+Do this only after `/health` shows the database is ok and you have a provider account. No provider is confirmed yet. Brevo registration was blocked. The HTTPS adapter is named Brevo so the host and path have a place to go. A different provider is a second class on the same interface. Do not put a key, a password, or a token in this file or in Git.
+
+Set these on the host. `MAIL_API_URL` is a normal variable. `MAIL_API_KEY` is the only mail value that is a dashboard secret.
+
+| Variable | What to set | Secret |
+|---|---|---|
+| `MAIL_MAILER` | `brevo` for a real send. Leave `log` until the provider is confirmed | No |
+| `MAIL_FROM_ADDRESS` | The address the provider will accept as the sender | No |
+| `MAIL_FROM_NAME` | The name shown on the message | No |
+| `MAIL_API_URL` | The provider's HTTPS host. The app adds the provider path | No |
+| `MAIL_API_KEY` | The provider API key, entered in the dashboard | Yes |
+| `MAIL_API_TIMEOUT` | Seconds to wait for the provider | No |
+| `MAIL_DAILY_LIMIT` | The cap for one Africa/Lagos day. A production send through the real adapter refuses to run when this is unset | No |
+
+Before the first real send on a database that does not already have the `email_outbox.secrets` column, set `RUN_MIGRATIONS=true` for one deploy so that migration runs, confirm it finished, then set `RUN_MIGRATIONS` back to `false` and redeploy.
+
+The reset link puts the token in the path. The container access log replaces that path with `/reset-password/[redacted]`. Keep the platform health check on `/up`. `/health` is for you to read. It returns HTTP 503 when the snapshot is degraded, and it does not include a key, a count, or an error from the provider.
+
+At the live test, re-check the provider's own documentation for HTTP 402, 429, and 5xx. The app maps 402 to a quota hold, and 429 and 5xx to a retry. That mapping was written before a provider account existed.
+
+`superadmin@example.com` cannot receive mail. An example.com address is not a mailbox. Before the test, the signed-in Super Admin needs an address the provider can deliver to. Until that works, a Super Admin who has forgotten the password cannot reset it on the live site. Production refuses the reset template on the log mailer, and the bootstrap does not create or re-arm an admin once a Super Admin exists and has changed the forced password. A 15-minute identifier lockout expires by itself and is not this case. None of the options below is built:
+
+- **Env-gated one-time reset.** A dedicated flag plus a bcrypt hash, both set in the host, re-arms the existing bootstrap account for one boot even after the forced change, writes an audit row, prints neither the hash nor the address, and does nothing on the next boot unless the owner sets the flag again. The owner deletes both variables after that boot. A flag left in place resets the admin on every deploy. The hash sits in the host dashboard. A flag that can target any user is a backdoor, so the command has to stay limited to the existing bootstrap account. This is the recorded recommendation. It is not built.
+- **A second Super Admin, kept as a spare.** The spare's identifier is not the locked one, so a 15-minute lockout of the first account does not freeze the spare. Two accounts have full access, and the spare password has to be stored offline. Today's bootstrap refuses a second Super Admin. A signed-in spare cannot replace the other account's password until user management exists.
+- **Wait for a provider.** No new backdoor. The only admin who has forgotten the password cannot open the staff panel until mail works or someone uses a shell.
+
+Steps, with no values:
+
+1. Confirm the provider and set `MAIL_MAILER`, `MAIL_API_URL`, `MAIL_API_KEY`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_API_TIMEOUT`, and `MAIL_DAILY_LIMIT` in the host dashboard.
+2. Set `RUN_MIGRATIONS=true` for the one deploy that adds `email_outbox.secrets`, then set it back to `false`.
+3. Give the Super Admin a real mailbox. `superadmin@example.com` will not receive the test.
+4. Sign in, open the email outbox, and send the test email to that signed-in admin only.
+5. Read `/health` yourself. Leave the platform probe on `/up`.
+6. If a reset link is used, confirm the container access log shows `/reset-password/[redacted]` and not the token.

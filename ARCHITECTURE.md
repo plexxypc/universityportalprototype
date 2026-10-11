@@ -91,6 +91,7 @@ university-portal/
 │   ├── Support/
 │   │   ├── Money.php  Dates.php  CsvSafe.php
 │   │   ├── Rbac/                  # Permissions map, Scopes
+│   │   ├── Mail/                  # MailTransport, BrevoTransport (HTTPS), ProviderStatus
 │   │   ├── Payments/              # Contracts/PaymentGateway, RemitaGateway, InterswitchGateway, DemoGateway
 │   │   └── Import/                # CsvParser, XlsxParser, GoogleSheetSource, RowValidator
 │   └── Providers/
@@ -233,12 +234,28 @@ Lecturer enters/uploads component scores → results rows (draft)
 ```
 
 ### 8.4 Email
-```
-Service → MailService::send(template, to, data)
-  → render HTML/text → insert email_outbox (queued) → dispatch SendOutboxEmail job
-  → job sends via Laravel Mail (Brevo) → status sent/failed, attempts, error
-  → scheduler runs `outbox:send` every minute for queued/failed (with retry limits); admin "retry" button as backup
-```
+
+`MailService` is the only sender. Secret templates (credentials and password reset) store a placeholder body and an encrypted `secrets` payload. Other templates store the escaped body. `SendOutboxEmail` is dispatched after commit and carries only the outbox id.
+
+The job is the only sender. It holds `Cache::lock('outbox-send:{id}')` on the database cache store across the provider call and the status update. The message is rendered in memory at send time. `outbox:send` runs every minute and only dispatches due rows. A second dispatch of the same id is dropped while the first job is queued.
+
+`MAIL_MAILER` selects the driver. `log` and `array` use Laravel's transports. `brevo` uses `App\Support\Mail\BrevoTransport` over HTTPS. The host, key, and timeout come from `MAIL_API_URL`, `MAIL_API_KEY`, and `MAIL_API_TIMEOUT`. Any other mailer fails closed. Brevo is the first adapter, not a confirmed vendor.
+
+Attempts stop at 5. Backoff from `updated_at` is 1 minute, 5 minutes, 15 minutes, then 1 hour. HTTP 400 and 422 fail that row at once, clear its secret, and do not pause sending. HTTP 401 and 403 leave the row `Queued`, do not increment `attempts`, do not clear `secrets`, and record `provider_auth`. After 3 of those with no success between them, sending pauses for 15 minutes. HTTP 402 does not count toward those 3. Timeout, connection failure, 408, 429, and 5xx increment `attempts`. `secrets` is cleared after a successful send, on a permanent failure, when attempts are exhausted, and when a re-issue supersedes the row. A `Sent` row sets `redacted_at`. A `Failed` row leaves `redacted_at` null.
+
+`MAIL_DAILY_LIMIT` has no PHP default. When it is unset, the cap is off for the log mailer and for tests. A production send through the real adapter refuses to run when it is unset. The count is rows marked `Sent` whose `sent_at` falls on the current Africa/Lagos day.
+
+In production, a credentials or password-reset template is never handed to the `log` mailer. The row is marked `Failed` with `secret_template_refused`, and its secret is cleared. An unexpected transport exception is stored as `outbox_send_failed` and is not rethrown, so the exception text is not written to `failed_jobs` or the log. An `APP_KEY` change makes an unsent secret unreadable; that row fails closed with `secret_unreadable`.
+
+The outbox page is Super Admin only. Credentials and reset bodies are not shown, and retry is unavailable for those two templates.
+
+Password reset accepts an email or a matric number and always answers with one generic sentence. Only an Active user is sent a link. The link carries the token and not the email. The form asks for the email or matric number with the new password. The token is single-use and expires in 60 minutes. A successful reset clears `must_change_password` and `temp_password_expires_at`, deletes every session, and rotates `remember_token`. The container access log masks `/reset-password/{token}` as `/reset-password/[redacted]`.
+
+In-app notifications use `NotificationService` and `App\Enums\NotificationType`: `admission`, `registration_confirmed`, `payment_confirmed`, `result_published`, `announcement`, and `timetable_published`. Credentials and password reset are email only. The unread count is rendered with the page. There is no polling.
+
+`/health` reports `queue` as `ok`, `backlog`, or `failing`, and `mail` as `log`, `brevo`, `unconfigured`, or `misconfigured`. The body has no counts and no secrets. The platform probe stays on `/up`.
+
+`AuditService::record()` strips secret keys from `before` and `after`, requires an open transaction, and does not open one. `ip` stores `REMOTE_ADDR` only.
 
 ## 9. Environments and deployment
 
@@ -258,7 +275,7 @@ Service → MailService::send(template, to, data)
 3. Set environment variables (below) in the host's dashboard.
 4. Run migrations, `create-super-admin` and the seeder (one-off command or `RUN_MIGRATIONS=true`).
 5. Set the payment provider's callback (and notification, if offered) URLs to the deployed domain, or keep `PAYMENT_PROVIDER=demo` for the demo.
-6. Verify the Brevo sender; send a test email from Settings.
+6. Send a test email from the Super Admin outbox page once a mail provider is confirmed. The provider is not chosen yet.
 7. Run the smoke test in TEST_PLAN.md.
 
 ### Environment variables
@@ -267,7 +284,7 @@ APP_NAME= APP_ENV= APP_KEY= APP_URL= APP_DEBUG=false
 DB_CONNECTION=mysql DB_HOST= DB_PORT= DB_DATABASE= DB_USERNAME= DB_PASSWORD= DB_SSL_CA=
 SESSION_DRIVER=database  CACHE_STORE=database  QUEUE_CONNECTION=database
 MAIL_MAILER=brevo|log  MAIL_FROM_ADDRESS=  MAIL_FROM_NAME=
-BREVO_API_KEY=            # or SMTP host/user/password if using the SMTP relay
+MAIL_API_URL=https://api.brevo.com  MAIL_API_KEY=  MAIL_API_TIMEOUT=10  MAIL_DAILY_LIMIT=250
 PAYMENT_PROVIDER=demo|remita|interswitch
 REMITA_ENV=demo|live  REMITA_MERCHANT_ID=  REMITA_SERVICE_TYPE_ID=  REMITA_API_KEY=
 INTERSWITCH_MODE=TEST|LIVE  INTERSWITCH_MERCHANT_CODE=  INTERSWITCH_PAY_ITEM_ID=  INTERSWITCH_CLIENT_ID=  INTERSWITCH_SECRET=
@@ -275,6 +292,8 @@ FILESYSTEM_DISK=local|s3  (+ S3/Spaces keys in production)
 DEMO_SEED_PASSWORD=       # used only by the seeder
 ```
 `.env` is never committed. `config/portal.php` validates required values on boot in non-local environments.
+
+`MAIL_API_URL` is not a secret. `MAIL_API_KEY` is. In production, credentials and password-reset mail are refused on the `log` mailer, and a Brevo send is refused when `MAIL_DAILY_LIMIT` is unset. The daily count uses the Africa/Lagos day. nginx replaces `/reset-password/{token}` with `/reset-password/[redacted]` in the container access log. `/health` is for monitoring. The platform probe stays on `/up`.
 
 ## 10. Database overview
 

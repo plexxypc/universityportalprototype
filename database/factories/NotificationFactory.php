@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\NotificationType;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -16,7 +17,7 @@ class NotificationFactory extends Factory
     /**
      * Define the model's default state.
      *
-     * type is an open string. Known types are enforced in a service later.
+     * type is one of the allowed notification types.
      *
      * @return array<string, mixed>
      */
@@ -24,8 +25,11 @@ class NotificationFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
-            'type' => 'announcement.published',
-            'data' => ['title' => 'Semester notice'],
+            'type' => NotificationType::Announcement,
+            'data' => [
+                'title' => 'Semester notice',
+                'message' => 'A short notice',
+            ],
             'read_at' => null,
         ];
     }

@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Filament\Staff\Pages\EmailOutboxPage;
+use App\Filament\Staff\Pages\NotificationsPage;
 use App\Http\Middleware\AuthenticateStaffPanel;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -23,6 +25,10 @@ function route_coverage_named_public_routes(): array
     return [
         'login' => 'Portal login page.',
         'login.store' => 'Portal login action.',
+        'password.request' => 'Forgot-password form. The response does not reveal whether an account exists.',
+        'password.email' => 'Forgot-password action. Lookup and email run after the response.',
+        'password.reset' => 'Reset form. The link carries only the token.',
+        'password.reset.store' => 'Reset action. A success sends the person to the login page.',
         'staff.login' => 'The staff panel login redirects to the portal login.',
         'health' => 'Health probe. It does not start a session.',
         'webhooks.ping' => 'Provider notification ping. It sits outside the auth groups.',
@@ -228,9 +234,70 @@ it('points the public allow-list at routes that are registered', function () {
         ))->toBeTrue();
 });
 
+it('keeps phase 5 routes public with a reason or behind the right middleware', function () {
+    $public = route_coverage_named_public_routes();
+    $named_public = [
+        'password.request',
+        'password.email',
+        'password.reset',
+        'password.reset.store',
+        'health',
+    ];
+
+    foreach ($named_public as $name) {
+        $reason = $public[$name] ?? '';
+
+        expect(Route::has($name))->toBeTrue()
+            ->and($reason !== '')->toBeTrue();
+    }
+
+    $student = [
+        'student.notifications',
+        'student.notifications.read-all',
+        'student.notifications.read',
+    ];
+
+    foreach ($student as $name) {
+        $route = Route::getRoutes()->getByName($name);
+        $middleware = $route instanceof RegisteredRoute
+            ? array_map(strval(...), $route->gatherMiddleware())
+            : [];
+
+        expect($route)->toBeInstanceOf(RegisteredRoute::class)
+            ->and(array_key_exists($name, $public))->toBeFalse()
+            ->and(route_coverage_has_auth($middleware))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsureActive::class))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsurePasswordChanged::class))->toBeTrue()
+            ->and(in_array(EnsurePortalArea::class.':student', $middleware, true))->toBeTrue();
+    }
+
+    $staff_pages = [
+        NotificationsPage::class,
+        EmailOutboxPage::class,
+    ];
+
+    foreach ($staff_pages as $page) {
+        $name = $page::getRouteName();
+        $route = Route::getRoutes()->getByName($name);
+        $middleware = $route instanceof RegisteredRoute
+            ? array_map(strval(...), $route->gatherMiddleware())
+            : [];
+
+        expect(Route::has($name))->toBeTrue()
+            ->and($route)->toBeInstanceOf(RegisteredRoute::class)
+            ->and(array_key_exists($name, $public))->toBeFalse()
+            ->and(route_coverage_has_auth($middleware))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsureActive::class))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, EnsurePasswordChanged::class))->toBeTrue()
+            ->and(route_coverage_has_class($middleware, AuthenticateStaffPanel::class))->toBeTrue()
+            ->and(in_array(EnsurePortalArea::class.':staff', $middleware, true))->toBeTrue();
+    }
+});
+
 it('keeps the design preview routes inside the local guard', function () {
     expect(Route::has('design-preview'))->toBeFalse()
-        ->and(Route::has('design-preview.student'))->toBeFalse();
+        ->and(Route::has('design-preview.student'))->toBeFalse()
+        ->and(Route::has('design-preview.emails'))->toBeFalse();
 
     $source = file_get_contents(base_path('routes/web.php'));
 
@@ -240,10 +307,13 @@ it('keeps the design preview routes inside the local guard', function () {
     $guard = strpos($source, "environment('local')");
     $preview = strpos($source, "'/design-preview'");
     $student_preview = strpos($source, "'/design-preview/student'");
+    $email_preview = strpos($source, "'/design-preview/emails'");
 
     expect($guard)->toBeInt()
         ->and($preview)->toBeInt()
         ->and($student_preview)->toBeInt()
+        ->and($email_preview)->toBeInt()
         ->and($guard < $preview)->toBeTrue()
-        ->and($guard < $student_preview)->toBeTrue();
+        ->and($guard < $student_preview)->toBeTrue()
+        ->and($guard < $email_preview)->toBeTrue();
 });

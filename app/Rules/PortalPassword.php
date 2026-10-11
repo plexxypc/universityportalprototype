@@ -57,9 +57,11 @@ final class PortalPassword implements ValidationRule
     }
 
     /**
-     * Whether this password may be stored for the signed-in user.
+     * Whether this password may be stored for the user.
+     *
+     * Includes the matric number and the current password.
      */
-    private function accepts(string $password): bool
+    public function accepts(string $password): bool
     {
         if (! self::allows($password, $this->user->email) || $this->containsMatric($password)) {
             return false;

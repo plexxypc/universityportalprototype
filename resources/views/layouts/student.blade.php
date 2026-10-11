@@ -14,7 +14,13 @@
         <div class="min-h-screen md:grid md:grid-cols-[15rem_minmax(0,1fr)]">
             <x-student.sidebar :current="$current" />
             <div class="flex min-w-0 flex-col">
-                <x-student.top-bar />
+                <x-student.top-bar>
+                    @hasSection('preview-bell')
+                        <x-slot:bell>
+                            @yield('preview-bell')
+                        </x-slot:bell>
+                    @endif
+                </x-student.top-bar>
                 <main class="w-full min-w-0 flex-1 px-page-mobile pt-page-mobile pb-24 md:px-page-tablet md:py-page-tablet lg:px-page-desktop lg:py-page-desktop">
                     <div class="mx-auto w-full min-w-0 max-w-content">
                         @yield('content')

@@ -20,6 +20,9 @@
                 <p class="mt-space-4 text-center text-body font-normal text-muted">Sign in</p>
 
                 <x-card class="mt-space-24">
+                    @if (session('status'))
+                        <p role="status" class="mb-space-16 text-body font-normal text-text">{{ session('status') }}</p>
+                    @endif
                     @if (request()->query('expired') === '1')
                         <p role="status" class="mb-space-16 text-body font-normal text-text">Your session has ended. Sign in to continue.</p>
                     @endif
@@ -46,6 +49,10 @@
                         >
                             <x-password-input name="password" />
                         </x-field>
+
+                        <p class="text-body font-normal">
+                            <a href="{{ route('password.request') }}" class="font-semibold text-primary underline">Forgot password</a>
+                        </p>
 
                         <x-button type="submit" class="w-full">Sign in</x-button>
                     </form>

@@ -8,6 +8,7 @@ use App\Enums\PermissionAccess;
 use App\Enums\PermissionScope;
 use App\Enums\Role;
 use App\Enums\UserStatus;
+use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 use InvalidArgumentException;
@@ -181,13 +182,20 @@ final class Permissions
      * Register Gate::before and one Gate::define for every permission key.
      *
      * Before returns null when the user is not Active, so it grants nothing
-     * and denies nothing. An Active Super Admin is allowed every ability
-     * except the explicit denials. Every other check is resolved from the map.
+     * and denies nothing. It also returns null when the subject is a
+     * notification, or the Notification class, so NotificationPolicy decides
+     * view, viewAny, create, and mark-read even for Super Admin. An Active
+     * Super Admin is allowed every other ability except the explicit denials.
+     * Every other check is resolved from the map.
      */
     public static function registerGates(): void
     {
-        Gate::before(function (?User $user, string $ability): ?bool {
+        Gate::before(function (?User $user, string $ability, array $arguments = []): ?bool {
             if (! $user instanceof User || $user->status !== UserStatus::Active) {
+                return null;
+            }
+
+            if (self::targetsNotification($arguments)) {
                 return null;
             }
 
@@ -207,6 +215,25 @@ final class Permissions
                 return self::allows($user, $ability);
             });
         }
+    }
+
+    /**
+     * Whether this gate check is about an in-app notification.
+     *
+     * A Notification instance covers view and mark-read. The class covers
+     * viewAny and create. The policy then decides, including for Super Admin.
+     *
+     * @param  array<int, mixed>  $arguments
+     */
+    private static function targetsNotification(array $arguments): bool
+    {
+        foreach ($arguments as $argument) {
+            if ($argument instanceof Notification || $argument === Notification::class) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

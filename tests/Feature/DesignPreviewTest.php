@@ -15,5 +15,6 @@ class DesignPreviewTest extends TestCase
     {
         $this->get('/design-preview')->assertNotFound();
         $this->get('/design-preview/student')->assertNotFound();
+        $this->get('/design-preview/emails')->assertNotFound();
     }
 }

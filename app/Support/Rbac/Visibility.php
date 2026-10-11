@@ -29,8 +29,9 @@ final class Visibility
     /**
      * Limit the query to rows this account may see.
      *
-     * An inactive account matches nothing. An Active Super Admin is not
-     * filtered. Submit and pay stay on the gate keys, not on this query.
+     * An inactive account matches nothing. Notifications stay on the signed-in
+     * account, including Super Admin. Every other model is unfiltered for an
+     * Active Super Admin. Submit and pay stay on the gate keys, not on this query.
      *
      * @template TModel of Model
      *
@@ -43,12 +44,12 @@ final class Visibility
             return self::matchNone($query);
         }
 
-        if ($user->hasRole(Role::SuperAdmin)) {
-            return $query;
-        }
-
         if ($profile->kind === VisibilityKind::Notification) {
             return $query->where($query->qualifyColumn('user_id'), $user->id);
+        }
+
+        if ($user->hasRole(Role::SuperAdmin)) {
+            return $query;
         }
 
         if ($profile->kind === VisibilityKind::Document) {
