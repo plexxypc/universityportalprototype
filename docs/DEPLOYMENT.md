@@ -263,17 +263,21 @@ Migrations run before nginx starts. A database error during `RUN_MIGRATIONS=true
 - The initial delay is shorter than startup. Config cache plus the first migration can take longer than a few seconds. Raise the delay (**verify in the provider dashboard**) and redeploy.
 - The instance is out of memory. A 512 MiB plan is too small for this container. Move to a plan with at least 1 GiB and redeploy.
 - The build failed, so no container is listening. Read the build log. The Dockerfile path must be `docker/Dockerfile` and the source directory must be the repository root.
-- `/health` is for monitoring. It returns HTTP 503 when the snapshot is degraded: the database probe fails, the scheduler heartbeat is older than two minutes, the queue is `backlog` or `failing`, or mail is `unconfigured` or `misconfigured`. That status is for you to read. Keep the platform health check on `/up`.
+- `/health` is for monitoring. It returns HTTP 503 when the snapshot is degraded: the database probe fails, the scheduler heartbeat is older than two minutes, the queue is `backlog`, `failing`, or `stopped`, or mail is `unconfigured` or `misconfigured`. `stopped` for up to three minutes after a wake or restart is expected. That status is for you to read. Keep the platform health check on `/up`.
 
 ### Queue worker not running
 
 The worker is a supervisord program in this same container. It runs:
 
-`php artisan queue:work --sleep=3 --tries=3 --max-time=3600 --memory=96 --timeout=90`
+`php -d memory_limit=128M artisan queue:work --sleep=3 --tries=3 --max-time=3600 --memory=96 --timeout=90`
+
+`--memory=96` is checked after a job finishes. The PHP limit is 128M so a job can finish and the worker can exit between jobs, instead of dying with a fatal error during the job. The scheduler stays at `memory_limit=96M`. PHP-FPM allows 2 children (`pm.max_children = 2`, `pm.max_spare_servers = 1`), each with a 128 MB limit. Four children do not fit beside nginx, opcache, the worker, and the scheduler on a 512 MB instance.
 
 There is no separate App Platform worker component to create. A second component would be a second copy of the whole stack.
 
-`/health` reports `queue` as `ok`, `backlog`, or `failing`, and `mail` as `log`, `brevo`, `unconfigured`, or `misconfigured`. It does not include counts. The heartbeat still only shows that `portal:heartbeat` ran (once at container start, then every minute from the scheduler). `backlog` means a queued job has been waiting more than 10 minutes. `failing` means a row was written to `failed_jobs` in the last 24 hours.
+`/health` reports `queue` as `ok`, `backlog`, `failing`, or `stopped`, and `mail` as `log`, `brevo`, `unconfigured`, or `misconfigured`. It does not include counts or addresses. The heartbeat still only shows that `portal:heartbeat` ran (once at container start, then every minute from the scheduler). `backlog` means a `jobs` row has been available for more than 10 minutes, or a due `Queued` outbox row has been waiting more than 15 minutes. `failing` means a row was written to `failed_jobs` in the last hour, and it wins over `backlog` while the worker is looping. `stopped` means the queue worker has not written its loop marker in the last three minutes.
+
+A freshly woken or restarted instance can show `"queue": "stopped"` for up to three minutes. The worker writes the marker on its first loop, and the marker is allowed to be three minutes old so a job inside the 90-second timeout does not look dead. That `stopped` reading is expected until the first loop. The scheduler heartbeat can already be `ok` during that wait. Keep the platform health check on `/up`.
 
 In the runtime logs, confirm a `queue:work` process started and is still running. If the container is restarting, the worker restarts with it and will exit again until the boot error is fixed. `QUEUE_CONNECTION` must be `database`. The `jobs` table is created by the first migration, so a boot with `RUN_MIGRATIONS=false` against an empty database leaves the worker unable to query that table. Set `RUN_MIGRATIONS=true`, deploy once, then set it back to `false`.
 
@@ -340,7 +344,7 @@ If the blueprint form requires a value for an unused secret (`MAIL_API_KEY`, the
 
 ### Health check
 
-Set the health check path to `/up`. `render.yaml` sets `healthCheckPath: /up` and that value must stay on `/up`. Render sends `GET /up` and expects a successful response. `/up` answers when PHP is up. `/health` is for monitoring and returns HTTP 503 when the snapshot is degraded (database, heartbeat, queue backlog or failing jobs, or mail unconfigured or misconfigured), so a database blip would restart the instance if the platform checked `/health`. After deploy, open `/health` yourself.
+Set the health check path to `/up`. `render.yaml` sets `healthCheckPath: /up` and that value must stay on `/up`. Render sends `GET /up` and expects a successful response. `/up` answers when PHP is up. `/health` is for monitoring and returns HTTP 503 when the snapshot is degraded (database, heartbeat, queue backlog, failing jobs, a stopped worker, or mail unconfigured or misconfigured), so a database blip would restart the instance if the platform checked `/health`. A freshly woken instance can show `"queue": "stopped"` for up to three minutes, until the worker's first loop. That is expected. After deploy, open `/health` yourself.
 
 The first boot caches config, routes, and views, and may run migrations, before nginx listens. Render waits for the health check during the deploy (the platform limit is on the order of 15 minutes). **Verify in the provider dashboard** whether an initial-delay field is shown. If it is, set it to at least 60 seconds.
 

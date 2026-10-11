@@ -10,6 +10,7 @@ use App\Models\EmailOutbox;
 use App\Models\RoleAssignment;
 use App\Models\User;
 use App\Services\MailService;
+use App\Support\Console\StderrLine;
 use App\Support\Mail\MailError;
 use App\Support\Mail\OutboundMessage;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -286,6 +287,24 @@ function secret_hunt_was_sent(int $email_outbox_id): bool
         && $row->redacted_at !== null;
 }
 
+/**
+ * Read the captured command lines. The stream stays positioned for the next write.
+ *
+ * @param  resource  $stream
+ */
+function secret_hunt_stderr($stream): string
+{
+    $end = ftell($stream);
+    rewind($stream);
+    $text = stream_get_contents($stream);
+
+    if (is_int($end)) {
+        fseek($stream, $end);
+    }
+
+    return is_string($text) ? $text : '';
+}
+
 it('keeps a credentials password and a reset token out of the send path', function () {
     $test = $this;
     $password = 'HuntPw'.bin2hex(random_bytes(8));
@@ -301,6 +320,12 @@ it('keeps a credentials password and a reset token out of the send path', functi
         Cache::store('database')->forget(MailService::DAILY_LIMIT_KEY);
         Cache::store('database')->forget(MailService::CIRCUIT_PAUSE_KEY);
         Cache::store('database')->forget(MailService::CIRCUIT_STREAK_KEY);
+
+        $stderr = fopen('php://memory', 'w+');
+        if ($stderr === false) {
+            throw new RuntimeException('stderr capture failed');
+        }
+        app(StderrLine::class)->useStream($stderr);
 
         $logged = '';
 
@@ -323,7 +348,7 @@ it('keeps a credentials password and a reset token out of the send path', functi
         $sent_now = app(MailService::class)->sendNow($sent_credentials, $admin, '127.0.0.1');
 
         $exit = Artisan::call('outbox:send');
-        $command_output = Artisan::output();
+        $command_output = Artisan::output().secret_hunt_stderr($stderr);
         $seen_jobs = secret_hunt_columns('jobs', ['payload']);
         $escaped = secret_hunt_handle($sent_credentials->id) || secret_hunt_handle($sent_reset->id);
 
@@ -333,7 +358,7 @@ it('keeps a credentials password and a reset token out of the send path', functi
             'attempts' => MailError::MAX_ATTEMPTS,
         ]);
         $exhaust_exit = Artisan::call('outbox:send');
-        $command_output .= Artisan::output();
+        $command_output .= Artisan::output().secret_hunt_stderr($stderr);
         $seen_jobs .= secret_hunt_columns('jobs', ['payload']);
         $escaped = $escaped || secret_hunt_handle($exhaust_credentials->id) || secret_hunt_handle($exhaust_reset->id);
 
@@ -342,7 +367,7 @@ it('keeps a credentials password and a reset token out of the send path', functi
         $new_credentials = secret_hunt_queue(OutboundMessage::TEMPLATE_CREDENTIALS, $reissue_user, $password, $token);
         $new_reset = secret_hunt_queue(OutboundMessage::TEMPLATE_PASSWORD_RESET, $reissue_user, $password, $token);
         $reissue_exit = Artisan::call('outbox:send');
-        $command_output .= Artisan::output();
+        $command_output .= Artisan::output().secret_hunt_stderr($stderr);
         $seen_jobs .= secret_hunt_columns('jobs', ['payload']);
         $escaped = $escaped
             || secret_hunt_handle($old_credentials->id)
@@ -355,7 +380,7 @@ it('keeps a credentials password and a reset token out of the send path', functi
 
         $boom = secret_hunt_queue(OutboundMessage::TEMPLATE_CREDENTIALS, $boom_user, $password, $token);
         $boom_exit = Artisan::call('outbox:send');
-        $command_output .= Artisan::output();
+        $command_output .= Artisan::output().secret_hunt_stderr($stderr);
         $seen_jobs .= secret_hunt_columns('jobs', ['payload']);
         $transport_installed = secret_hunt_install_throwing_transport($password);
         $boom_escaped = secret_hunt_handle($boom->id);
@@ -402,7 +427,8 @@ it('keeps a credentials password and a reset token out of the send path', functi
         $leaked = secret_hunt_has($haystack, $password) || secret_hunt_has($haystack, $token);
         $page_rendered = secret_hunt_has($page, 'Email outbox') || secret_hunt_has($http_body, 'Email outbox');
 
-        expect($sent_now)->toBeTrue()
+        // send() already holds the 180-second unique lock, so send now is skipped.
+        expect($sent_now)->toBeFalse()
             ->and($exit)->toBe(0)
             ->and($exhaust_exit)->toBe(0)
             ->and($reissue_exit)->toBe(0)

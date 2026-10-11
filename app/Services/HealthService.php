@@ -13,8 +13,9 @@ use Throwable;
 /**
  * Coarse status for the public health endpoint.
  *
- * The heartbeat shows that the scheduler command ran recently. queue and mail
- * are status words only: no counts, no key, and no from-address.
+ * The heartbeat shows that the scheduler command ran recently. The worker
+ * marker shows that queue:work has looped. queue and mail are status words
+ * only: no counts, no key, and no from-address.
  */
 final class HealthService
 {
@@ -65,6 +66,7 @@ final class HealthService
             || $heartbeat !== 'ok'
             || $queue === 'backlog'
             || $queue === 'failing'
+            || $queue === 'stopped'
             || $mail === 'unconfigured'
             || $mail === 'misconfigured';
 
@@ -184,18 +186,21 @@ final class HealthService
      */
     private function heartbeatValue(): mixed
     {
-        if (! $this->heartbeatUsesDatabase()) {
-            return Cache::get($this->heartbeatKey());
-        }
-
-        return $this->databaseHeartbeatValue();
+        return $this->cachedTimestamp($this->heartbeatKey());
     }
 
     /**
-     * Read the heartbeat row through the probe connection.
+     * Read one timestamp from the configured cache store.
+     *
+     * Database cache is read on the probe PDO so a stalled server cannot use
+     * the application's normal connection.
      */
-    private function databaseHeartbeatValue(): mixed
+    private function cachedTimestamp(string $key): mixed
     {
+        if (! $this->heartbeatUsesDatabase()) {
+            return Cache::get($key);
+        }
+
         $table = config('cache.stores.database.table');
 
         if (! is_string($table) || preg_match('/^[A-Za-z0-9_]+$/', $table) !== 1) {
@@ -205,7 +210,7 @@ final class HealthService
         $statement = $this->openProbe()->prepare(
             'select `value`, `expiration` from `'.$table.'` where `key` = ? limit 1',
         );
-        $statement->execute([(string) config('cache.prefix').$this->heartbeatKey()]);
+        $statement->execute([(string) config('cache.prefix').$key]);
         $row = $statement->fetch(PDO::FETCH_ASSOC);
 
         if (! is_array($row) || (int) $row['expiration'] <= now()->getTimestamp()) {
@@ -300,16 +305,24 @@ final class HealthService
     }
 
     /**
-     * Queue word: failing wins over backlog. No depths are returned.
+     * Queue word. No depths are returned.
+     *
+     * stopped wins while the worker marker is stale. Then failing wins over
+     * backlog. backlog is an old jobs row, or a due outbox row that has been
+     * waiting more than 15 minutes.
      */
     private function queueStatus(): string
     {
         try {
+            if (! $this->workerIsFresh()) {
+                return 'stopped';
+            }
+
             if ($this->hasRecentFailure()) {
                 return 'failing';
             }
 
-            if ($this->hasBacklog()) {
+            if ($this->hasBacklog() || $this->hasAgedOutbox()) {
                 return 'backlog';
             }
         } catch (Throwable) {
@@ -320,7 +333,32 @@ final class HealthService
     }
 
     /**
-     * A failed_jobs row in the last 24 hours.
+     * Whether queue:work has looped inside the recent window.
+     */
+    private function workerIsFresh(): bool
+    {
+        $recorded_at = $this->cachedTimestamp($this->workerKey());
+
+        if (! is_int($recorded_at) && ! (is_string($recorded_at) && ctype_digit($recorded_at))) {
+            return false;
+        }
+
+        $window = (int) config('portal.health.worker_recent_seconds');
+        $window = $window > 0 ? $window : 180;
+
+        return (now()->getTimestamp() - (int) $recorded_at) <= $window;
+    }
+
+    /**
+     * Cache key written by the queue worker loop.
+     */
+    private function workerKey(): string
+    {
+        return (string) config('portal.health.worker_key');
+    }
+
+    /**
+     * A failed_jobs row in the last hour.
      */
     private function hasRecentFailure(): bool
     {
@@ -331,9 +369,9 @@ final class HealthService
         }
 
         $statement = $this->openProbe()->prepare(
-            'select 1 from `'.$table.'` where unix_timestamp(`failed_at`) >= ? limit 1',
+            'select 1 from `'.$table.'` where `failed_at` >= ? limit 1',
         );
-        $statement->execute([now()->subHours(24)->getTimestamp()]);
+        $statement->execute([now()->subHour()->format('Y-m-d H:i:s')]);
 
         return $statement->fetchColumn() !== false;
     }
@@ -353,6 +391,45 @@ final class HealthService
             'select 1 from `'.$table.'` where `available_at` < ? limit 1',
         );
         $statement->execute([now()->subMinutes(10)->getTimestamp()]);
+
+        return $statement->fetchColumn() !== false;
+    }
+
+    /**
+     * A due Queued outbox row that has been waiting more than 15 minutes.
+     *
+     * Due follows the send backoff from updated_at. The query returns no
+     * address and no count.
+     */
+    private function hasAgedOutbox(): bool
+    {
+        $table = $this->safeIdentifier('email_outbox');
+
+        if ($table === null) {
+            return true;
+        }
+
+        $waiting_seconds = (int) config('portal.health.outbox_backlog_seconds');
+        $waiting_seconds = $waiting_seconds > 0 ? $waiting_seconds : 900;
+        $due_at = now()->subSeconds($waiting_seconds);
+
+        $statement = $this->openProbe()->prepare(
+            'select 1 from `'.$table.'` where `status` = ? and (
+                (`attempts` = 0 and `updated_at` <= ?)
+                or (`attempts` = 1 and `updated_at` <= ?)
+                or (`attempts` = 2 and `updated_at` <= ?)
+                or (`attempts` = 3 and `updated_at` <= ?)
+                or (`attempts` = 4 and `updated_at` <= ?)
+            ) limit 1',
+        );
+        $statement->execute([
+            'Queued',
+            $due_at->format('Y-m-d H:i:s'),
+            $due_at->copy()->subSeconds(60)->format('Y-m-d H:i:s'),
+            $due_at->copy()->subSeconds(5 * 60)->format('Y-m-d H:i:s'),
+            $due_at->copy()->subSeconds(15 * 60)->format('Y-m-d H:i:s'),
+            $due_at->copy()->subSeconds(60 * 60)->format('Y-m-d H:i:s'),
+        ]);
 
         return $statement->fetchColumn() !== false;
     }

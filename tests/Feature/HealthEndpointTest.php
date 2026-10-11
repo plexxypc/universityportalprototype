@@ -2,8 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Enums\EmailStatus;
+use App\Models\EmailOutbox;
 use App\Services\MailService;
+use App\Support\Health\QueueWorkerMarker;
 use Illuminate\Cache\RateLimiter;
+use Illuminate\Queue\Events\Looping;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -12,6 +17,7 @@ beforeEach(function () {
     DB::table('jobs')->delete();
     DB::table('failed_jobs')->delete();
     Cache::store('database')->forget(MailService::CIRCUIT_PAUSE_KEY);
+    health_mark_worker();
 });
 
 it('returns the healthy shape and keeps the framework health route', function () {
@@ -253,6 +259,157 @@ it('reports brevo unconfigured when the key is missing', function () {
         ->assertJsonPath('mail', 'unconfigured');
 });
 
+it('reports stopped when the worker marker is missing', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    Cache::forget((string) config('portal.health.worker_key'));
+
+    $response = $this->get('/health')->assertStatus(503);
+
+    expect($response->json('queue'))->toBe('stopped')
+        ->and($response->json('status'))->toBe('degraded')
+        ->and($response->json('heartbeat'))->toBe('ok')
+        ->and(array_key_exists('count', $response->json()))->toBeFalse();
+});
+
+it('reports stopped when the worker marker is older than three minutes', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    Cache::put(
+        (string) config('portal.health.worker_key'),
+        now()->subSeconds(181)->getTimestamp(),
+        600,
+    );
+
+    $response = $this->get('/health')->assertStatus(503);
+
+    expect($response->json('queue'))->toBe('stopped');
+});
+
+it('records the worker marker from the queue looping event', function () {
+    $key = (string) config('portal.health.worker_key');
+    Cache::forget($key);
+
+    event(new Looping('database', 'default'));
+
+    expect(Cache::get($key))->toBeInt();
+});
+
+it('throttles the queue worker marker', function () {
+    $key = (string) config('portal.health.worker_key');
+    $stamp = now()->subSeconds(10)->getTimestamp();
+    Cache::put($key, $stamp, 600);
+
+    app(QueueWorkerMarker::class)->record();
+
+    expect(Cache::get($key))->toBe($stamp);
+
+    Cache::put($key, now()->subSeconds(31)->getTimestamp(), 600);
+    app(QueueWorkerMarker::class)->record();
+
+    expect(Cache::get($key))->toBe(now()->getTimestamp());
+});
+
+it('ignores a failed job older than one hour', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    health_insert_failure(now()->subHours(2));
+
+    $this->get('/health')
+        ->assertOk()
+        ->assertJsonPath('queue', 'ok');
+});
+
+it('reports a failed job from the last hour ahead of a backlog', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    health_insert_job(now()->subMinutes(11)->getTimestamp());
+    health_insert_failure(now()->subMinutes(30));
+
+    $this->get('/health')
+        ->assertStatus(503)
+        ->assertJsonPath('queue', 'failing');
+});
+
+it('reports stopped ahead of a recent failure when the worker marker is stale', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    Cache::forget((string) config('portal.health.worker_key'));
+    health_insert_failure(now()->subMinutes(5));
+
+    $this->get('/health')
+        ->assertStatus(503)
+        ->assertJsonPath('queue', 'stopped');
+});
+
+it('reports backlog when a due queued outbox row has been waiting more than 15 minutes', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    $row = health_queue_outbox(0, 16 * 60);
+
+    try {
+        $response = $this->get('/health')->assertStatus(503);
+
+        expect($response->json('queue'))->toBe('backlog')
+            ->and($response->getContent())->not->toContain($row->recipient_email)
+            ->and(array_key_exists('count', $response->json()))->toBeFalse();
+    } finally {
+        DB::table('email_outbox')->where('id', $row->id)->delete();
+        DB::table('users')->where('id', $row->user_id)->delete();
+    }
+});
+
+it('leaves a due queued outbox row under 15 minutes off the backlog word', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    $row = health_queue_outbox(0, 10 * 60);
+
+    try {
+        $this->get('/health')
+            ->assertOk()
+            ->assertJsonPath('queue', 'ok');
+    } finally {
+        DB::table('email_outbox')->where('id', $row->id)->delete();
+        DB::table('users')->where('id', $row->user_id)->delete();
+    }
+});
+
+it('does not call a row backlog while its backoff is still running', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    $row = health_queue_outbox(4, 20 * 60);
+
+    try {
+        $this->get('/health')
+            ->assertOk()
+            ->assertJsonPath('queue', 'ok');
+    } finally {
+        DB::table('email_outbox')->where('id', $row->id)->delete();
+        DB::table('users')->where('id', $row->user_id)->delete();
+    }
+});
+
+it('reports backlog for a due retry that has been waiting more than 15 minutes', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    $row = health_queue_outbox(1, 20 * 60);
+
+    try {
+        $this->get('/health')
+            ->assertStatus(503)
+            ->assertJsonPath('queue', 'backlog');
+    } finally {
+        DB::table('email_outbox')->where('id', $row->id)->delete();
+        DB::table('users')->where('id', $row->user_id)->delete();
+    }
+});
+
+it('reports stopped ahead of an aged outbox row', function () {
+    $this->artisan('portal:heartbeat')->assertSuccessful();
+    Cache::forget((string) config('portal.health.worker_key'));
+    $row = health_queue_outbox(0, 16 * 60);
+
+    try {
+        $this->get('/health')
+            ->assertStatus(503)
+            ->assertJsonPath('queue', 'stopped');
+    } finally {
+        DB::table('email_outbox')->where('id', $row->id)->delete();
+        DB::table('users')->where('id', $row->user_id)->delete();
+    }
+});
+
 /**
  * Insert one waiting job. The payload is empty.
  */
@@ -271,7 +428,7 @@ function health_insert_job(int $available_at): void
 /**
  * Insert one failed job. The payload and exception text are fixed and empty of secrets.
  */
-function health_insert_failure(): void
+function health_insert_failure(?Carbon $failed_at = null): void
 {
     DB::table('failed_jobs')->insert([
         'uuid' => (string) Str::uuid(),
@@ -279,6 +436,36 @@ function health_insert_failure(): void
         'queue' => 'default',
         'payload' => '{}',
         'exception' => 'failed',
-        'failed_at' => now(),
+        'failed_at' => $failed_at ?? now(),
     ]);
+}
+
+/**
+ * Mark the queue worker as looping now.
+ */
+function health_mark_worker(): void
+{
+    Cache::put(
+        (string) config('portal.health.worker_key'),
+        now()->getTimestamp(),
+        600,
+    );
+}
+
+/**
+ * Queue one announcement and set updated_at without touching the address in the assertion.
+ */
+function health_queue_outbox(int $attempts, int $age_seconds): EmailOutbox
+{
+    $row = EmailOutbox::factory()->create([
+        'template' => 'announcement',
+        'attempts' => $attempts,
+        'status' => EmailStatus::Queued,
+    ]);
+
+    DB::table('email_outbox')->where('id', $row->id)->update([
+        'updated_at' => now()->subSeconds($age_seconds)->format('Y-m-d H:i:s'),
+    ]);
+
+    return $row->refresh();
 }

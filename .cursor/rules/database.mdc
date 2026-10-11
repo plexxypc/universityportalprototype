@@ -1,0 +1,11 @@
+---
+description: Diagnostic and test writes stay on university_portal_testing
+alwaysApply: true
+---
+
+# Databases
+
+- Pest, migrations under test, and diagnostic scripts use `127.0.0.1` and `university_portal_testing` only.
+- Never delete or change rows on `university_portal`. That includes `tinker`, `artisan`, and a one-off PHP file that boots `.env`.
+- `.env` points at `university_portal`. Do not boot the app from that file unless `DB_DATABASE` is forced to `university_portal_testing` first.
+- Before any command that writes to a database other than `university_portal_testing`, stop and tell the user which database and what will be written.

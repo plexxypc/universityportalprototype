@@ -237,7 +237,7 @@ Lecturer enters/uploads component scores → results rows (draft)
 
 `MailService` is the only sender. Secret templates (credentials and password reset) store a placeholder body and an encrypted `secrets` payload. Other templates store the escaped body. `SendOutboxEmail` is dispatched after commit and carries only the outbox id.
 
-The job is the only sender. It holds `Cache::lock('outbox-send:{id}')` on the database cache store across the provider call and the status update. The message is rendered in memory at send time. `outbox:send` runs every minute and only dispatches due rows. A second dispatch of the same id is dropped while the first job is queued.
+The job is the only sender. It holds `Cache::lock('outbox-send:{id}')` on the database cache store across the provider call and the status update. The message is rendered in memory at send time. `outbox:send` runs every minute and only dispatches due rows. `SendOutboxEmail` is unique per outbox id for 180 seconds. A second dispatch in that window is skipped. The command writes the counts to stderr.
 
 `MAIL_MAILER` selects the driver. `log` and `array` use Laravel's transports. `brevo` uses `App\Support\Mail\BrevoTransport` over HTTPS. The host, key, and timeout come from `MAIL_API_URL`, `MAIL_API_KEY`, and `MAIL_API_TIMEOUT`. Any other mailer fails closed. Brevo is the first adapter, not a confirmed vendor.
 
@@ -253,7 +253,7 @@ Password reset accepts an email or a matric number and always answers with one g
 
 In-app notifications use `NotificationService` and `App\Enums\NotificationType`: `admission`, `registration_confirmed`, `payment_confirmed`, `result_published`, `announcement`, and `timetable_published`. Credentials and password reset are email only. The unread count is rendered with the page. There is no polling.
 
-`/health` reports `queue` as `ok`, `backlog`, or `failing`, and `mail` as `log`, `brevo`, `unconfigured`, or `misconfigured`. The body has no counts and no secrets. The platform probe stays on `/up`.
+`/health` reports `queue` as `ok`, `backlog`, `failing`, or `stopped`, and `mail` as `log`, `brevo`, `unconfigured`, or `misconfigured`. `stopped` means the queue worker has not looped in the last three minutes. `failing` means a failed job in the last hour. `backlog` means a job available for more than 10 minutes, or a due queued outbox row waiting more than 15 minutes. The body has no counts and no secrets. The platform probe stays on `/up`.
 
 `AuditService::record()` strips secret keys from `before` and `after`, requires an open transaction, and does not open one. `ip` stores `REMOTE_ADDR` only.
 

@@ -14,6 +14,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Services\AuditService;
 use App\Services\MailService;
+use Filament\Notifications\Notification;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -299,6 +300,30 @@ it('sends a queued credentials row now without revealing the body', function () 
             'status' => 'Queued',
             'template' => 'credentials',
         ])
+        ->and(Queue::pushed(SendOutboxEmail::class))->toHaveCount(1);
+});
+
+it('does not send now while the unique lock is held', function () {
+    Queue::fake();
+    $admin = outbox_user_for_role(Role::SuperAdmin);
+    $row = EmailOutbox::factory()->create([
+        'template' => 'announcement',
+        'status' => EmailStatus::Queued,
+        'attempts' => 0,
+        'recipient_email' => 'send-now-locked@example.test',
+    ]);
+    SendOutboxEmail::dispatch($row->id);
+
+    $this->actingAs($admin);
+    Livewire::test(EmailOutboxPage::class)->callTableAction('sendNow', $row);
+
+    Notification::assertNotified(
+        'The email was not queued. It is already waiting to send, the daily limit was reached, or sending is paused.',
+    );
+
+    expect($row->refresh()->status)->toBe(EmailStatus::Queued)
+        ->and($row->attempts)->toBe(0)
+        ->and(AuditLog::query()->where('action', AuditService::ACTION_SENT_NOW)->count())->toBe(0)
         ->and(Queue::pushed(SendOutboxEmail::class))->toHaveCount(1);
 });
 

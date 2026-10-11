@@ -166,7 +166,7 @@ class EmailOutboxPage extends Page implements HasTable
                         Notification::make()
                             ->title($queued
                                 ? 'The email was queued to send now.'
-                                : 'The daily send limit was reached, or sending is paused.')
+                                : 'The email was not queued. It is already waiting to send, the daily limit was reached, or sending is paused.')
                             ->send();
                     }),
                 Action::make('retry')

@@ -19,12 +19,22 @@ use Throwable;
  * The payload is the outbox id. Failures are stored as a fixed code and are
  * not rethrown, so the worker retry count does not add attempts. This job
  * does not dispatch another send. Retries wait for `outbox:send`.
- * A second dispatch of the same outbox id is dropped while the first is queued.
+ * A second dispatch of the same outbox id is dropped until uniqueFor expires.
+ * That window is longer than the worker timeout, and short enough that a
+ * lock left by a dead process expires within minutes.
  */
 class SendOutboxEmail implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use Queueable;
+
+    /**
+     * Seconds the unique lock is held when the worker does not release it.
+     *
+     * The queue worker timeout is 90 seconds. 180 keeps a live job from
+     * being dispatched twice, and lets an orphan lock expire within minutes.
+     */
+    public const int UNIQUE_FOR_SECONDS = 180;
 
     public int $tries = 1;
 
@@ -36,6 +46,14 @@ class SendOutboxEmail implements ShouldBeUnique, ShouldQueue
     public function uniqueId(): string
     {
         return (string) $this->email_outbox_id;
+    }
+
+    /**
+     * How long a dropped dispatch stays dropped.
+     */
+    public function uniqueFor(): int
+    {
+        return self::UNIQUE_FOR_SECONDS;
     }
 
     /**

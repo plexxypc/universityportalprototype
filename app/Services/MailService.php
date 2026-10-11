@@ -14,6 +14,7 @@ use App\Support\Mail\MailTransport;
 use App\Support\Mail\OutboundMessage;
 use App\Support\Mail\ProviderStatus;
 use App\Support\Mail\RenderedMail;
+use App\Support\Mail\UniqueOutboxDispatch;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Cache\Repository;
 use Illuminate\Contracts\Cache\LockProvider;
@@ -329,7 +330,7 @@ final class MailService
                 $ip,
             );
 
-            SendOutboxEmail::dispatch($locked->id)->afterCommit();
+            UniqueOutboxDispatch::dispatch($locked->id, true);
         });
     }
 
@@ -371,6 +372,10 @@ final class MailService
                 $locked->save();
             }
 
+            if (! UniqueOutboxDispatch::dispatch($locked->id, true)) {
+                return false;
+            }
+
             $this->audit->record(
                 $actor->id,
                 AuditService::ACTION_SENT_NOW,
@@ -383,8 +388,6 @@ final class MailService
                 ],
                 $ip,
             );
-
-            SendOutboxEmail::dispatch($locked->id)->afterCommit();
 
             return true;
         });
@@ -830,7 +833,7 @@ final class MailService
      * Dispatch one row when its send lock is free.
      *
      * The lock is released before the job is queued so the worker can hold it
-     * across the provider call. ShouldBeUnique drops a second dispatch.
+     * across the provider call. A unique-lock drop is skipped, not dispatched.
      */
     private function dispatchOne(int $email_outbox_id): bool
     {
@@ -853,9 +856,8 @@ final class MailService
         }
 
         $lock->release();
-        SendOutboxEmail::dispatch($email_outbox_id);
 
-        return true;
+        return UniqueOutboxDispatch::dispatch($email_outbox_id, false);
     }
 
     /**
