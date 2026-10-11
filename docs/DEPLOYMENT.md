@@ -434,3 +434,40 @@ Super Admin bootstrap failed: tables_missing exit=1. run migrations first.
 The variable name must be exactly `RUN_MIGRATIONS`.
 
 When a shell is available, `php artisan create-super-admin` asks for the name, email, and a hidden password instead of reading those variables. It still refuses to create a second Super Admin.
+
+## 11. Live email test
+
+Do this only after `/health` shows the database is ok and you have a provider account. No provider is confirmed yet. Brevo registration was blocked. The HTTPS adapter is named Brevo so the host and path have a place to go. A different provider is a second class on the same interface. Do not put a key, a password, or a token in this file or in Git.
+
+Set these on the host. `MAIL_API_URL` is a normal variable. `MAIL_API_KEY` is the only mail value that is a dashboard secret.
+
+| Variable | What to set | Secret |
+|---|---|---|
+| `MAIL_MAILER` | `brevo` for a real send. Leave `log` until the provider is confirmed | No |
+| `MAIL_FROM_ADDRESS` | The address the provider will accept as the sender | No |
+| `MAIL_FROM_NAME` | The name shown on the message | No |
+| `MAIL_API_URL` | The provider's HTTPS host. The app adds the provider path | No |
+| `MAIL_API_KEY` | The provider API key, entered in the dashboard | Yes |
+| `MAIL_API_TIMEOUT` | Seconds to wait for the provider | No |
+| `MAIL_DAILY_LIMIT` | The cap for one Africa/Lagos day. A production send through the real adapter refuses to run when this is unset | No |
+
+Before the first real send on a database that does not already have the `email_outbox.secrets` column, set `RUN_MIGRATIONS=true` for one deploy so that migration runs, confirm it finished, then set `RUN_MIGRATIONS` back to `false` and redeploy.
+
+The reset link puts the token in the path. The container access log replaces that path with `/reset-password/[redacted]`. Keep the platform health check on `/up`. `/health` is for you to read. It returns HTTP 503 when the snapshot is degraded, and it does not include a key, a count, or an error from the provider.
+
+At the live test, re-check the provider's own documentation for HTTP 402, 429, and 5xx. The app maps 402 to a quota hold, and 429 and 5xx to a retry. That mapping was written before a provider account existed.
+
+`superadmin@example.com` cannot receive mail. An example.com address is not a mailbox. Before the test, the signed-in Super Admin needs an address the provider can deliver to. Until that works, a Super Admin who has forgotten the password cannot reset it on the live site. Production refuses the reset template on the log mailer, and the bootstrap does not create or re-arm an admin once a Super Admin exists and has changed the forced password. A 15-minute identifier lockout expires by itself and is not this case. None of the options below is built:
+
+- **Env-gated one-time reset.** A dedicated flag plus a bcrypt hash, both set in the host, re-arms the existing bootstrap account for one boot even after the forced change, writes an audit row, prints neither the hash nor the address, and does nothing on the next boot unless the owner sets the flag again. The owner deletes both variables after that boot. A flag left in place resets the admin on every deploy. The hash sits in the host dashboard. A flag that can target any user is a backdoor, so the command has to stay limited to the existing bootstrap account. This is the recorded recommendation. It is not built.
+- **A second Super Admin, kept as a spare.** The spare's identifier is not the locked one, so a 15-minute lockout of the first account does not freeze the spare. Two accounts have full access, and the spare password has to be stored offline. Today's bootstrap refuses a second Super Admin. A signed-in spare cannot replace the other account's password until user management exists.
+- **Wait for a provider.** No new backdoor. The only admin who has forgotten the password cannot open the staff panel until mail works or someone uses a shell.
+
+Steps, with no values:
+
+1. Confirm the provider and set `MAIL_MAILER`, `MAIL_API_URL`, `MAIL_API_KEY`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_API_TIMEOUT`, and `MAIL_DAILY_LIMIT` in the host dashboard.
+2. Set `RUN_MIGRATIONS=true` for the one deploy that adds `email_outbox.secrets`, then set it back to `false`.
+3. Give the Super Admin a real mailbox. `superadmin@example.com` will not receive the test.
+4. Sign in, open the email outbox, and send the test email to that signed-in admin only.
+5. Read `/health` yourself. Leave the platform probe on `/up`.
+6. If a reset link is used, confirm the container access log shows `/reset-password/[redacted]` and not the token.
