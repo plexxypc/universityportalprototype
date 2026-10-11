@@ -3,10 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Sunday, 11 October 2026 (CI workflow YAML repair)
+**Last updated:** Sunday, 11 October 2026 (missing .env test warning)
 **Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
+
+`fix/ci-env-warning` includes `origin/main` at `cfeca09` (pull request #14). Tests that boot the application were warning on CI because `LoadEnvironmentVariables` asks phpdotenv to `file_get_contents` `.env`, and the checkout has no `.env` file. phpdotenv ignores the missing file. PHPUnit still prints the warning, because phpdotenv is not on its exclude list. `App\Support\EnvironmentFileLoader` skips that read unless the file exists. phpunit.xml still supplies the test values. `.env.example` was not copied in CI: it sets `DB_DATABASE=university_portal` and other local defaults for any variable PHPUnit does not force. The temporary Pest JUnit upload is removed. The `Require pcntl and posix` step stays a literal block scalar. On 11 October 2026, `composer check` passed against `127.0.0.1` / `university_portal_testing`: Pint passed, Larastan reported 0 errors, Pest passed **613 tests**, **611 passed**, **2 skipped** (the signal tests on this Windows CLI, which has no `pcntl` or `posix`), and **3453 assertions**. Those two signal tests passed in a Linux container on the same testing database (23 assertions). TASKS.md was not ticked.
 
 `fix/ci-workflow` repairs `.github/workflows/ci.yml`. The Pest step `Require pcntl and posix` used a plain `run` scalar, and the ternary `: 1` was invalid YAML, so GitHub never started the workflow. That step is now a literal block scalar. The five job names are unchanged. The Pest job still installs `pcntl` and `posix` and exits 1 before the suite when `posix_kill`, `SIGTERM`, or `SIGKILL` is missing. On 11 October 2026, `composer check` on this branch passed against `127.0.0.1` / `university_portal_testing`: Pint passed, Larastan reported 0 errors, Pest passed **611 tests**, **609 passed**, **2 skipped** (the signal tests on this Windows CLI, which has no `pcntl` or `posix`), and **3450 assertions**. TASKS.md was not ticked.
 

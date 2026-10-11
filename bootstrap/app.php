@@ -9,17 +9,19 @@ use App\Http\Middleware\NoStoreResponse;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Services\HealthService;
+use App\Support\EnvironmentFileLoader;
 use App\Support\SessionReturn;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests;
 use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Bootstrap\LoadEnvironmentVariables;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\TokenMismatchException;
 
-return Application::configure(basePath: dirname(__DIR__))
+$app = Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: [
             __DIR__.'/../routes/web.php',
@@ -122,3 +124,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->header('Cache-Control', 'no-store, private');
         });
     })->create();
+
+// phpdotenv calls file_get_contents on .env and then ignores a missing file.
+// PHPUnit still prints that warning. CI has no .env; phpunit.xml sets the test values.
+$app->bind(LoadEnvironmentVariables::class, EnvironmentFileLoader::class);
+
+return $app;
