@@ -17,6 +17,12 @@ define('LARAVEL_START', microtime(true));
 
 $ready_file = $argv[1] ?? '';
 $release_file = $argv[2] ?? '';
+$database = getenv('DB_DATABASE');
+
+if (! is_string($database) || $database !== 'university_portal_testing') {
+    fwrite(STDERR, "Refusing to run unless DB_DATABASE is university_portal_testing.\n");
+    exit(1);
+}
 
 require __DIR__.'/../../vendor/autoload.php';
 
