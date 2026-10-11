@@ -57,7 +57,7 @@ it('returns portal notifications for the user', function () {
     $user = User::factory()->create();
     $notification = Notification::factory()->create([
         'user_id' => $user->id,
-        'type' => 'announcement.published',
+        'type' => 'announcement',
         'data' => ['announcement_id' => 1],
     ]);
     Notification::factory()->create();

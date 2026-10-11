@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\NotificationType;
 use App\Models\Concerns\ScopesVisibleTo;
 use App\Models\Concerns\VisibleToUser;
 use App\Support\Rbac\VisibilityKind;
@@ -20,7 +21,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * Rows live in notifications and use user_id. This is not Laravel's database
  * notification channel. read and unread exist so the Notifiable helpers filter
- * this table by read_at.
+ * this table by read_at. Each account sees only its own rows, including
+ * Super Admin.
  */
 #[Fillable([
     'user_id',
@@ -43,6 +45,7 @@ class Notification extends Model implements VisibleToUser
     protected function casts(): array
     {
         return [
+            'type' => NotificationType::class,
             'data' => 'array',
             'read_at' => 'datetime',
         ];
@@ -81,7 +84,7 @@ class Notification extends Model implements VisibleToUser
     }
 
     /**
-     * Each account sees its own notifications. Super Admin sees every row.
+     * Each account sees its own notifications, including Super Admin.
      */
     protected static function visibilityProfile(): VisibilityProfile
     {
