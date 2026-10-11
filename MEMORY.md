@@ -3,10 +3,12 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Sunday, 11 October 2026 (outbox stall fix, pushed)
+**Last updated:** Sunday, 11 October 2026 (CI workflow YAML repair)
 **Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
+
+`fix/ci-workflow` repairs `.github/workflows/ci.yml`. The Pest step `Require pcntl and posix` used a plain `run` scalar, and the ternary `: 1` was invalid YAML, so GitHub never started the workflow. That step is now a literal block scalar. The five job names are unchanged. The Pest job still installs `pcntl` and `posix` and exits 1 before the suite when `posix_kill`, `SIGTERM`, or `SIGKILL` is missing. On 11 October 2026, `composer check` on this branch passed against `127.0.0.1` / `university_portal_testing`: Pint passed, Larastan reported 0 errors, Pest passed **611 tests**, **609 passed**, **2 skipped** (the signal tests on this Windows CLI, which has no `pcntl` or `posix`), and **3450 assertions**. TASKS.md was not ticked.
 
 `fix/outbox-stall` was created from `main` at `96f5857` (pull request #12) and pushed. `SendOutboxEmail` keeps its unique lock for 180 seconds. A dropped dispatch counts as skipped, and `outbox:send` writes those counts to stderr. `/health` can say `stopped` when the queue worker has not looped for three minutes, `failing` for a failed job in the last hour, and `backlog` when a due queued outbox row has been waiting more than 15 minutes. PHP-FPM allows 2 children. The queue program's PHP `memory_limit` is 128M and `--memory` stays 96, so the worker can exit between jobs. The scheduler stays at 96M. The Pest CI job loads `pcntl` and `posix`, so the two signal tests run there. Diagnostic writes stay on `university_portal_testing`. ADR-029 has an amendment dated 11 October 2026. TASKS.md was not ticked.
 
