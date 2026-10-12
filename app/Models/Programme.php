@@ -16,7 +16,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * A programme. Its code is unique across the institution. degree is free text.
+ * A programme. Its code is unique across the institution.
+ *
+ * degree is stored as text and must be one of App\Enums\Degree.
  */
 #[Fillable(['department_id', 'name', 'code', 'degree', 'duration_years'])]
 class Programme extends Model implements VisibleToUser

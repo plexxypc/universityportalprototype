@@ -23,7 +23,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 2 | The active semester belongs to the current session | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines). Test: `it activates a semester and its session in one transaction` |
 | 2 | Session names match `2026/2027` | TASK-055 | Academic sessions resource (single current session). Test: `it accepts only a session name whose second year is the next year` |
 | 2 | Prerequisite cycles. A two-course cycle is stored | TASK-058 | Course catalogue resource with prerequisites and programme–course mapping |
-| 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules |
+| 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules. Test: `it accepts only a degree from the closed list` |
 | 2 | What payment satisfies `require_minimum_payment` | TASK-094 | Optional "minimum payment before registration" setting |
 | 3 | `users.name` is set from the student's three name parts | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`) |
 | 3 | On conversion, copy the applicant onto the new user and student | TASK-080 | Applicants: admit and convert to student (single and bulk), admission email |

@@ -31,6 +31,14 @@ function session_user(Role $role): User
         return $user;
     }
 
+    if ($role === Role::DepartmentOfficer) {
+        RoleAssignment::factory()->departmentOfficer()->create([
+            'user_id' => $user->id,
+        ]);
+
+        return $user;
+    }
+
     RoleAssignment::factory()->create([
         'user_id' => $user->id,
         'role' => $role,
