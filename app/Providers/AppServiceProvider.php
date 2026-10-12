@@ -24,6 +24,7 @@ use App\Models\Payment;
 use App\Models\Programme;
 use App\Models\Receipt;
 use App\Models\Result;
+use App\Models\Semester;
 use App\Models\Student;
 use App\Policies\AcademicSessionPolicy;
 use App\Policies\AttendanceRecordPolicy;
@@ -40,6 +41,7 @@ use App\Policies\PaymentPolicy;
 use App\Policies\ProgrammePolicy;
 use App\Policies\ReceiptPolicy;
 use App\Policies\ResultPolicy;
+use App\Policies\SemesterPolicy;
 use App\Policies\StudentPolicy;
 use App\Services\SettingsService;
 use App\Support\Console\StderrLine;
@@ -172,6 +174,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Programme::class, ProgrammePolicy::class);
         Gate::policy(Course::class, CoursePolicy::class);
         Gate::policy(AcademicSession::class, AcademicSessionPolicy::class);
+        Gate::policy(Semester::class, SemesterPolicy::class);
         Gate::policy(InstitutionSetting::class, InstitutionSettingPolicy::class);
     }
 }

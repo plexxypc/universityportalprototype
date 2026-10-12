@@ -16,11 +16,11 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 1 | Deactivating a staff profile deactivates the user | TASK-137 | Activate/deactivate staff |
 | 1 | Deactivating a staff profile revokes sessions | TASK-137 | Activate/deactivate staff |
 | 2 | Switching the current session clears the old row first, inside a transaction | TASK-055 | Academic sessions resource (single current session). Test: `it switches the current session inside one transaction` |
-| 2 | Switching the active semester clears the old row first, inside a transaction | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
+| 2 | Switching the active semester clears the old row first, inside a transaction | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines). Test: `it switches the active semester inside one transaction` |
 | 2 | Reads fall back to `config/portal.php` while `institution_settings` is empty | TASK-054 | Institution settings page. Test: `it falls back to portal config when institution settings are empty` |
 | 2 | A non-empty session list contains a current session. The flag only guarantees at most one | TASK-055 | Academic sessions resource (single current session). Test: `it keeps a current session whenever sessions exist` |
-| 2 | A non-empty semester list contains an active semester. The flag only guarantees at most one | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
-| 2 | The active semester belongs to the current session | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
+| 2 | A non-empty semester list contains an active semester. The flag only guarantees at most one | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines). Test: `it keeps an active semester whenever semesters exist` |
+| 2 | The active semester belongs to the current session | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines). Test: `it activates a semester and its session in one transaction` |
 | 2 | Session names match `2026/2027` | TASK-055 | Academic sessions resource (single current session). Test: `it accepts only a session name whose second year is the next year` |
 | 2 | Prerequisite cycles. A two-course cycle is stored | TASK-058 | Course catalogue resource with prerequisites and programme–course mapping |
 | 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules |
