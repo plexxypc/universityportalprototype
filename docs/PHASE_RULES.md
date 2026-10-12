@@ -20,6 +20,7 @@
 - Follow DESIGN.md tokens exactly; no hard-coded colours, sizes, university name or logo.
 - Escape all output; no {!! !!} with user data. Accessible, responsive at 375px, 768px and 1440px.
 - Pest tests for every rule; never weaken, skip or delete an existing test. Pest runs without a front-end build (Vite is disabled in tests only).
+- Before reporting, run the Pest suite with public/build and public/hot moved aside, because CI has no front-end build.
 - Implement and tick the docs/SERVICE_RULES.md rows that name the phase's tasks, with the test name.
 
 ## Workflow for a bundled phase prompt

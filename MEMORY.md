@@ -3,7 +3,7 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Monday, 12 October 2026 (Phase 6 tasks ticked and pushed)
+**Last updated:** Monday, 12 October 2026 (Vite disabled on every test application)
 **Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
@@ -335,3 +335,4 @@ Phase 6 setup tasks TASK-054 through TASK-063 are committed on `phase-6-setup` a
 | 12 Oct 2026 | Phase 6 Stop 1. Sessions, semesters, faculties, departments, programmes, and courses are committed on `phase-6-setup` and not pushed. TASKS.md is not ticked. `composer check` on `127.0.0.1` / `university_portal_testing` passed (679 tests, 677 passed, 2 skipped, 3868 assertions). The live site was not clicked. Next task is TASK-059. |
 | 12 Oct 2026 | Phase 6 Part B. Prerequisite cycles are refused. Grading, the standing-threshold table, the preview, and fee categories and prices are committed. The standing migration ran on local `university_portal` at `127.0.0.1`. TASKS.md is not ticked. Not pushed. |
 | 12 Oct 2026 | Phase 6 acceptance checks. No feature code changed. `composer check` on `127.0.0.1` / `university_portal_testing` passed (721 tests, 719 passed, 2 skipped, 4166 assertions) at a 512MB process limit. `npm run build` succeeded. TASK-054 through TASK-063 are ticked. `phase-6-setup` is pushed. |
+| 12 Oct 2026 | CI failed because `SetupNavigationTest` refreshes the application and the staff layout then reads the missing Vite manifest. `Tests\TestCase` now skips Vite on every new application. With `public/build` moved aside, Pest passed (721 tests, 719 passed, 2 skipped, 4166 assertions). Not pushed. |
