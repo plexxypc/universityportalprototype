@@ -127,6 +127,28 @@ class GradingService
     }
 
     /**
+     * Warning, probation, or null when standing is off or the CGPA is clear.
+     *
+     * Probation is checked first. A CGPA below warning, and not below probation, is a warning.
+     */
+    public function standing(?int $cgpa_hundredths, ?int $warning_hundredths, ?int $probation_hundredths): ?string
+    {
+        if ($cgpa_hundredths === null || ($warning_hundredths === null && $probation_hundredths === null)) {
+            return null;
+        }
+
+        if ($probation_hundredths !== null && $cgpa_hundredths < $probation_hundredths) {
+            return 'Probation';
+        }
+
+        if ($warning_hundredths !== null && $cgpa_hundredths < $warning_hundredths) {
+            return 'Warning';
+        }
+
+        return null;
+    }
+
+    /**
      * Points that count after the resit cap, then Latest or Best.
      *
      * The cap applies to every attempt after the first. A Best tie uses the later semester.

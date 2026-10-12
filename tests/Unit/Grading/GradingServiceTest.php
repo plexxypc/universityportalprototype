@@ -118,6 +118,16 @@ it('breaks a best-attempt tie with the later semester', function () {
         ->and($chosen['points_hundredths'])->toBe(400);
 });
 
+it('places a CGPA on probation before warning', function () {
+    $service = grading();
+
+    expect($service->standing(99, 150, 100))->toBe('Probation')
+        ->and($service->standing(120, 150, 100))->toBe('Warning')
+        ->and($service->standing(200, 150, 100))->toBeNull()
+        ->and($service->standing(50, null, null))->toBeNull()
+        ->and($service->standing(null, 150, 100))->toBeNull();
+});
+
 it('can round a total before lookup without changing the default callers', function () {
     $grade = grading()->grade(
         6_950,

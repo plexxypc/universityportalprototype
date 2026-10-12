@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * One version of the institution's grading rules.
@@ -97,5 +98,15 @@ class GradingScheme extends Model
     public function results(): HasMany
     {
         return $this->hasMany(Result::class);
+    }
+
+    /**
+     * Standing thresholds for this scheme version, when standing is on.
+     *
+     * @return HasOne<AcademicStandingThreshold, $this>
+     */
+    public function standing(): HasOne
+    {
+        return $this->hasOne(AcademicStandingThreshold::class, 'scheme_id');
     }
 }
