@@ -84,14 +84,7 @@ class AcademicSessionsPage extends Page implements HasTable
                         ->default(true),
                 ])
                 ->action(function (array $data): void {
-                    $this->guardManage();
-                    app(AcademicService::class)->createSession(
-                        $this->actor(),
-                        $this->text($data, 'name'),
-                        (bool) ($data['is_current'] ?? false),
-                        request(),
-                    );
-                    Notification::make()->title('Session saved')->success()->send();
+                    $this->saveSession(0, $this->text($data, 'name'), (bool) ($data['is_current'] ?? false));
                 }),
         ];
     }
@@ -117,15 +110,11 @@ class AcademicSessionsPage extends Page implements HasTable
                         Toggle::make('is_current')->label('Current session'),
                     ])
                     ->action(function (AcademicSession $record, array $data): void {
-                        $this->guardManage();
-                        app(AcademicService::class)->updateSession(
-                            $this->actor(),
+                        $this->saveSession(
                             (int) $record->getKey(),
                             $this->text($data, 'name'),
                             (bool) ($data['is_current'] ?? false),
-                            request(),
                         );
-                        Notification::make()->title('Session saved')->success()->send();
                     }),
                 DeleteAction::make()
                     ->authorize(fn (AcademicSession $record): bool => $this->policy()->delete($this->actor(), $record))
@@ -133,6 +122,33 @@ class AcademicSessionsPage extends Page implements HasTable
                         $this->deleteSession((int) $record->getKey());
                     }),
             ]);
+    }
+
+    /**
+     * Create or update one session. A forged id is refused and changes nothing.
+     */
+    public function saveSession(int $session_id, string $name, bool $is_current): void
+    {
+        $this->guardManage();
+
+        try {
+            $service = app(AcademicService::class);
+
+            if ($session_id === 0) {
+                $service->createSession($this->actor(), $name, $is_current, request());
+            } else {
+                $service->updateSession($this->actor(), $session_id, $name, $is_current, request());
+            }
+        } catch (ValidationException $exception) {
+            Notification::make()
+                ->title($this->firstError($exception, 'That session could not be saved.'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()->title('Session saved')->success()->send();
     }
 
     /**
@@ -146,7 +162,7 @@ class AcademicSessionsPage extends Page implements HasTable
             app(AcademicService::class)->deleteSession($this->actor(), $session_id, request());
         } catch (ValidationException $exception) {
             Notification::make()
-                ->title($exception->errors()['session'][0] ?? 'That session could not be deleted.')
+                ->title($this->firstError($exception, 'That session could not be deleted.'))
                 ->danger()
                 ->send();
 
@@ -197,6 +213,22 @@ class AcademicSessionsPage extends Page implements HasTable
         }
 
         return $user;
+    }
+
+    /**
+     * The first validation sentence, for the danger notice.
+     */
+    private function firstError(ValidationException $exception, string $fallback): string
+    {
+        foreach ($exception->errors() as $messages) {
+            $message = $messages[0] ?? null;
+
+            if (is_string($message) && $message !== '') {
+                return $message;
+            }
+        }
+
+        return $fallback;
     }
 
     /**
