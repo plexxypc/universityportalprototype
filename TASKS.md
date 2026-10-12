@@ -127,6 +127,7 @@
 - [ ] TASK-064 `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`)
   - Phase 3 carry-over: set `users.name` from the student's three name parts.
   - Phase 3 carry-over: default a blank entry session to the current session.
+  - Phase 6 carry-over: the counters key must follow `MatricPattern::counterParts()`. Include the department code when the pattern contains `{DEPT}`, and the year when it contains `{YEAR}`. A pattern that uses only one of those tokens must not share a counter with a pattern that uses the other, so two departments cannot receive the same matric number. `{SEQ}` has no zero padding. `{SEQ4}` pads to four digits and does not shorten a number past 9999.
 - [ ] TASK-065 `CredentialService`: temporary password, expiry, welcome email, **resend credentials**
   - Phase 5 carry-over: the welcome email goes through MailService with the credentials template and login_id (matric number for students, email address for staff). Add a test that runs the REAL student-creation path and sweeps for the temporary password as in SecretHuntTest; resending credentials must supersede older unsent rows; there is currently no command or service that creates a student with a temporary password.
 - [ ] TASK-066 Single "Add student" form
