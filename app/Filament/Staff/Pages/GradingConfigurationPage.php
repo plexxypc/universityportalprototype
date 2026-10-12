@@ -19,6 +19,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -49,6 +50,13 @@ class GradingConfigurationPage extends Page
      * @var array<string, mixed>|null
      */
     public ?array $data = [];
+
+    /**
+     * The last preview. Null until the button is used. Preview writes nothing.
+     *
+     * @var array{courses: list<array{total: string, letter: string, points: string, passed: bool}>, gpa: string|null, classification: string|null}|null
+     */
+    public ?array $preview_lines = null;
 
     /**
      * Registrar and Exam Officer can open the page. Only Super Admin can save.
@@ -93,6 +101,22 @@ class GradingConfigurationPage extends Page
         $this->gradingForm()->fill(app(GradingConfigService::class)->formValues());
 
         Notification::make()->title('Grading scheme saved')->success()->send();
+    }
+
+    /**
+     * Grade the sample courses on the form. The scheme is not saved.
+     */
+    public function preview(): void
+    {
+        abort_unless(static::canAccess(), 403);
+
+        try {
+            $this->preview_lines = app(GradingConfigService::class)->preview($this->gradingForm()->getState());
+        } catch (ValidationException $exception) {
+            $this->preview_lines = null;
+
+            Notification::make()->title($this->firstError($exception, 'Those scores could not be previewed.'))->danger()->send();
+        }
     }
 
     /**
@@ -194,17 +218,31 @@ class GradingConfigurationPage extends Page
             TextInput::make('probation_cgpa')
                 ->label('Probation CGPA')
                 ->helperText('Leave standing off, or set at least one threshold. Probation must be below warning.'),
+            Repeater::make('preview_courses')
+                ->label('Sample courses')
+                ->schema([
+                    TextInput::make('units')->label('Credit units')->required(),
+                    TextInput::make('scores.0')->label('First component score')->required(),
+                    TextInput::make('scores.1')->label('Second component score'),
+                    TextInput::make('scores.2')->label('Third component score'),
+                ])
+                ->maxItems(3)
+                ->helperText('Up to three courses. Scores follow the component order above. Preview does not save the scheme.'),
         ]);
     }
 
     public function content(Schema $schema): Schema
     {
         return $schema->components([
+            View::make('filament.staff.grading-preview'),
             Form::make([EmbeddedSchema::make('form')])
                 ->id('form')
                 ->livewireSubmitHandler('save')
                 ->footer([
                     Actions::make([
+                        Action::make('preview')
+                            ->label('Preview these scores')
+                            ->action('preview'),
                         Action::make('save')
                             ->label('Save grading scheme')
                             ->visible(fn (): bool => $this->canManage())

@@ -75,6 +75,85 @@ class GradingConfigService
     }
 
     /**
+     * Grade up to three sample courses from the form. This writes nothing.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{
+     *     courses: list<array{total: string, letter: string, points: string, passed: bool}>,
+     *     gpa: string|null,
+     *     classification: string|null
+     * }
+     */
+    public function preview(array $input): array
+    {
+        $parsed = $this->parsed($input);
+        $samples = $input['preview_courses'] ?? null;
+
+        if (! is_array($samples) || $samples === [] || count($samples) > 3) {
+            throw ValidationException::withMessages([
+                'preview_courses' => 'Enter one, two, or three sample courses.',
+            ]);
+        }
+
+        $grading = new GradingService;
+        $bands = [];
+
+        foreach ($parsed['bands'] as $band) {
+            $bands[] = [
+                'min_hundredths' => $band['min'],
+                'max_hundredths' => $band['max'],
+                'letter' => $band['letter'],
+                'points_hundredths' => $band['points'],
+                'remark' => $band['remark'],
+            ];
+        }
+
+        $classes = [];
+
+        foreach ($parsed['classifications'] as $class) {
+            $classes[] = [
+                'min_hundredths' => $class['min'],
+                'max_hundredths' => $class['max'],
+                'name' => $class['name'],
+            ];
+        }
+
+        $lines = [];
+        $averages = [];
+
+        foreach ($samples as $sample) {
+            if (! is_array($sample)) {
+                throw ValidationException::withMessages([
+                    'preview_courses' => 'Each sample course needs credit units and a score for every component.',
+                ]);
+            }
+
+            $units = $this->units($sample);
+            $scores = $this->sampleScores($sample, $parsed['components']);
+            $total = $grading->total($scores);
+            $grade = $grading->grade($total, $bands, $parsed['pass_mark']);
+            $lines[] = [
+                'total' => Hundredths::toDecimal($total),
+                'letter' => $grade['letter'],
+                'points' => Hundredths::toDecimal($grade['points_hundredths']),
+                'passed' => $grade['passed'],
+            ];
+            $averages[] = [
+                'points_hundredths' => $grade['points_hundredths'],
+                'units' => $units,
+            ];
+        }
+
+        $gpa = $grading->average($averages);
+
+        return [
+            'courses' => $lines,
+            'gpa' => $gpa === null ? null : Hundredths::toDecimal($gpa),
+            'classification' => $grading->classification($gpa, $classes),
+        ];
+    }
+
+    /**
      * Validate the form and store the next version in one transaction.
      *
      * @param  array<string, mixed>  $input
@@ -781,6 +860,96 @@ class GradingConfigService
         } catch (InvalidArgumentException) {
             throw ValidationException::withMessages([$key => $message]);
         }
+    }
+
+    /**
+     * Credit units for one sample course.
+     *
+     * @param  array<string, mixed>  $sample
+     */
+    private function units(array $sample): int
+    {
+        $units = $this->text($sample, 'units');
+
+        if (preg_match('/^\d+$/', $units) !== 1) {
+            throw ValidationException::withMessages([
+                'preview_courses' => 'Enter credit units as a whole number from 1 to 255.',
+            ]);
+        }
+
+        $value = (int) $units;
+
+        if ($value < 1 || $value > 255) {
+            throw ValidationException::withMessages([
+                'preview_courses' => 'Enter credit units as a whole number from 1 to 255.',
+            ]);
+        }
+
+        return $value;
+    }
+
+    /**
+     * One score per component, in the same order, not above that component's maximum.
+     *
+     * @param  array<string, mixed>  $sample
+     * @param  list<array{name: string, max: int}>  $components
+     * @return list<int>
+     */
+    private function sampleScores(array $sample, array $components): array
+    {
+        $scores = $sample['scores'] ?? null;
+
+        if (! is_array($scores)) {
+            throw ValidationException::withMessages([
+                'preview_courses' => 'Enter a score for every assessment component.',
+            ]);
+        }
+
+        while ($scores !== []) {
+            $last = end($scores);
+
+            if ((is_string($last) || is_numeric($last)) && trim((string) $last) !== '') {
+                break;
+            }
+
+            array_pop($scores);
+        }
+
+        if (count($scores) !== count($components)) {
+            throw ValidationException::withMessages([
+                'preview_courses' => 'Enter a score for every assessment component.',
+            ]);
+        }
+
+        $parsed = [];
+
+        foreach ($components as $index => $component) {
+            $raw = $scores[$index] ?? null;
+
+            if (! is_string($raw) && ! is_numeric($raw)) {
+                throw ValidationException::withMessages([
+                    'preview_courses' => 'Enter a score for every assessment component.',
+                ]);
+            }
+
+            try {
+                $score = Hundredths::fromDecimal((string) $raw);
+            } catch (InvalidArgumentException) {
+                throw ValidationException::withMessages([
+                    'preview_courses' => 'Enter each sample score with at most two decimal places.',
+                ]);
+            }
+
+            if ($score > $component['max']) {
+                throw ValidationException::withMessages([
+                    'preview_courses' => $component['name'].' cannot be above its maximum.',
+                ]);
+            }
+
+            $parsed[] = $score;
+        }
+
+        return $parsed;
     }
 
     /**
