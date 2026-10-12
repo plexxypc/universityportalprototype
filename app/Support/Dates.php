@@ -52,6 +52,23 @@ final class Dates
     }
 
     /**
+     * Lagos wall time for a DATETIME column, as Y-m-d H:i:s.
+     *
+     * A naive string is read in Africa/Lagos and is not shifted. A value that
+     * already carries a timezone, including UTC, is converted to Lagos.
+     */
+    public static function storageDateTime(mixed $value, ?string $source_timezone = null): ?string
+    {
+        $instant = self::toLagos($value, $source_timezone);
+
+        if ($instant === null) {
+            return null;
+        }
+
+        return $instant->format('Y-m-d H:i:s');
+    }
+
+    /**
      * Convert a stored instant to Africa/Lagos, or null when it cannot be read.
      */
     private static function toLagos(mixed $value, ?string $source_timezone): ?DateTimeImmutable

@@ -8,6 +8,7 @@ use App\Http\Controllers\StaffLogoutController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
+use App\Models\AcademicSession;
 use App\Models\Applicant;
 use App\Models\AttendanceRecord;
 use App\Models\AuditLog;
@@ -16,13 +17,16 @@ use App\Models\CourseRegistration;
 use App\Models\Department;
 use App\Models\Document;
 use App\Models\Faculty;
+use App\Models\InstitutionSetting;
 use App\Models\Invoice;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Programme;
 use App\Models\Receipt;
 use App\Models\Result;
+use App\Models\Semester;
 use App\Models\Student;
+use App\Policies\AcademicSessionPolicy;
 use App\Policies\AttendanceRecordPolicy;
 use App\Policies\AuditLogPolicy;
 use App\Policies\CoursePolicy;
@@ -30,13 +34,16 @@ use App\Policies\CourseRegistrationPolicy;
 use App\Policies\DepartmentPolicy;
 use App\Policies\DocumentPolicy;
 use App\Policies\FacultyPolicy;
+use App\Policies\InstitutionSettingPolicy;
 use App\Policies\InvoicePolicy;
 use App\Policies\NotificationPolicy;
 use App\Policies\PaymentPolicy;
 use App\Policies\ProgrammePolicy;
 use App\Policies\ReceiptPolicy;
 use App\Policies\ResultPolicy;
+use App\Policies\SemesterPolicy;
 use App\Policies\StudentPolicy;
+use App\Services\SettingsService;
 use App\Support\Console\StderrLine;
 use App\Support\DatabaseTls;
 use App\Support\EnvironmentGuard;
@@ -51,6 +58,7 @@ use Illuminate\Queue\Events\Looping;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
@@ -84,6 +92,7 @@ class AppServiceProvider extends ServiceProvider
 
         Permissions::registerGates();
         $this->registerPolicies();
+        $this->registerInstitutionBrand();
         $this->registerMailTransport();
         $this->registerQueueHealth();
 
@@ -92,6 +101,27 @@ class AppServiceProvider extends ServiceProvider
             EnsurePasswordChanged::class,
             EnsurePortalArea::class,
         ]);
+    }
+
+    /**
+     * Share the institution name, short code, and logo with the public pages.
+     */
+    private function registerInstitutionBrand(): void
+    {
+        View::composer(
+            [
+                'auth.login',
+                'auth.forgot-password',
+                'auth.reset-password',
+                'auth.change-password',
+                'layouts.student',
+                'components.student.sidebar',
+                'components.student.top-bar',
+            ],
+            function (\Illuminate\View\View $view): void {
+                $view->with('institution', app(SettingsService::class)->brand());
+            },
+        );
     }
 
     /**
@@ -143,5 +173,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Department::class, DepartmentPolicy::class);
         Gate::policy(Programme::class, ProgrammePolicy::class);
         Gate::policy(Course::class, CoursePolicy::class);
+        Gate::policy(AcademicSession::class, AcademicSessionPolicy::class);
+        Gate::policy(Semester::class, SemesterPolicy::class);
+        Gate::policy(InstitutionSetting::class, InstitutionSettingPolicy::class);
     }
 }

@@ -46,3 +46,49 @@ function something()
 {
     // ..
 }
+
+/**
+ * A real PNG of the given size, for logo checks.
+ */
+function logo_png(int $width, int $height): string
+{
+    $image = imagecreatetruecolor($width, $height);
+
+    if ($image === false) {
+        throw new RuntimeException('GD could not create an image.');
+    }
+
+    ob_start();
+    imagepng($image);
+    $bytes = ob_get_clean();
+    unset($image);
+
+    if (! is_string($bytes) || $bytes === '') {
+        throw new RuntimeException('GD could not encode a PNG.');
+    }
+
+    return $bytes;
+}
+
+/**
+ * A real JPEG of the given size, for logo checks.
+ */
+function logo_jpeg(int $width, int $height): string
+{
+    $image = imagecreatetruecolor($width, $height);
+
+    if ($image === false) {
+        throw new RuntimeException('GD could not create an image.');
+    }
+
+    ob_start();
+    imagejpeg($image);
+    $bytes = ob_get_clean();
+    unset($image);
+
+    if (! is_string($bytes) || $bytes === '') {
+        throw new RuntimeException('GD could not encode a JPEG.');
+    }
+
+    return $bytes;
+}

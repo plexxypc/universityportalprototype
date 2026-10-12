@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\InstitutionSettingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -31,10 +35,12 @@ use Illuminate\Database\Eloquent\Model;
     'attendance_threshold',
     'require_minimum_payment',
 ])]
-class InstitutionSetting extends Model
+class InstitutionSetting extends Model implements VisibleToUser
 {
     /** @use HasFactory<InstitutionSettingFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the setting flags.
@@ -48,5 +54,16 @@ class InstitutionSetting extends Model
             'withhold_results_for_debt' => 'boolean',
             'require_minimum_payment' => 'boolean',
         ];
+    }
+
+    /**
+     * The profile follows users_roles_settings. Only Super Admin holds that key.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['users_roles_settings'],
+            kind: VisibilityKind::InstitutionSetting,
+        );
     }
 }

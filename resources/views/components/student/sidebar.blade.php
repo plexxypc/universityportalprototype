@@ -5,8 +5,11 @@
 <aside {{ $attributes->merge(['class' => 'hidden h-screen w-60 shrink-0 flex-col border-e border-border bg-surface md:flex']) }}>
     <div class="flex items-center justify-between gap-space-8 pe-space-8">
         <a href="{{ url('/design-preview/student') }}" class="flex min-h-11 min-w-0 flex-1 items-center gap-space-12 px-space-16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
-            <img src="{{ asset(config('portal.institution.logo')) }}" alt="" width="32" height="32" class="size-8 shrink-0 rounded-control">
-            <span class="truncate text-body font-semibold text-text">{{ config('portal.institution.name') }}</span>
+            <img src="{{ $institution['logo_url'] }}" alt="" width="32" height="32" class="size-8 shrink-0 rounded-control">
+            <span class="min-w-0">
+                <span class="block truncate text-body font-semibold text-text">{{ $institution['name'] }}</span>
+                <span class="block truncate text-small font-normal text-muted">{{ $institution['code'] }}</span>
+            </span>
         </a>
         @auth
             <x-student.notification-bell />

@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 use App\Filament\StaffPanelTheme;
+use App\Services\SettingsService;
 use Filament\FontProviders\LocalFontProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
 
 it('themes the staff panel from the design tokens and institution config', function () {
     config([
@@ -11,6 +15,7 @@ it('themes the staff panel from the design tokens and institution config', funct
         'portal.institution.logo' => 'images/logo-placeholder.svg',
     ]);
 
+    $brand = app(SettingsService::class)->brand();
     $panel = filament()->getPanel('staff');
     $primary = $panel->getColors()['primary'];
     $labels = array_map(
@@ -31,7 +36,7 @@ it('themes the staff panel from the design tokens and institution config', funct
         ->and($primary[600])->toBe('#4F46E5')
         ->and($primary[700])->toBe('#4338CA')
         ->and($panel->getBrandName())->toBe('Northwind Polytechnic')
-        ->and((string) $panel->getBrandLogo())->toContain('images/logo-placeholder.svg')
+        ->and((string) $panel->getBrandLogo())->toBe($brand['logo_url'])
         ->and($labels)->toBe(StaffPanelTheme::navigationGroupLabels())
         ->and($panel->getResources())->toBe([])
         ->and(is_file(public_path('js/filament/support/support.js')))->toBeTrue();

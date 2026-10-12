@@ -20,6 +20,8 @@ enum VisibilityKind
     case Department;
     case Programme;
     case Course;
+    case InstitutionSetting;
+    case AcademicCalendar;
 
     /**
      * Faculty, department, programme, and course rows.

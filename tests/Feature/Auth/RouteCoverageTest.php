@@ -2,8 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Filament\Staff\Pages\AcademicSessionsPage;
+use App\Filament\Staff\Pages\CoursesPage;
+use App\Filament\Staff\Pages\DepartmentsPage;
 use App\Filament\Staff\Pages\EmailOutboxPage;
+use App\Filament\Staff\Pages\FacultiesPage;
+use App\Filament\Staff\Pages\FeeCategoriesPage;
+use App\Filament\Staff\Pages\FeeStructuresPage;
+use App\Filament\Staff\Pages\GradingConfigurationPage;
+use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\NotificationsPage;
+use App\Filament\Staff\Pages\ProgrammesPage;
+use App\Filament\Staff\Pages\SemestersPage;
 use App\Http\Middleware\AuthenticateStaffPanel;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -37,6 +47,7 @@ function route_coverage_named_public_routes(): array
         'livewire.preview-file' => 'Persistent middleware from the page protects this Livewire preview.',
         'storage.local' => 'Signed file route for the private local disk.',
         'storage.local.upload' => 'Signed upload route for the private local disk.',
+        'institution.logo' => 'Public institution logo. The route has no path, and a missing file falls back to the placeholder.',
         'filament.exports.download' => 'Filament checks the signed-in owner in the controller. This package route has no auth middleware.',
         'filament.imports.failed-rows.download' => 'Filament checks the signed-in owner in the controller. This package route has no auth middleware.',
     ];
@@ -227,7 +238,16 @@ it('points the public allow-list at routes that are registered', function () {
         }
     }
 
+    $logo = Route::getRoutes()->getByName('institution.logo');
+
+    expect($logo)->toBeInstanceOf(RegisteredRoute::class)
+        ->and($logo->uri())->toBe('institution/logo')
+        ->and(route_coverage_named_public_routes()['institution.logo'])->toBe(
+            'Public institution logo. The route has no path, and a missing file falls back to the placeholder.',
+        );
+
     expect($uris)->toContain('/')
+        ->and($uris)->toContain('institution/logo')
         ->and($uris)->toContain('up')
         ->and(collect($uris)->contains(
             fn (string $uri): bool => str_contains($uri, '/livewire.min.js') || str_contains($uri, '/livewire.js'),
@@ -274,6 +294,16 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
     $staff_pages = [
         NotificationsPage::class,
         EmailOutboxPage::class,
+        InstitutionSettingsPage::class,
+        AcademicSessionsPage::class,
+        SemestersPage::class,
+        FacultiesPage::class,
+        DepartmentsPage::class,
+        ProgrammesPage::class,
+        CoursesPage::class,
+        GradingConfigurationPage::class,
+        FeeCategoriesPage::class,
+        FeeStructuresPage::class,
     ];
 
     foreach ($staff_pages as $page) {

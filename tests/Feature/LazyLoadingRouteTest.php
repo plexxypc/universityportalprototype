@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use App\Support\DesignPreviewTable;
 use Illuminate\Database\LazyLoadingViolationException;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+
+uses(RefreshDatabase::class);
 
 it('serves the portal login page without a lazy-loading violation', function () {
     $this->withoutVite();

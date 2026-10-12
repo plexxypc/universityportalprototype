@@ -15,15 +15,15 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 1 | Block login when the temporary password has expired | TASK-039 | Login page and login action (`it blocks login when the temporary password has expired`) |
 | 1 | Deactivating a staff profile deactivates the user | TASK-137 | Activate/deactivate staff |
 | 1 | Deactivating a staff profile revokes sessions | TASK-137 | Activate/deactivate staff |
-| 2 | Switching the current session clears the old row first, inside a transaction | TASK-055 | Academic sessions resource (single current session) |
-| 2 | Switching the active semester clears the old row first, inside a transaction | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
-| 2 | Reads fall back to `config/portal.php` while `institution_settings` is empty | TASK-054 | Institution settings page (profile, logo upload, matric pattern, unit limits, approval toggle, deadlines, attendance threshold, withhold-results toggle) |
-| 2 | A non-empty session list contains a current session. The flag only guarantees at most one | TASK-055 | Academic sessions resource (single current session) |
-| 2 | A non-empty semester list contains an active semester. The flag only guarantees at most one | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
-| 2 | The active semester belongs to the current session | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
-| 2 | Session names match `2026/2027` | TASK-055 | Academic sessions resource (single current session) |
-| 2 | Prerequisite cycles. A two-course cycle is stored | TASK-058 | Course catalogue resource with prerequisites and programme–course mapping |
-| 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules |
+| 2 | Switching the current session clears the old row first, inside a transaction | TASK-055 | Academic sessions resource (single current session). Test: `it switches the current session inside one transaction` |
+| 2 | Switching the active semester clears the old row first, inside a transaction | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines). Test: `it switches the active semester inside one transaction` |
+| 2 | Reads fall back to `config/portal.php` while `institution_settings` is empty | TASK-054 | Institution settings page. Test: `it falls back to portal config when institution settings are empty` |
+| 2 | A non-empty session list contains a current session. The flag only guarantees at most one | TASK-055 | Academic sessions resource (single current session). Test: `it keeps a current session whenever sessions exist` |
+| 2 | A non-empty semester list contains an active semester. The flag only guarantees at most one | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines). Test: `it keeps an active semester whenever semesters exist` |
+| 2 | The active semester belongs to the current session | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines). Test: `it activates a semester and its session in one transaction` |
+| 2 | Session names match `2026/2027` | TASK-055 | Academic sessions resource (single current session). Test: `it accepts only a session name whose second year is the next year` |
+| 2 | Prerequisite cycles. A two-course cycle is stored | TASK-058 | The database cannot reject the cycle, so PrerequisiteGraph does. Test: `it rejects a cycle of two or more courses` |
+| 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules. Test: `it accepts only a degree from the closed list` |
 | 2 | What payment satisfies `require_minimum_payment` | TASK-094 | Optional "minimum payment before registration" setting |
 | 3 | `users.name` is set from the student's three name parts | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`) |
 | 3 | On conversion, copy the applicant onto the new user and student | TASK-080 | Applicants: admit and convert to student (single and bulk), admission email |
@@ -53,22 +53,22 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 4 | At most one non-cancelled invoice per student per session | TASK-096 | Invoice generation: single and bulk by programme/level/session, with preview and confirm |
 | 4 | A reversal reduces `paid_kobo` and does not delete the payment | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |
 | 4 | Invoice numbers, receipt numbers, and payment references are allocated from `counters` inside the creating transaction | TASK-096, TASK-100, TASK-106 | Invoice generation; payment reference on initiate; receipt numbering |
-| 5 | Assessment components of one scheme total 100 | TASK-060 | Grading configuration UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation; default-scheme loader; scheme versioning. Add the academic-standing threshold table (warning, probation) in this task |
-| 5 | Grade bands cover 0–100 with no gaps and no overlap | TASK-060 | Grading configuration UI, including overlap/gap/total validation |
+| 5 | Assessment components of one scheme total 100 | TASK-060 | Test: `it refuses component totals that are not 100` |
+| 5 | Grade bands cover 0–100 with no gaps and no overlap | TASK-060 | Test: `it refuses grade bands that leave a gap` |
 | 5 | A score is not above that component's maximum | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |
 | 5 | Published results are locked | TASK-114 | Workflow: submit → approve → publish, with role checks and locking on publish |
 | 5 | Amendments are audited and re-published | TASK-115 | Amendment process for published results (audited, re-publish) |
 | 5 | A result score's component belongs to the result's scheme | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |
 | 5 | `scheme_version` matches the linked scheme row | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |
-| 5 | Editing the active scheme inserts a new version and repoints unpublished results. Published rows keep their scheme id | TASK-060 | Grading configuration UI, including scheme versioning |
-| 5 | When unpublished results move, `result_scores` are remapped to the new version's components in that transaction | TASK-060 | Grading configuration UI, including scheme versioning |
-| 5 | GPA uses the latest or best attempt and applies `resit_points_cap` | TASK-059 | `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests |
-| 5 | Classification bands do not overlap or leave gaps | TASK-060 | Grading configuration UI, including classification bands and overlap/gap/total validation |
-| 5 | The pass mark agrees with the fail band | TASK-060 | Grading configuration UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation |
-| 5 | Stored total, grade, and points match the scores and the scheme | TASK-059 | `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests |
-| 5 | Switching the active grading scheme clears the previous row inside a transaction | TASK-060 | Grading configuration UI, including scheme versioning |
-| 5 | A decimal total is rounded before the grade lookup, or bands are lower-bound inclusive | TASK-059 | Decide here whether a decimal total is rounded to a whole number before the grade lookup, or bands are lower-bound inclusive |
-| 5 | Academic standing thresholds (warning, probation) need their own table | TASK-060 | Add the academic-standing threshold table (warning, probation) in this task |
+| 5 | Editing the active scheme inserts a new version and repoints unpublished results. Published rows keep their scheme id | TASK-060 | Test: `it versions the scheme and remaps unpublished scores in one transaction` |
+| 5 | When unpublished results move, `result_scores` are remapped to the new version's components in that transaction | TASK-060 | Test: `it rolls back when a removed component still has an unpublished score` |
+| 5 | GPA uses the latest or best attempt and applies `resit_points_cap` | TASK-059 | Tests: `it uses the latest or the best attempt after the resit cap`, `it weights grade points by credit units`, `it rounds a CGPA half up before classification` |
+| 5 | Classification bands do not overlap or leave gaps | TASK-060 | Tests: `it refuses classification bands that leave a gap`, `it requires classification bands to end at the highest grade point` |
+| 5 | The pass mark agrees with the fail band | TASK-060 | Test: `it refuses a pass mark that does not sit one hundredth above the fail band` |
+| 5 | Stored total, grade, and points match the scores and the scheme | TASK-059 | `GradingService` pure functions. Test: `it adds continuous assessment and the exam before the lookup` |
+| 5 | Switching the active grading scheme clears the previous row inside a transaction | TASK-060 | Tests: `it versions the scheme and remaps unpublished scores in one transaction`, `it keeps exactly one active scheme after a version save and after a failed one` |
+| 5 | A decimal total is rounded before the grade lookup, or bands are lower-bound inclusive | TASK-059 | Bands are lower-bound inclusive and the total is not rounded. Test: `it keeps 69.50 in the B band and does not round it up to 70` |
+| 5 | Academic standing thresholds (warning, probation) need their own table | TASK-060 | Test: `it stores a standing row only when a threshold is set` |
 | 6 | The marked student is registered for that course in that semester | TASK-122 | `AttendanceService` (sessions, records, percentages, threshold) |
 | 6 | Attendance percentage and `attendance_threshold` | TASK-122 | `AttendanceService` (sessions, records, percentages, threshold) |
 | 6 | A lecturer marks only assigned courses | TASK-122 | `AttendanceService` (sessions, records, percentages, threshold) |

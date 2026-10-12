@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Mail;
 
 use App\Enums\EmailTemplate;
+use App\Services\SettingsService;
 use App\Support\Dates;
 use App\Support\Money;
 use InvalidArgumentException;
@@ -487,9 +488,9 @@ final class EmailTemplateRenderer
 
     private function institutionName(): string
     {
-        $name = config('portal.institution.name');
+        $name = app(SettingsService::class)->brand()['name'];
 
-        if (! is_string($name) || trim($name) === '') {
+        if (trim($name) === '') {
             throw new InvalidArgumentException(MailError::INVALID_TEMPLATE_DATA);
         }
 

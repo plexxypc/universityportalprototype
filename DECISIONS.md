@@ -326,3 +326,21 @@
 **Reason:** Render's free plan cannot use SMTP, and no provider account is available yet. The outbox still has to hold a password and a reset token until send without putting them in the queue, the logs, or the staff screen. Audit and reset have to record the event without storing the identifier or the secret.
 
 **Consequences:** Phase 5 implements this ADR. Tests pass with the log mailer and test fakes. A live send waits until a provider is confirmed and `MAIL_MAILER`, `MAIL_API_URL`, `MAIL_API_KEY`, and `MAIL_DAILY_LIMIT` are set. The approved schema change is the nullable `secrets` column only. `redacted_at` is unchanged. Admin recovery is a later decision if the recommendation is accepted.
+
+## ADR-030: Grading arithmetic
+
+**Status:** Provisional. Confirm the two notes below with the Registrar before treating them as final.
+
+**Decision:** Course totals, grade points, GPA, and CGPA are integer hundredths. The calculator does not use floating point. `App\Support\Grading\DefaultScheme` holds the Nigerian 5-point numbers. The calculator does not read that class. A button on the grading screen loads it only when no scheme exists. A migration or a seeder does not.
+
+1. **Hundredths.** A score of 69.50 is 6950. A grade point of 5.00 is 500. A CGPA of 4.60 is 460. Bands run from 0.00 (0) through 100.00 (10000). The default B band is 60.00–69.99 (6000–6999). The default A band is 70.00–100.00 (7000–10000).
+2. **Lower-bound lookup.** The letter is the band with the highest minimum that is still at or below the total. The next band starts one hundredth after the previous maximum, so the bands are contiguous and do not overlap.
+3. **Pass mark.** The pass mark is the top of the fail band plus 0.01. The default pass mark is 40.00, so F ends at 39.99. 39.99 fails. 40.00 is E and passes.
+4. **Provisional: confirm with the Registrar.** Course totals are not rounded before the letter lookup. 69.50 stays in B. It does not become 70. `GradingService::grade()` takes a `GradeRounding` argument that defaults to `None`, so a later mode can be passed without changing callers that omit it. That mode is not a setting on the screen.
+5. **Provisional: confirm with the Registrar.** CGPA is rounded half up at the division, and classification uses that rounded value. 4.495 becomes 4.50 and is First Class. 4.494 stays 4.49 and is Second Class Upper. `GradingService::average()` takes a `GradeRounding` argument that defaults to `HalfUp`.
+6. **Zero units.** An average with no credit units returns null. The calculator does not divide by zero.
+7. **Repeats.** The resit cap, when one is set, is applied to every attempt after the first. Latest or Best is chosen after that cap. A Best tie uses the later semester. A failed course stays in the average.
+
+**Reason:** The database stores decimals, and a float would move a boundary such as 69.50. Hundredths keep those edges exact. The two rounding rules are the ones the Registrar still has to confirm, so they stay provisional and the method signatures already have a place for a different mode.
+
+**Consequences:** TASK-059 implements the calculator. TASK-060 checks that a saved scheme matches these edges and versions the scheme. The default scheme is not inserted by a migration.

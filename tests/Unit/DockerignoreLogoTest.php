@@ -89,6 +89,7 @@ it('keeps the institution logo in the docker image', function () {
     expect(is_file($logo_path))->toBeTrue()
         ->and((string) file_get_contents($logo_path))->toContain('<svg')
         ->and(dockerignore_excludes($ignore, $logo))->toBeFalse()
+        ->and(dockerignore_excludes($ignore, 'public/images/logo-default.png'))->toBeFalse()
         ->and(dockerignore_excludes($ignore, 'docs/screenshot.png'))->toBeTrue()
         ->and(dockerignore_excludes($ignore, 'README.md'))->toBeTrue();
 });
