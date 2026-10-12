@@ -35,6 +35,8 @@ $app = Application::configure(basePath: dirname(__DIR__))
             require $application->basePath('routes/webhooks.php');
             // Health probes must not start a session or set a cookie.
             require $application->basePath('routes/health.php');
+            // The logo is public and cached. The web group would mark it no-store.
+            require $application->basePath('routes/brand.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

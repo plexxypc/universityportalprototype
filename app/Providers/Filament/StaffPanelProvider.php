@@ -12,6 +12,7 @@ use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\SettingsService;
 use Filament\FontProviders\LocalFontProvider;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -53,8 +54,8 @@ class StaffPanelProvider extends PanelProvider
             ->path('staff')
             ->viteTheme('resources/css/filament/staff/theme.css')
             ->font('Inter', provider: LocalFontProvider::class)
-            ->brandName(fn (): string => (string) config('portal.institution.name'))
-            ->brandLogo(fn (): string => asset((string) config('portal.institution.logo')))
+            ->brandName(fn (): string => app(SettingsService::class)->brand()['name'])
+            ->brandLogo(fn (): string => app(SettingsService::class)->brand()['logo_url'])
             ->brandLogoHeight('2rem')
             ->darkMode(false)
             ->sidebarWidth('240px')

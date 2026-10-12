@@ -17,7 +17,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 1 | Deactivating a staff profile revokes sessions | TASK-137 | Activate/deactivate staff |
 | 2 | Switching the current session clears the old row first, inside a transaction | TASK-055 | Academic sessions resource (single current session) |
 | 2 | Switching the active semester clears the old row first, inside a transaction | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
-| 2 | Reads fall back to `config/portal.php` while `institution_settings` is empty | TASK-054 | Institution settings page (profile, logo upload, matric pattern, unit limits, approval toggle, deadlines, attendance threshold, withhold-results toggle) |
+| 2 | Reads fall back to `config/portal.php` while `institution_settings` is empty | TASK-054 | Institution settings page. Test: `it falls back to portal config when institution settings are empty` |
 | 2 | A non-empty session list contains a current session. The flag only guarantees at most one | TASK-055 | Academic sessions resource (single current session) |
 | 2 | A non-empty semester list contains an active semester. The flag only guarantees at most one | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |
 | 2 | The active semester belongs to the current session | TASK-056 | Semesters resource (single active semester, registration and add/drop deadlines) |

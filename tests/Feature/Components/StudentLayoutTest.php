@@ -2,17 +2,25 @@
 
 declare(strict_types=1);
 
+use App\Services\SettingsService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
+
 it('renders the student shell from institution config', function () {
     $this->withoutVite();
     config([
         'portal.institution.name' => 'Northwind Polytechnic',
+        'portal.institution.code' => 'NWP',
         'portal.institution.logo' => 'images/logo-placeholder.svg',
     ]);
 
+    $brand = app(SettingsService::class)->brand();
     $html = view('design-preview-student')->render();
 
     expect($html)->toContain('Northwind Polytechnic')
-        ->and($html)->toContain('images/logo-placeholder.svg')
+        ->and($html)->toContain('NWP')
+        ->and($html)->toContain($brand['logo_url'])
         ->and($html)->not->toContain('University Portal')
         ->and($html)->toContain('Home')
         ->and($html)->toContain('Courses')
