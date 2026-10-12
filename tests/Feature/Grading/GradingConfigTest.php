@@ -121,6 +121,97 @@ it('refuses a pass mark that does not sit one hundredth above the fail band', fu
         ->toThrow(ValidationException::class, 'The pass mark must be one hundredth above the fail band.');
 });
 
+it('requires classification bands to end at the highest grade point', function () {
+    $admin = grading_user(Role::SuperAdmin);
+    $service = app(GradingConfigService::class);
+    $input = $service->defaultInput();
+    $input['bands'][0]['points'] = '4.00';
+
+    expect(fn () => $service->saveVersion($admin, $input, grading_request()))
+        ->toThrow(ValidationException::class, 'Classification bands must run from 0.00 to 4.00 without a gap.');
+});
+
+it('keeps exactly one active scheme after a version save and after a failed one', function () {
+    $admin = grading_user(Role::SuperAdmin);
+    $service = app(GradingConfigService::class);
+    $original = $service->loadDefault($admin, grading_request());
+    $revised = $service->defaultInput();
+    $revised['name'] = 'Nigerian 5-point revised';
+    $next = $service->saveVersion($admin, $revised, grading_request());
+    $failed = $service->defaultInput();
+    $failed['components'][0]['max_score'] = '10.00';
+
+    expect(fn () => $service->saveVersion($admin, $failed, grading_request()))
+        ->toThrow(ValidationException::class);
+
+    expect(GradingScheme::query()->where('is_active', true)->count())->toBe(1)
+        ->and($next->refresh()->is_active)->toBeTrue()
+        ->and($original->refresh()->is_active)->toBeFalse()
+        ->and(GradingScheme::query()->count())->toBe(2);
+});
+
+it('refuses a tampered id on the grading screen', function () {
+    $admin = grading_user(Role::SuperAdmin);
+    $scheme = app(GradingConfigService::class)->loadDefault($admin, grading_request());
+
+    Livewire::actingAs($admin)
+        ->test(GradingConfigurationPage::class)
+        ->call('save', 999999);
+
+    expect(GradingScheme::query()->whereKey(999999)->exists())->toBeFalse()
+        ->and($scheme->refresh()->name)->toBe('Nigerian 5-point')
+        ->and($scheme->is_active)->toBeFalse()
+        ->and(GradingScheme::query()->where('is_active', true)->count())->toBe(1)
+        ->and(GradingScheme::query()->count())->toBe(2);
+});
+
+it('allows only a super admin to save the grading scheme', function () {
+    $admin = grading_user(Role::SuperAdmin);
+    $input = app(GradingConfigService::class)->defaultInput();
+
+    Livewire::actingAs($admin)
+        ->test(GradingConfigurationPage::class)
+        ->fillForm($input)
+        ->call('save')
+        ->assertNotified('Grading scheme saved');
+
+    expect(GradingScheme::query()->where('is_active', true)->count())->toBe(1);
+
+    $refused = [
+        Role::Registrar,
+        Role::ExamOfficer,
+        Role::Bursar,
+        Role::FacultyAdmin,
+        Role::DepartmentOfficer,
+        Role::Lecturer,
+    ];
+
+    foreach ($refused as $role) {
+        $actor = grading_user($role);
+        $can_open = in_array($role, [Role::Registrar, Role::ExamOfficer], true);
+
+        if ($can_open) {
+            Livewire::actingAs($actor)
+                ->test(GradingConfigurationPage::class)
+                ->call('save')
+                ->assertForbidden();
+        } else {
+            Livewire::actingAs($actor)
+                ->test(GradingConfigurationPage::class)
+                ->assertForbidden();
+        }
+
+        $page = Livewire::actingAs($admin)
+            ->test(GradingConfigurationPage::class);
+
+        Livewire::actingAs($actor);
+
+        $page->call('save')->assertForbidden();
+
+        expect(GradingScheme::query()->count())->toBe(1);
+    }
+});
+
 it('refuses classification bands that leave a gap', function () {
     $admin = grading_user(Role::SuperAdmin);
     $service = app(GradingConfigService::class);

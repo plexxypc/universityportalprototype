@@ -14,6 +14,7 @@ use App\Models\RoleAssignment;
 use App\Models\User;
 use App\Services\FeeService;
 use App\Support\Money;
+use Filament\Notifications\Notification;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -136,6 +137,90 @@ it('lets the bursar manage fees and lets the registrar only view', function () {
         ->toThrow(AuthorizationException::class);
 
     expect(FeeCategory::query()->count())->toBe(0);
+});
+
+it('refuses a tampered fee category id and a tampered fee structure id', function () {
+    $bursar = fee_user(Role::Bursar);
+    $service = app(FeeService::class);
+    $category = $service->createCategory($bursar, 'Tuition', 'tuition', null, 1, fee_request());
+    $programme = Programme::factory()->create();
+    $session = AcademicSession::factory()->create();
+    $structure = $service->createStructure(
+        $bursar,
+        (int) $category->getKey(),
+        (int) $programme->getKey(),
+        100,
+        (int) $session->getKey(),
+        '10.00',
+        fee_request(),
+    );
+
+    Livewire::actingAs($bursar)
+        ->test(FeeCategoriesPage::class)
+        ->call('saveCategory', 999999, [
+            'name' => 'Changed',
+            'code' => 'changed',
+            'description' => '',
+            'sort' => 1,
+            'is_active' => false,
+        ]);
+
+    Notification::assertNotified('That category was not found.');
+
+    Livewire::actingAs($bursar)
+        ->test(FeeCategoriesPage::class)
+        ->call('removeCategory', 999999);
+
+    Notification::assertNotified('That category was not found.');
+
+    Livewire::actingAs($bursar)
+        ->test(FeeStructuresPage::class)
+        ->call('saveStructure', 999999, [
+            'fee_category_id' => $category->id,
+            'programme_id' => $programme->id,
+            'level' => 100,
+            'session_id' => $session->id,
+            'amount' => '99.00',
+        ]);
+
+    Notification::assertNotified('That fee was not found.');
+
+    expect($category->refresh()->name)->toBe('Tuition')
+        ->and($category->is_active)->toBeTrue()
+        ->and($structure->refresh()->amount_kobo)->toBe(1_000)
+        ->and(FeeCategory::query()->count())->toBe(1)
+        ->and(FeeStructure::query()->count())->toBe(1);
+});
+
+it('stores 125,000.50 as 12500050 kobo and refuses extra decimals, zero, and a negative amount', function () {
+    $bursar = fee_user(Role::Bursar);
+    $service = app(FeeService::class);
+    $category = $service->createCategory($bursar, 'Tuition', 'tuition', null, 1, fee_request());
+    $programme = Programme::factory()->create();
+    $session = AcademicSession::factory()->create();
+    $structure = $service->createStructure(
+        $bursar,
+        (int) $category->getKey(),
+        (int) $programme->getKey(),
+        100,
+        (int) $session->getKey(),
+        '125,000.50',
+        fee_request(),
+    );
+
+    expect($structure->amount_kobo)->toBe(12_500_050)
+        ->and(Money::format(12_500_050))->toBe('₦125,000.50');
+
+    expect(fn () => $service->createStructure($bursar, (int) $category->getKey(), (int) $programme->getKey(), 200, (int) $session->getKey(), '10.555', fee_request()))
+        ->toThrow(ValidationException::class, 'Enter an amount in naira, with at most two decimal places.');
+
+    expect(fn () => $service->createStructure($bursar, (int) $category->getKey(), (int) $programme->getKey(), 300, (int) $session->getKey(), '0.00', fee_request()))
+        ->toThrow(ValidationException::class, 'Enter at least 0.01.');
+
+    expect(fn () => $service->createStructure($bursar, (int) $category->getKey(), (int) $programme->getKey(), 400, (int) $session->getKey(), '-10.00', fee_request()))
+        ->toThrow(ValidationException::class, 'Enter at least 0.01.');
+
+    expect(FeeStructure::query()->count())->toBe(1);
 });
 
 it('refuses a second price for the same programme, level, session, and category', function () {

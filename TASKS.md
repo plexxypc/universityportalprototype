@@ -104,23 +104,23 @@
 
 ## Phase 6: University setup [SETUP-1..8]
 
-- [ ] TASK-054 Institution settings page (profile, logo upload, matric pattern, unit limits, approval toggle, deadlines, attendance threshold, withhold-results toggle)
+- [x] TASK-054 Institution settings page (profile, logo upload, matric pattern, unit limits, approval toggle, deadlines, attendance threshold, withhold-results toggle)
   - Phase 3 carry-over: while `institution_settings` is empty, reads fall back to `config/portal.php`.
-- [ ] TASK-055 Academic sessions resource (single current session)
+- [x] TASK-055 Academic sessions resource (single current session)
   - Phase 3 carry-over: session names match `2026/2027`.
   - Phase 4 carry-over: TEST_PLAN section 2. Reject a tampered Livewire id on this screen. It is the first screen that takes an id.
-- [ ] TASK-056 Semesters resource (single active semester, registration and add/drop deadlines)
+- [x] TASK-056 Semesters resource (single active semester, registration and add/drop deadlines)
   - Phase 3 carry-over: the active semester belongs to the current session.
-- [ ] TASK-057 Faculties, departments and programmes resources with scope rules
+- [x] TASK-057 Faculties, departments and programmes resources with scope rules
   - Phase 3 carry-over: degree is chosen from a closed list.
-- [ ] TASK-058 Course catalogue resource with prerequisites and programme–course mapping
-- [ ] TASK-059 `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests. Decide here whether a decimal total is rounded to a whole number before the grade lookup, or bands are lower-bound inclusive.
-- [ ] TASK-060 **Grading configuration** UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation; default-scheme loader; scheme versioning. Add the academic-standing threshold table (warning, probation) in this task.
+- [x] TASK-058 Course catalogue resource with prerequisites and programme–course mapping
+- [x] TASK-059 `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests. Decide here whether a decimal total is rounded to a whole number before the grade lookup, or bands are lower-bound inclusive.
+- [x] TASK-060 **Grading configuration** UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation; default-scheme loader; scheme versioning. Add the academic-standing threshold table (warning, probation) in this task.
   - Phase 3 carry-over: when unpublished results move to a new scheme version, remap `result_scores` to that version's components in the same transaction.
   - Phase 3 carry-over: the pass mark agrees with the fail band.
-- [ ] TASK-061 Grading preview tool ("enter sample scores, see computed grade") to let the admin verify their configuration
-- [ ] TASK-062 Fee categories and fee structures resources
-- [ ] TASK-063 Setup tests (single current session, band validation, scoped edits)
+- [x] TASK-061 Grading preview tool ("enter sample scores, see computed grade") to let the admin verify their configuration
+- [x] TASK-062 Fee categories and fee structures resources
+- [x] TASK-063 Setup tests (single current session, band validation, scoped edits)
 
 ## Phase 7: Student onboarding and records [PRD §6, ADM, STU]
 

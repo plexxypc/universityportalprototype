@@ -238,7 +238,16 @@ it('points the public allow-list at routes that are registered', function () {
         }
     }
 
+    $logo = Route::getRoutes()->getByName('institution.logo');
+
+    expect($logo)->toBeInstanceOf(RegisteredRoute::class)
+        ->and($logo->uri())->toBe('institution/logo')
+        ->and(route_coverage_named_public_routes()['institution.logo'])->toBe(
+            'Public institution logo. The route has no path, and a missing file falls back to the placeholder.',
+        );
+
     expect($uris)->toContain('/')
+        ->and($uris)->toContain('institution/logo')
         ->and($uris)->toContain('up')
         ->and(collect($uris)->contains(
             fn (string $uri): bool => str_contains($uri, '/livewire.min.js') || str_contains($uri, '/livewire.js'),

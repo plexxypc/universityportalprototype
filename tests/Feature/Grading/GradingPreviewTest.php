@@ -50,4 +50,6 @@ it('previews unsaved scores and writes nothing', function () {
         ->fillForm($input)
         ->call('preview')
         ->assertSet('preview_lines.courses.0.letter', 'B');
+
+    expect(GradingScheme::query()->count())->toBe(0);
 });

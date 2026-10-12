@@ -6,6 +6,7 @@ use App\Enums\GradeRounding;
 use App\Enums\RepeatPolicy;
 use App\Services\GradingService;
 use App\Support\Grading\DefaultScheme;
+use App\Support\Grading\Hundredths;
 
 function grading(): GradingService
 {
@@ -54,7 +55,8 @@ it('weights grade points by credit units', function () {
         ['points_hundredths' => 400, 'units' => 2],
     ]);
 
-    expect($average)->toBe(460);
+    expect($average)->toBe(460)
+        ->and(Hundredths::toDecimal((int) $average))->toBe('4.60');
 });
 
 it('counts a failed course in the average', function () {
@@ -80,8 +82,10 @@ it('rounds a CGPA half up before classification', function () {
     ]);
 
     expect($half_up)->toBe(450)
+        ->and(Hundredths::toDecimal((int) $half_up))->toBe('4.50')
         ->and($service->classification($half_up, $bands))->toBe('First Class')
         ->and($below)->toBe(449)
+        ->and(Hundredths::toDecimal((int) $below))->toBe('4.49')
         ->and($service->classification($below, $bands))->toBe('Second Class Upper');
 });
 
