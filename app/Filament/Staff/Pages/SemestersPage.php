@@ -77,19 +77,53 @@ class SemestersPage extends Page implements HasTable
                 ->authorize(fn (): bool => $this->canManage())
                 ->schema($this->fields())
                 ->action(function (array $data): void {
-                    $this->guardManage();
-                    app(AcademicService::class)->createSemester(
-                        $this->actor(),
-                        (int) ($data['session_id'] ?? 0),
-                        $this->text($data, 'name'),
-                        (bool) ($data['is_active'] ?? false),
+                    $session_id = (int) ($data['session_id'] ?? 0);
+                    $name = $this->text($data, 'name');
+                    $is_active = (bool) ($data['is_active'] ?? false);
+
+                    if ($this->queueSwitchConfirmation(0, $session_id, $name, $is_active, $data)) {
+                        return;
+                    }
+
+                    $this->saveSemester(
+                        0,
+                        $session_id,
+                        $name,
+                        $is_active,
                         $data['registration_deadline'] ?? null,
                         $data['add_drop_deadline'] ?? null,
-                        request(),
                     );
-                    Notification::make()->title('Semester saved')->success()->send();
                 }),
         ];
+    }
+
+    /**
+     * Confirm a save that also changes which session is current.
+     *
+     * Kept off the header. A hidden action is treated as disabled and cannot stay mounted.
+     */
+    public function confirmSemesterSwitchAction(): Action
+    {
+        return Action::make('confirmSemesterSwitch')
+            ->authorize(fn (): bool => $this->canManage())
+            ->modalHeading('Save both changes')
+            ->modalDescription(function (array $arguments): string {
+                $notice = $arguments['notice'] ?? '';
+
+                return is_string($notice) ? $notice : '';
+            })
+            ->modalSubmitActionLabel('Save both changes')
+            ->action(function (array $arguments): void {
+                $name = $arguments['name'] ?? '';
+                $this->saveSemester(
+                    (int) ($arguments['semester_id'] ?? 0),
+                    (int) ($arguments['session_id'] ?? 0),
+                    is_string($name) ? $name : '',
+                    (bool) ($arguments['is_active'] ?? false),
+                    $arguments['registration_deadline'] ?? null,
+                    $arguments['add_drop_deadline'] ?? null,
+                );
+            });
     }
 
     public function table(Table $table): Table
@@ -114,17 +148,22 @@ class SemestersPage extends Page implements HasTable
                     ])
                     ->schema($this->fields())
                     ->action(function (Semester $record, array $data): void {
-                        $this->guardManage();
-                        app(AcademicService::class)->updateSemester(
-                            $this->actor(),
+                        $name = $this->text($data, 'name');
+                        $is_active = (bool) ($data['is_active'] ?? false);
+                        $session_id = (int) $record->session_id;
+
+                        if ($this->queueSwitchConfirmation((int) $record->getKey(), $session_id, $name, $is_active, $data)) {
+                            return;
+                        }
+
+                        $this->saveSemester(
                             (int) $record->getKey(),
-                            $this->text($data, 'name'),
-                            (bool) ($data['is_active'] ?? false),
+                            $session_id,
+                            $name,
+                            $is_active,
                             $data['registration_deadline'] ?? null,
                             $data['add_drop_deadline'] ?? null,
-                            request(),
                         );
-                        Notification::make()->title('Semester saved')->success()->send();
                     }),
                 DeleteAction::make()
                     ->authorize(fn (Semester $record): bool => $this->policy()->delete($this->actor(), $record))
@@ -132,6 +171,55 @@ class SemestersPage extends Page implements HasTable
                         $this->deleteSemester((int) $record->getKey());
                     }),
             ]);
+    }
+
+    /**
+     * Create or update one semester. A forged id is refused and changes nothing.
+     */
+    public function saveSemester(
+        int $semester_id,
+        int $session_id,
+        string $name,
+        bool $is_active,
+        mixed $registration_deadline,
+        mixed $add_drop_deadline,
+    ): void {
+        $this->guardManage();
+
+        try {
+            $service = app(AcademicService::class);
+
+            if ($semester_id === 0) {
+                $service->createSemester(
+                    $this->actor(),
+                    $session_id,
+                    $name,
+                    $is_active,
+                    $registration_deadline,
+                    $add_drop_deadline,
+                    request(),
+                );
+            } else {
+                $service->updateSemester(
+                    $this->actor(),
+                    $semester_id,
+                    $name,
+                    $is_active,
+                    $registration_deadline,
+                    $add_drop_deadline,
+                    request(),
+                );
+            }
+        } catch (ValidationException $exception) {
+            Notification::make()
+                ->title($this->firstError($exception, 'That semester could not be saved.'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        Notification::make()->title('Semester saved')->success()->send();
     }
 
     /**
@@ -145,7 +233,7 @@ class SemestersPage extends Page implements HasTable
             app(AcademicService::class)->deleteSemester($this->actor(), $semester_id, request());
         } catch (ValidationException $exception) {
             Notification::make()
-                ->title($exception->errors()['semester'][0] ?? 'That semester could not be deleted.')
+                ->title($this->firstError($exception, 'That semester could not be deleted.'))
                 ->danger()
                 ->send();
 
@@ -177,6 +265,48 @@ class SemestersPage extends Page implements HasTable
             TextInput::make('add_drop_deadline')->label('Add/drop deadline'),
             Toggle::make('is_active')->label('Active semester')->default(true),
         ];
+    }
+
+    /**
+     * Open the confirmation dialog when this save also switches the current session.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function queueSwitchConfirmation(int $semester_id, int $session_id, string $name, bool $is_active, array $data): bool
+    {
+        $notice = app(AcademicService::class)->activationNotice($session_id, $name, $is_active);
+
+        if ($notice === null) {
+            return false;
+        }
+
+        $this->replaceMountedAction('confirmSemesterSwitch', [
+            'semester_id' => $semester_id,
+            'session_id' => $session_id,
+            'name' => $name,
+            'is_active' => true,
+            'notice' => $notice,
+            'registration_deadline' => $data['registration_deadline'] ?? null,
+            'add_drop_deadline' => $data['add_drop_deadline'] ?? null,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * The first validation sentence, for the danger notice.
+     */
+    private function firstError(ValidationException $exception, string $fallback): string
+    {
+        foreach ($exception->errors() as $messages) {
+            $message = $messages[0] ?? null;
+
+            if (is_string($message) && $message !== '') {
+                return $message;
+            }
+        }
+
+        return $fallback;
     }
 
     private function canManage(): bool

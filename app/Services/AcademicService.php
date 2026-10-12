@@ -66,6 +66,30 @@ class AcademicService
 
     public const string MESSAGE_ADD_DROP = 'The add/drop deadline must be on or after the registration deadline.';
 
+    /**
+     * Plain-words warning when saving an active semester also changes the current session.
+     *
+     * Returns null when this save does not switch the current session.
+     */
+    public function activationNotice(int $session_id, string $semester_name, bool $is_active): ?string
+    {
+        if (! $is_active) {
+            return null;
+        }
+
+        $session = AcademicSession::query()->find($session_id);
+
+        if (! $session instanceof AcademicSession || $session->is_current) {
+            return null;
+        }
+
+        $current_name = AcademicSession::query()->where('is_current', true)->value('name');
+        $current = is_string($current_name) && $current_name !== '' ? $current_name : 'the current session';
+        $semester_name = trim($semester_name);
+
+        return "This will make {$semester_name} the active semester and make {$session->name} the current session instead of {$current}.";
+    }
+
     public function __construct(private readonly Audit $audit) {}
 
     /**
@@ -547,7 +571,7 @@ class AcademicService
     /**
      * Fields stored on the semester audit row.
      *
-     * @return array{session_id: int, name: string, is_active: bool, registration_deadline: ?string, add_drop_deadline: ?string}
+     * @return array{session_id: int, name: string, is_active: bool, session_is_current: bool, registration_deadline: ?string, add_drop_deadline: ?string}
      */
     private function semesterSnapshot(Semester $semester): array
     {
@@ -555,6 +579,7 @@ class AcademicService
             'session_id' => (int) $semester->session_id,
             'name' => $semester->name,
             'is_active' => (bool) $semester->is_active,
+            'session_is_current' => (bool) AcademicSession::query()->whereKey($semester->session_id)->value('is_current'),
             'registration_deadline' => Dates::storageDateTime($semester->registration_deadline),
             'add_drop_deadline' => Dates::storageDateTime($semester->add_drop_deadline),
         ];
