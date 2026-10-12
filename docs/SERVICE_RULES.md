@@ -62,12 +62,12 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 5 | `scheme_version` matches the linked scheme row | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |
 | 5 | Editing the active scheme inserts a new version and repoints unpublished results. Published rows keep their scheme id | TASK-060 | Grading configuration UI, including scheme versioning |
 | 5 | When unpublished results move, `result_scores` are remapped to the new version's components in that transaction | TASK-060 | Grading configuration UI, including scheme versioning |
-| 5 | GPA uses the latest or best attempt and applies `resit_points_cap` | TASK-059 | `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests |
+| 5 | GPA uses the latest or best attempt and applies `resit_points_cap` | TASK-059 | `GradingService` pure functions. Test: `it uses the latest or the best attempt after the resit cap` |
 | 5 | Classification bands do not overlap or leave gaps | TASK-060 | Grading configuration UI, including classification bands and overlap/gap/total validation |
 | 5 | The pass mark agrees with the fail band | TASK-060 | Grading configuration UI: assessment components with max scores, grade bands, pass mark, classification bands, standing thresholds, repeat policy; overlap/gap/total validation |
-| 5 | Stored total, grade, and points match the scores and the scheme | TASK-059 | `GradingService` pure functions: component totals, grade lookup, points, GPA, CGPA, classification, repeat-course policy, with Pest unit tests |
+| 5 | Stored total, grade, and points match the scores and the scheme | TASK-059 | `GradingService` pure functions. Test: `it adds continuous assessment and the exam before the lookup` |
 | 5 | Switching the active grading scheme clears the previous row inside a transaction | TASK-060 | Grading configuration UI, including scheme versioning |
-| 5 | A decimal total is rounded before the grade lookup, or bands are lower-bound inclusive | TASK-059 | Decide here whether a decimal total is rounded to a whole number before the grade lookup, or bands are lower-bound inclusive |
+| 5 | A decimal total is rounded before the grade lookup, or bands are lower-bound inclusive | TASK-059 | Bands are lower-bound inclusive and the total is not rounded. Test: `it keeps 69.50 in the B band and does not round it up to 70` |
 | 5 | Academic standing thresholds (warning, probation) need their own table | TASK-060 | Add the academic-standing threshold table (warning, probation) in this task |
 | 6 | The marked student is registered for that course in that semester | TASK-122 | `AttendanceService` (sessions, records, percentages, threshold) |
 | 6 | Attendance percentage and `attendance_threshold` | TASK-122 | `AttendanceService` (sessions, records, percentages, threshold) |
