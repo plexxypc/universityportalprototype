@@ -3,9 +3,16 @@
 declare(strict_types=1);
 
 use App\Filament\Staff\Pages\AcademicSessionsPage;
+use App\Filament\Staff\Pages\CoursesPage;
+use App\Filament\Staff\Pages\DepartmentsPage;
 use App\Filament\Staff\Pages\EmailOutboxPage;
+use App\Filament\Staff\Pages\FacultiesPage;
+use App\Filament\Staff\Pages\FeeCategoriesPage;
+use App\Filament\Staff\Pages\FeeStructuresPage;
+use App\Filament\Staff\Pages\GradingConfigurationPage;
 use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\NotificationsPage;
+use App\Filament\Staff\Pages\ProgrammesPage;
 use App\Filament\Staff\Pages\SemestersPage;
 use App\Http\Middleware\AuthenticateStaffPanel;
 use App\Http\Middleware\EnsureActive;
@@ -281,6 +288,13 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         InstitutionSettingsPage::class,
         AcademicSessionsPage::class,
         SemestersPage::class,
+        FacultiesPage::class,
+        DepartmentsPage::class,
+        ProgrammesPage::class,
+        CoursesPage::class,
+        GradingConfigurationPage::class,
+        FeeCategoriesPage::class,
+        FeeStructuresPage::class,
     ];
 
     foreach ($staff_pages as $page) {
