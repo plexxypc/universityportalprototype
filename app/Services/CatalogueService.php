@@ -14,6 +14,7 @@ use App\Models\ProgrammeCourse;
 use App\Models\User;
 use App\Policies\CoursePolicy;
 use App\Support\Audit;
+use App\Support\PrerequisiteGraph;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * The course catalogue, its prerequisites, and programme mappings.
  *
- * A two-course cycle is stored. A course cannot require itself. Scoped roles
+ * A course cannot require itself, and a cycle of two or more courses is refused.
+ * The database cannot see that cycle. Scoped roles
  * cannot map a course and a programme that sit in different faculties, and
  * a Department Officer cannot map outside their department.
  */
@@ -53,8 +55,6 @@ class CatalogueService
     public const string MESSAGE_SEMESTER = 'Choose semester 1 or 2.';
 
     public const string MESSAGE_TYPE = 'Choose Core or Elective.';
-
-    public const string MESSAGE_SELF = 'A course cannot require itself.';
 
     public const string MESSAGE_PREREQUISITE = 'That prerequisite course was not found.';
 
@@ -93,7 +93,7 @@ class CatalogueService
         $title = $this->label($title, 'title', self::MESSAGE_TITLE, 255);
         $units = $this->units($credit_units);
         $parsed_mappings = $this->mappings($mappings);
-        $parsed_prerequisites = $this->prerequisiteIds($prerequisite_ids, null);
+        $parsed_prerequisites = $this->prerequisiteIds($prerequisite_ids);
 
         return DB::transaction(function () use ($actor, $department_id, $code, $title, $units, $parsed_mappings, $parsed_prerequisites, $request): Course {
             $this->departmentForWrite($actor, $department_id);
@@ -144,7 +144,7 @@ class CatalogueService
         $title = $this->label($title, 'title', self::MESSAGE_TITLE, 255);
         $units = $this->units($credit_units);
         $parsed_mappings = $this->mappings($mappings);
-        $parsed_prerequisites = $this->prerequisiteIds($prerequisite_ids, $course_id);
+        $parsed_prerequisites = $this->prerequisiteIds($prerequisite_ids);
 
         return DB::transaction(function () use ($actor, $course_id, $department_id, $code, $title, $units, $parsed_mappings, $parsed_prerequisites, $request): Course {
             $course = $this->lockedCourse($actor, $course_id);
@@ -239,19 +239,17 @@ class CatalogueService
     }
 
     /**
-     * Replace prerequisites. A cycle of two courses is kept.
+     * Replace prerequisites. A cycle of any length is refused before the old rows are deleted.
      *
      * @param  list<int>  $prerequisite_ids
      */
     private function writePrerequisites(Course $course, array $prerequisite_ids): void
     {
+        $this->assertNoCycle($course, $prerequisite_ids);
+
         $course->prerequisites()->delete();
 
         foreach ($prerequisite_ids as $prerequisite_id) {
-            if ($prerequisite_id === (int) $course->getKey()) {
-                throw ValidationException::withMessages(['prerequisite_ids' => self::MESSAGE_SELF]);
-            }
-
             if (! Course::query()->whereKey($prerequisite_id)->exists()) {
                 throw ValidationException::withMessages(['prerequisite_ids' => self::MESSAGE_PREREQUISITE]);
             }
@@ -310,6 +308,48 @@ class CatalogueService
         }
 
         throw new AuthorizationException;
+    }
+
+    /**
+     * Refuse a self-link or any cycle before the prerequisite rows change.
+     *
+     * @param  list<int>  $prerequisite_ids
+     */
+    private function assertNoCycle(Course $course, array $prerequisite_ids): void
+    {
+        $requires = [];
+        $ids = [(int) $course->getKey() => true];
+
+        foreach ($prerequisite_ids as $prerequisite_id) {
+            $ids[$prerequisite_id] = true;
+        }
+
+        $edges = CoursePrerequisite::query()->get(['course_id', 'prerequisite_course_id']);
+
+        foreach ($edges as $edge) {
+            $from = (int) $edge->course_id;
+            $to = (int) $edge->prerequisite_course_id;
+            $requires[$from][] = $to;
+            $ids[$from] = true;
+            $ids[$to] = true;
+        }
+
+        $names = [];
+
+        foreach (Course::query()->whereIn('id', array_keys($ids))->get(['id', 'code']) as $row) {
+            $names[(int) $row->getKey()] = $row->code;
+        }
+
+        $message = (new PrerequisiteGraph)->rejection(
+            (int) $course->getKey(),
+            $prerequisite_ids,
+            $requires,
+            $names,
+        );
+
+        if ($message !== null) {
+            throw ValidationException::withMessages(['prerequisite_ids' => $message]);
+        }
     }
 
     /**
@@ -418,7 +458,7 @@ class CatalogueService
      * @param  list<mixed>  $prerequisite_ids
      * @return list<int>
      */
-    private function prerequisiteIds(array $prerequisite_ids, ?int $course_id): array
+    private function prerequisiteIds(array $prerequisite_ids): array
     {
         $ids = [];
 
@@ -431,10 +471,6 @@ class CatalogueService
 
             if ($id < 1) {
                 throw ValidationException::withMessages(['prerequisite_ids' => self::MESSAGE_PREREQUISITE]);
-            }
-
-            if ($course_id !== null && $id === $course_id) {
-                throw ValidationException::withMessages(['prerequisite_ids' => self::MESSAGE_SELF]);
             }
 
             $ids[$id] = $id;

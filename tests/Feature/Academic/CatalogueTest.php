@@ -33,28 +33,31 @@ function catalogue_branch(StructureService $service, mixed $registrar, string $f
     return [$faculty, $department, $programme];
 }
 
-it('stores a two-course prerequisite cycle', function () {
+it('rejects a cycle of two or more courses', function () {
     $registrar = session_user(Role::Registrar);
     $structure = app(StructureService::class);
     $catalogue = app(CatalogueService::class);
     [, $department] = catalogue_branch($structure, $registrar, 'SCI', 'CSC', 'CSC');
-
     $first = $catalogue->createCourse($registrar, (int) $department->getKey(), 'CSC101', 'Introduction', 3, [], [], session_request());
     $second = $catalogue->createCourse($registrar, (int) $department->getKey(), 'CSC201', 'Structures', 3, [], [(int) $first->getKey()], session_request());
-    $catalogue->updateCourse(
-        $registrar,
-        (int) $first->getKey(),
-        (int) $department->getKey(),
-        'CSC101',
-        'Introduction',
-        3,
-        [],
-        [(int) $second->getKey()],
-        session_request(),
-    );
+    $third = $catalogue->createCourse($registrar, (int) $department->getKey(), 'CSC301', 'Algorithms', 3, [], [(int) $second->getKey()], session_request());
 
-    expect(CoursePrerequisite::query()->where('course_id', $first->id)->where('prerequisite_course_id', $second->id)->exists())->toBeTrue()
-        ->and(CoursePrerequisite::query()->where('course_id', $second->id)->where('prerequisite_course_id', $first->id)->exists())->toBeTrue();
+    Livewire::actingAs($registrar)
+        ->test(CoursesPage::class)
+        ->call('saveCourse', (int) $first->getKey(), (int) $department->getKey(), 'CSC101', 'Introduction', 3, [], [(int) $second->getKey(), (int) $third->getKey()]);
+
+    Notification::assertNotified('CSC201 and CSC101 form a prerequisite cycle.');
+
+    expect(CoursePrerequisite::query()->where('course_id', $first->id)->exists())->toBeFalse()
+        ->and($first->refresh()->title)->toBe('Introduction');
+
+    Livewire::actingAs($registrar)
+        ->test(CoursesPage::class)
+        ->call('saveCourse', (int) $first->getKey(), (int) $department->getKey(), 'CSC101', 'Introduction', 3, [], [(int) $third->getKey()]);
+
+    Notification::assertNotified('CSC301, CSC201, and CSC101 form a prerequisite cycle.');
+
+    expect(CoursePrerequisite::query()->where('course_id', $first->id)->exists())->toBeFalse();
 });
 
 it('refuses a course that requires itself', function () {
@@ -74,7 +77,7 @@ it('refuses a course that requires itself', function () {
         [],
         [(int) $course->getKey()],
         session_request(),
-    ))->toThrow(ValidationException::class, CatalogueService::MESSAGE_SELF);
+    ))->toThrow(ValidationException::class, 'CSC101 cannot require itself.');
 
     expect(CoursePrerequisite::query()->count())->toBe(0)
         ->and($course->refresh()->title)->toBe('Introduction');
