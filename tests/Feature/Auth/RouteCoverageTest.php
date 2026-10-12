@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Staff\Pages\AcademicSessionsPage;
 use App\Filament\Staff\Pages\EmailOutboxPage;
 use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\NotificationsPage;
@@ -277,6 +278,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         NotificationsPage::class,
         EmailOutboxPage::class,
         InstitutionSettingsPage::class,
+        AcademicSessionsPage::class,
     ];
 
     foreach ($staff_pages as $page) {

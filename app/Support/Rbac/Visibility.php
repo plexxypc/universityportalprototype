@@ -56,6 +56,10 @@ final class Visibility
             return self::applyDocuments($query, $user);
         }
 
+        if ($profile->kind === VisibilityKind::AcademicCalendar) {
+            return self::applyAcademicCalendar($query, $user, $profile);
+        }
+
         return self::applyFromMap($query, $user, $profile);
     }
 
@@ -90,6 +94,28 @@ final class Visibility
         }
 
         return self::anyBranch($query, $branches);
+    }
+
+    /**
+     * Sessions and semesters are institution-wide.
+     *
+     * A role with academic_structure view or manage sees every row. Faculty
+     * and department scope does not hide the calendar.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return Builder<TModel>
+     */
+    private static function applyAcademicCalendar(Builder $query, User $user, VisibilityProfile $profile): Builder
+    {
+        foreach ($user->roles() as $role) {
+            if (self::mapGrants($role, $profile)) {
+                return $query;
+            }
+        }
+
+        return self::matchNone($query);
     }
 
     /**

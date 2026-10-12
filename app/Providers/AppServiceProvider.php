@@ -8,6 +8,7 @@ use App\Http\Controllers\StaffLogoutController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
+use App\Models\AcademicSession;
 use App\Models\Applicant;
 use App\Models\AttendanceRecord;
 use App\Models\AuditLog;
@@ -24,6 +25,7 @@ use App\Models\Programme;
 use App\Models\Receipt;
 use App\Models\Result;
 use App\Models\Student;
+use App\Policies\AcademicSessionPolicy;
 use App\Policies\AttendanceRecordPolicy;
 use App\Policies\AuditLogPolicy;
 use App\Policies\CoursePolicy;
@@ -169,6 +171,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Department::class, DepartmentPolicy::class);
         Gate::policy(Programme::class, ProgrammePolicy::class);
         Gate::policy(Course::class, CoursePolicy::class);
+        Gate::policy(AcademicSession::class, AcademicSessionPolicy::class);
         Gate::policy(InstitutionSetting::class, InstitutionSettingPolicy::class);
     }
 }
