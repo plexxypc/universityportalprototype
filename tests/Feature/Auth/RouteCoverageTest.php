@@ -15,6 +15,7 @@ use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\NotificationsPage;
 use App\Filament\Staff\Pages\ProgrammesPage;
 use App\Filament\Staff\Pages\SemestersPage;
+use App\Filament\Staff\Pages\StudentsPage;
 use App\Http\Middleware\AuthenticateStaffPanel;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -295,6 +296,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
     $staff_pages = [
         NotificationsPage::class,
         EmailOutboxPage::class,
+        StudentsPage::class,
         AddStudentPage::class,
         InstitutionSettingsPage::class,
         AcademicSessionsPage::class,

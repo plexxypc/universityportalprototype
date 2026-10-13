@@ -49,7 +49,7 @@ class AddStudentPage extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserPlus;
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 2;
 
     /**
      * @var array<string, mixed>|null
