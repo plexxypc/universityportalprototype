@@ -219,7 +219,7 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 
 ## Current Task
 
-**TASK-057** is next on `phase-6-setup`. TASK-054, TASK-055, and TASK-056 are committed and not pushed. Faculties, departments, and programmes are still to build, then the course catalogue, then Stop 1. Institution settings: profile, logo upload, matric pattern, unit limits, approval toggle, attendance threshold, and the withhold-results toggle. Deadlines stay on semesters. While `institution_settings` is empty, reads fall back to `config/portal.php`, including matric pattern `{DEPT}/{YEAR}/{SEQ4}`. Login limits stay in `AuthService`. The expired-temporary-password rule stays on TASK-039. `must_change_password` and `temp_password_expires_at` are set together on the bootstrap command; the general rule remains TASK-065.
+**TASK-065** is done on `phase-7-onboarding` and is not pushed. Stop A is waiting for continue before TASK-066. `StudentService::create` allocates the matric number and `CredentialService::issue` sets the temporary password, `must_change_password`, and `temp_password_expires_at` in that same transaction. Resend locks the user row, enforces a 60-second database-cache cool-down, and requires confirmation when the student has already chosen a password. A graduated student is mapped to a deactivated user; whether a graduate should still sign in is an open question for the Registrar.
 
 Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 

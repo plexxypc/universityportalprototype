@@ -798,6 +798,16 @@ final class MailService
         return filter_var($recipient, FILTER_VALIDATE_EMAIL) !== false;
     }
 
+    /**
+     * Whether this process will refuse to send a secret template.
+     *
+     * Production with the log mailer fails the row and clears the secret.
+     */
+    public function refusesSecretTemplate(string $template): bool
+    {
+        return $this->logMailerRefuses((string) config('mail.default'), $template);
+    }
+
     private function logMailerRefuses(string $mailer, string $template): bool
     {
         return app()->environment('production')

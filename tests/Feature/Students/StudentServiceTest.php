@@ -116,7 +116,7 @@ function student_make(array $overrides = [], ?Programme $programme = null): Stud
         student_actor(),
         student_input($programme, $overrides),
         student_request(),
-    );
+    )->student;
 }
 
 /**
@@ -202,10 +202,10 @@ it('allocates the matric number from the counter for the pattern', function () {
     $service = app(StudentService::class);
     $actor = student_actor();
 
-    $first = $service->create($actor, student_input($programme), student_request());
+    $first = $service->create($actor, student_input($programme), student_request())->student;
     $second = $service->create($actor, student_input($programme, [
         'email' => 'grace.hopper@example.com',
-    ]), student_request());
+    ]), student_request())->student;
 
     expect($first->matric_no)->toBe('CSC/2026/0001')
         ->and($second->matric_no)->toBe('CSC/2026/0002')
@@ -226,10 +226,10 @@ it('omits the department or the year from the counter key when the pattern does 
 
     $first = $service->create($actor, student_input($computer, [
         'email' => 'year.one@example.com',
-    ]), student_request());
+    ]), student_request())->student;
     $second = $service->create($actor, student_input($maths, [
         'email' => 'year.two@example.com',
-    ]), student_request());
+    ]), student_request())->student;
 
     expect($first->matric_no)->toBe('2026/1')
         ->and($second->matric_no)->toBe('2026/2')
@@ -242,10 +242,10 @@ it('omits the department or the year from the counter key when the pattern does 
 
     $third = $service->create($actor, student_input($computer, [
         'email' => 'dept.one@example.com',
-    ]), student_request());
+    ]), student_request())->student;
     $fourth = $service->create($actor, student_input($maths, [
         'email' => 'dept.two@example.com',
-    ]), student_request());
+    ]), student_request())->student;
 
     expect($third->matric_no)->toBe('CSC/0001')
         ->and($fourth->matric_no)->toBe('MTH/0001')
@@ -265,7 +265,7 @@ it('keeps a sequence past 9999 in full and does not pad {SEQ}', function () {
         student_actor(),
         student_input($programme),
         student_request(),
-    );
+    )->student;
 
     expect($padded->matric_no)->toBe('CSC/2026/10000');
 
@@ -280,7 +280,7 @@ it('keeps a sequence past 9999 in full and does not pad {SEQ}', function () {
             'email' => 'seq.plain@example.com',
         ]),
         student_request(),
-    );
+    )->student;
 
     expect($plain->matric_no)->toBe('MTH/2026/1');
 });
@@ -318,7 +318,7 @@ it('refuses a level the programme duration does not allow', function () {
     $accepted = $service->create($actor, student_input($programme, [
         'email' => 'level.400@example.com',
         'level' => 400,
-    ]), student_request());
+    ]), student_request())->student;
 
     $errors = student_field_error(fn () => $service->create($actor, student_input($programme, [
         'email' => 'level.500@example.com',

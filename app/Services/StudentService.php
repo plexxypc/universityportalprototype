@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\EmailTemplate;
 use App\Enums\Gender;
 use App\Enums\StudentStatus;
 use App\Enums\UserStatus;
 use App\Models\AcademicSession;
 use App\Models\Counter;
+use App\Models\EmailOutbox;
 use App\Models\Programme;
 use App\Models\Student;
 use App\Models\User;
@@ -113,6 +115,7 @@ class StudentService
     public function __construct(
         private readonly Audit $audit,
         private readonly AuthService $auth,
+        private readonly CredentialService $credentials,
     ) {}
 
     /**
@@ -124,11 +127,11 @@ class StudentService
      *
      * @param  array<string, mixed>  $input
      */
-    public function create(User $actor, array $input, Request $request): Student
+    public function create(User $actor, array $input, Request $request): CreatedStudent
     {
         $this->authoriseCreate($actor);
 
-        return DB::transaction(function () use ($actor, $input, $request): Student {
+        $created = DB::transaction(function () use ($actor, $input, $request): CreatedStudent {
             $this->authoriseCreate($actor);
             $parsed = $this->parsed($input, true);
             $session = $this->entrySession($parsed['entry_session_id']);
@@ -139,6 +142,7 @@ class StudentService
             $user = $this->newUser($parsed);
             $matric = $this->allocateMatric($programme, $session);
             $student = $this->newStudent($user, $programme, $session, $parsed, $matric);
+            $delivery = $this->credentials->issue($actor, $user, $matric, $request);
             $audit = $this->creationAudit($parsed, $programme, $session, $matric);
 
             $this->audit->record(
@@ -151,8 +155,20 @@ class StudentService
                 $this->audit->ipFromRequest($request),
             );
 
-            return $student->load(['user', 'programme.department']);
+            return new CreatedStudent($student->load(['user', 'programme.department']), $delivery);
         });
+
+        $row = EmailOutbox::query()
+            ->where('user_id', $created->student->user_id)
+            ->where('template', EmailTemplate::Credentials->value)
+            ->latest('id')
+            ->first();
+
+        if (! $row instanceof EmailOutbox) {
+            return $created;
+        }
+
+        return new CreatedStudent($created->student, $this->credentials->outcome($row));
     }
 
     /**
@@ -381,6 +397,7 @@ class StudentService
         $user = new User;
         $this->fillUser($user, $parsed);
         $user->status = UserStatus::Active;
+        // CredentialService::issue replaces this password before the transaction commits.
         $user->password = Str::password(32);
         $user->must_change_password = false;
         $user->temp_password_expires_at = null;
