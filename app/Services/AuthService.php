@@ -189,6 +189,23 @@ final class AuthService
     }
 
     /**
+     * Delete every session for this account and rotate the remember token.
+     *
+     * Staff deactivation (TASK-137) uses this same method. The caller keeps
+     * the status change and this revoke inside one transaction.
+     */
+    public function revokeSessions(User $user): void
+    {
+        $user->forceFill([
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        DB::table((string) config('session.table', 'sessions'))
+            ->where('user_id', $user->getAuthIdentifier())
+            ->delete();
+    }
+
+    /**
      * Trim, then lowercase an email or uppercase a matric number.
      *
      * An identifier that contains "@" is an email. Anything else is a
