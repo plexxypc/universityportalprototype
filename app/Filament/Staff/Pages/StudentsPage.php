@@ -80,6 +80,7 @@ class StudentsPage extends Page implements HasTable
             ->query(fn (): Builder => Student::query()
                 ->visibleTo($this->actor())
                 ->with(['user', 'programme.department.faculty']))
+            ->recordUrl(fn (Student $record): string => StudentRecordPage::getUrl(['student' => $record->getKey()]))
             ->defaultSort('matric_no')
             ->paginated([25])
             ->defaultPaginationPageOption(25)
