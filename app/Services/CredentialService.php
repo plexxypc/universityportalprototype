@@ -12,6 +12,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Support\Audit;
+use App\Support\TemporaryPassword;
 use Carbon\CarbonInterface;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
@@ -37,16 +38,11 @@ class CredentialService
 
     public const string MESSAGE_REPLACE = 'This student has already set their own password. Resending replaces it.';
 
-    public const int PASSWORD_LENGTH = 12;
+    public const int PASSWORD_LENGTH = TemporaryPassword::LENGTH;
 
     public const int EXPIRY_DAYS = 7;
 
     public const int COOLDOWN_SECONDS = 60;
-
-    /**
-     * Letters and digits that are not easily confused with each other.
-     */
-    private const string ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
     private const string COOLDOWN_PREFIX = 'credentials-resend:';
 
@@ -209,17 +205,7 @@ class CredentialService
      */
     private function temporaryPassword(): string
     {
-        $last = strlen(self::ALPHABET) - 1;
-
-        do {
-            $password = '';
-
-            for ($index = 0; $index < self::PASSWORD_LENGTH; $index++) {
-                $password .= self::ALPHABET[random_int(0, $last)];
-            }
-        } while (preg_match('/\p{L}/u', $password) !== 1 || preg_match('/\d/', $password) !== 1);
-
-        return $password;
+        return TemporaryPassword::generate();
     }
 
     /**

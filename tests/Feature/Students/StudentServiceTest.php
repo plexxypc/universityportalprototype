@@ -9,17 +9,24 @@ use App\Models\AcademicSession;
 use App\Models\AuditLog;
 use App\Models\Counter;
 use App\Models\Department;
+use App\Models\EmailOutbox;
 use App\Models\InstitutionSetting;
 use App\Models\Programme;
 use App\Models\RoleAssignment;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\AuthService;
+use App\Services\CredentialDelivery;
+use App\Services\CredentialService;
+use App\Services\MailService;
 use App\Services\SettingsService;
 use App\Services\StudentService;
+use App\Support\Audit;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
@@ -306,7 +313,84 @@ it('does not consume a matric number when creation rolls back', function () {
         ->and(User::query()->where('email', 'too.long@example.com')->exists())->toBeFalse()
         ->and(User::query()->count())->toBe($before_users + 1)
         ->and(Student::query()->count())->toBe(0)
-        ->and(Counter::query()->count())->toBe(0);
+        ->and(Counter::query()->count())->toBe(0)
+        ->and(EmailOutbox::query()->count())->toBe(0)
+        ->and(AuditLog::query()->where('action', StudentService::ACTION_CREATED)->count())->toBe(0);
+});
+
+it('leaves nothing behind when creation fails after the credentials step', function () {
+    student_session();
+    $programme = student_programme();
+    $before_users = User::query()->count();
+
+    app()->bind(CredentialService::class, function ($app): CredentialService {
+        return new class($app->make(MailService::class), $app->make(Audit::class), $app->make(AuthService::class)) extends CredentialService
+        {
+            public function issue(User $actor, User $account, string $login_id, Request $request): CredentialDelivery
+            {
+                parent::issue($actor, $account, $login_id, $request);
+
+                throw new RuntimeException('stopped after credentials');
+            }
+        };
+    });
+
+    $stopped = false;
+
+    try {
+        app(StudentService::class)->create(
+            student_actor(),
+            student_input($programme, ['email' => 'after.credentials@example.com']),
+            student_request(),
+        );
+    } catch (RuntimeException $exception) {
+        $stopped = $exception->getMessage() === 'stopped after credentials';
+    }
+
+    expect($stopped)->toBeTrue()
+        ->and(User::query()->where('email', 'after.credentials@example.com')->exists())->toBeFalse()
+        ->and(User::query()->count())->toBe($before_users + 1)
+        ->and(Student::query()->count())->toBe(0)
+        ->and(Counter::query()->count())->toBe(0)
+        ->and(EmailOutbox::query()->count())->toBe(0)
+        ->and(AuditLog::query()->count())->toBe(0);
+});
+
+it('leaves nothing behind when the student audit insert fails', function () {
+    student_session();
+    $programme = student_programme();
+    $before_users = User::query()->count();
+    $armed = true;
+
+    Event::listen('eloquent.creating: '.AuditLog::class, function (AuditLog $log) use (&$armed): void {
+        if ($armed && $log->action === StudentService::ACTION_CREATED) {
+            $armed = false;
+
+            throw new RuntimeException('audit insert failed');
+        }
+    });
+
+    $stopped = false;
+
+    try {
+        app(StudentService::class)->create(
+            student_actor(),
+            student_input($programme, ['email' => 'audit.failed@example.com']),
+            student_request(),
+        );
+    } catch (RuntimeException $exception) {
+        $stopped = $exception->getMessage() === 'audit insert failed';
+    }
+
+    $armed = false;
+
+    expect($stopped)->toBeTrue()
+        ->and(User::query()->where('email', 'audit.failed@example.com')->exists())->toBeFalse()
+        ->and(User::query()->count())->toBe($before_users + 1)
+        ->and(Student::query()->count())->toBe(0)
+        ->and(Counter::query()->count())->toBe(0)
+        ->and(EmailOutbox::query()->count())->toBe(0)
+        ->and(AuditLog::query()->where('action', StudentService::ACTION_CREATED)->count())->toBe(0);
 });
 
 it('refuses a level the programme duration does not allow', function () {
