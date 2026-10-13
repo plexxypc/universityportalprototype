@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\PingController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -20,6 +21,7 @@ Route::middleware([
     EnsurePortalArea::class.':staff',
 ])->group(function (): void {
     Route::get('/staff/downloads/ping', [PingController::class, 'staff_downloads'])->name('staff.downloads.ping');
+    Route::get('/staff/downloads/documents/{document}', DocumentDownloadController::class)->name('staff.downloads.document');
 });
 
 Route::redirect('/staff/login', '/login')->name('staff.login');

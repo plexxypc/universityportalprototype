@@ -328,6 +328,24 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
             ->and(route_coverage_has_class($middleware, AuthenticateStaffPanel::class))->toBeTrue()
             ->and(in_array(EnsurePortalArea::class.':staff', $middleware, true))->toBeTrue();
     }
+
+    $download = Route::getRoutes()->getByName('staff.downloads.document');
+    $download_middleware = $download instanceof RegisteredRoute
+        ? array_map(strval(...), $download->gatherMiddleware())
+        : [];
+
+    expect($download)->toBeInstanceOf(RegisteredRoute::class)
+        ->and($download->uri())->toBe('staff/downloads/documents/{document}')
+        ->and(route_coverage_has_auth($download_middleware))->toBeTrue()
+        ->and(route_coverage_has_class($download_middleware, EnsureActive::class))->toBeTrue()
+        ->and(route_coverage_has_class($download_middleware, EnsurePasswordChanged::class))->toBeTrue()
+        ->and(in_array(EnsurePortalArea::class.':staff', $download_middleware, true))->toBeTrue();
+
+    $bootstrap = file_get_contents(base_path('bootstrap/app.php'));
+
+    expect($bootstrap)->toBeString()
+        ->and($bootstrap)->toContain('AuthenticateSession::class')
+        ->and($bootstrap)->toContain('NoStoreResponse::class');
 });
 
 it('keeps the design preview routes inside the local guard', function () {

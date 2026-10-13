@@ -10,7 +10,9 @@ use App\Enums\StudentStatus;
 use App\Enums\UserStatus;
 use App\Models\AcademicSession;
 use App\Models\Counter;
+use App\Models\Document;
 use App\Models\EmailOutbox;
+use App\Models\Guardian;
 use App\Models\Programme;
 use App\Models\Student;
 use App\Models\User;
@@ -46,6 +48,12 @@ class StudentService
     public const string ACTION_STATUS_CHANGED = 'auth.status_changed';
 
     public const string ACTION_PROMOTED = 'students.promoted';
+
+    public const string ACTION_GUARDIANS = 'guardians.saved';
+
+    public const string MESSAGE_HAS_DOCUMENTS = 'Remove this student\'s documents before deleting the student.';
+
+    public const string MESSAGE_GUARDIAN = 'Enter the guardian name and relationship.';
 
     public const int PROMOTION_CAP = 200;
 
@@ -378,6 +386,76 @@ class StudentService
                     $this->audit->ipFromRequest($request),
                 );
             }
+        });
+    }
+
+    /**
+     * Replace this student's guardians. Phone numbers use the shared helper.
+     *
+     * The audit row lists changed field names and does not store the values.
+     *
+     * @param  list<array<string, mixed>>  $guardians
+     */
+    public function saveGuardians(User $actor, int $student_id, array $guardians, Request $request): void
+    {
+        $parsed = $this->guardianRows($guardians);
+
+        DB::transaction(function () use ($actor, $student_id, $parsed, $request): void {
+            $student = $this->lockedStudent($actor, $student_id);
+            $existing = Guardian::query()->where('student_id', $student->id)->orderBy('id')->get();
+            $before = $this->guardianSnapshot($existing);
+            $after = $this->guardianSnapshotFromRows($parsed);
+
+            Guardian::query()->where('student_id', $student->id)->delete();
+
+            foreach ($parsed as $row) {
+                $guardian = new Guardian;
+                $guardian->student_id = (int) $student->getKey();
+                $guardian->name = $row['name'];
+                $guardian->phone = $row['phone'];
+                $guardian->email = $row['email'];
+                $guardian->relationship = $row['relationship'];
+                $guardian->save();
+            }
+
+            $diff = PersonalAudit::diff($before, $after, ['name', 'phone', 'email', 'relationship'], []);
+
+            if ($diff['before'] === [] && $diff['after'] === []) {
+                return;
+            }
+
+            $this->audit->record(
+                $actor->id,
+                self::ACTION_GUARDIANS,
+                'guardians',
+                (int) $student->getKey(),
+                $diff['before'],
+                $diff['after'],
+                $this->audit->ipFromRequest($request),
+            );
+        });
+    }
+
+    /**
+     * Delete a student who has no documents.
+     *
+     * Documents have no foreign key, so a student with files is refused
+     * until those files are removed.
+     */
+    public function delete(User $actor, int $student_id, Request $request): void
+    {
+        DB::transaction(function () use ($actor, $student_id): void {
+            $student = $this->lockedStudent($actor, $student_id);
+            $has_documents = Document::query()
+                ->where('owner_type', 'Student')
+                ->where('owner_id', $student->getKey())
+                ->exists();
+
+            if ($has_documents) {
+                throw ValidationException::withMessages(['student' => self::MESSAGE_HAS_DOCUMENTS]);
+            }
+
+            $student->delete();
         });
     }
 
@@ -715,6 +793,99 @@ class StudentService
         }
 
         return $matches[1];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $guardians
+     * @return list<array{name: string, phone: string|null, email: string|null, relationship: string}>
+     */
+    private function guardianRows(array $guardians): array
+    {
+        $allowed = ['Parent', 'Guardian', 'Sibling', 'Spouse', 'Other'];
+        $rows = [];
+
+        foreach ($guardians as $guardian) {
+            $name = trim((string) ($guardian['name'] ?? ''));
+            $relationship = trim((string) ($guardian['relationship'] ?? ''));
+
+            if ($name === '' || ! in_array($relationship, $allowed, true)) {
+                throw ValidationException::withMessages(['guardian' => self::MESSAGE_GUARDIAN]);
+            }
+
+            try {
+                $phone = Phone::normalise(isset($guardian['phone']) ? (string) $guardian['phone'] : null);
+            } catch (InvalidArgumentException) {
+                throw ValidationException::withMessages(['phone' => Phone::MESSAGE]);
+            }
+
+            $email = trim((string) ($guardian['email'] ?? ''));
+
+            if ($email === '') {
+                $email = null;
+            } elseif (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                throw ValidationException::withMessages(['email' => self::MESSAGE_EMAIL]);
+            }
+
+            $rows[] = [
+                'name' => $name,
+                'phone' => $phone,
+                'email' => $email,
+                'relationship' => $relationship,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  Collection<int, Guardian>  $guardians
+     * @return array<string, string>
+     */
+    private function guardianSnapshot(Collection $guardians): array
+    {
+        $rows = [];
+
+        foreach ($guardians as $guardian) {
+            $rows[] = [
+                'name' => $guardian->name,
+                'phone' => $guardian->phone,
+                'email' => $guardian->email,
+                'relationship' => $guardian->relationship,
+            ];
+        }
+
+        return $this->guardianSnapshotFromRows($rows);
+    }
+
+    /**
+     * @param  list<array{name: string, phone: string|null, email: string|null, relationship: string}>  $rows
+     * @return array<string, string>
+     */
+    private function guardianSnapshotFromRows(array $rows): array
+    {
+        $names = [];
+        $phones = [];
+        $emails = [];
+        $relationships = [];
+
+        foreach ($rows as $row) {
+            $names[] = $row['name'];
+            $phones[] = (string) ($row['phone'] ?? '');
+            $emails[] = (string) ($row['email'] ?? '');
+            $relationships[] = $row['relationship'];
+        }
+
+        sort($names);
+        sort($phones);
+        sort($emails);
+        sort($relationships);
+
+        return [
+            'name' => implode('|', $names),
+            'phone' => implode('|', $phones),
+            'email' => implode('|', $emails),
+            'relationship' => implode('|', $relationships),
+        ];
     }
 
     /**
