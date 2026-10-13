@@ -11,10 +11,13 @@ use App\Models\Programme;
 use App\Models\Student;
 use App\Models\User;
 use App\Policies\StudentPolicy;
+use App\Services\StudentService;
 use App\Support\StatusTone;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
@@ -26,6 +29,8 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 use UnitEnum;
 
 /**
@@ -48,6 +53,13 @@ class StudentsPage extends Page implements HasTable
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
     protected static ?int $navigationSort = 1;
+
+    /**
+     * Eligible ids from the confirmation text. Empty until that text is built.
+     *
+     * @var list<int>
+     */
+    public array $promotion_eligible = [];
 
     public static function canAccess(): bool
     {
@@ -114,6 +126,19 @@ class StudentsPage extends Page implements HasTable
                         $status = $state instanceof StudentStatus ? $state : StudentStatus::tryFrom((string) $state);
 
                         return $status instanceof StudentStatus ? StatusTone::for($status) : StatusTone::NEUTRAL;
+                    }),
+            ])
+            ->bulkActions([
+                BulkAction::make('promote')
+                    ->label('Promote')
+                    ->requiresConfirmation()
+                    ->visible(fn (): bool => app(StudentPolicy::class)->create($this->actor()))
+                    ->authorize(fn (): bool => app(StudentPolicy::class)->create($this->actor()))
+                    ->modalDescription(function (Collection $records): string {
+                        return $this->promotionSummary($records);
+                    })
+                    ->action(function (Collection $records): void {
+                        $this->commitPromotion($records);
                     }),
             ])
             ->filters([
@@ -281,6 +306,59 @@ class StudentsPage extends Page implements HasTable
         }
 
         return $options;
+    }
+
+    /**
+     * Confirmation text. Students who cannot move are named and left out.
+     */
+    private function promotionSummary(Collection $records): string
+    {
+        $preview = app(StudentService::class)->previewPromotion($this->actor(), $this->selectedIds($records));
+        $this->promotion_eligible = array_column($preview['eligible'], 'id');
+        $lines = [];
+
+        foreach ($preview['eligible'] as $row) {
+            $lines[] = $row['matric_no'].' moves from '.$row['from_level'].' to '.$row['to_level'].'.';
+        }
+
+        foreach ($preview['excluded'] as $row) {
+            $lines[] = $row['matric_no'].' is not promoted. '.$row['reason'];
+        }
+
+        return $lines === [] ? 'No students were selected.' : implode(' ', $lines);
+    }
+
+    /**
+     * Apply the confirmed eligible list. A change since the preview is refused.
+     */
+    private function commitPromotion(Collection $records): void
+    {
+        $ids = $this->selectedIds($records);
+        $service = app(StudentService::class);
+
+        if ($this->promotion_eligible === []) {
+            $preview = $service->previewPromotion($this->actor(), $ids);
+            $this->promotion_eligible = array_column($preview['eligible'], 'id');
+        }
+
+        try {
+            $service->commitPromotion($this->actor(), $ids, $this->promotion_eligible, request());
+        } catch (ValidationException $exception) {
+            $this->promotion_eligible = [];
+
+            throw $exception;
+        }
+
+        $this->promotion_eligible = [];
+        Notification::make()->success()->title('Students promoted.')->send();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function selectedIds(Collection $records): array
+    {
+        return array_values(array_map(intval(...), $records->pluck('id')->all()));
     }
 
     private function actor(): User

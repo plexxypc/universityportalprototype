@@ -22,6 +22,7 @@ use App\Support\PersonalAudit;
 use App\Support\Phone;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -43,6 +44,18 @@ class StudentService
     public const string ACTION_UPDATED = 'students.updated';
 
     public const string ACTION_STATUS_CHANGED = 'auth.status_changed';
+
+    public const string ACTION_PROMOTED = 'students.promoted';
+
+    public const int PROMOTION_CAP = 200;
+
+    public const string MESSAGE_PROMOTION_CAP = 'Choose at most 200 students.';
+
+    public const string MESSAGE_PROMOTION_CHANGED = 'The list changed. Review the new preview before promoting.';
+
+    public const string MESSAGE_PROMOTION_INACTIVE = 'Only an active student can be promoted.';
+
+    public const string MESSAGE_PROMOTION_LEVEL = 'This student is already at the highest level for the programme.';
 
     public const string MESSAGE_FIRST_NAME = 'Enter a first name.';
 
@@ -275,6 +288,96 @@ class StudentService
             );
 
             return $student->load(['user', 'programme.department']);
+        });
+    }
+
+    /**
+     * Students who can move up one level, and those who cannot.
+     *
+     * A missing or out-of-scope id refuses the whole preview. The eligible
+     * list is what a later commit must still match.
+     *
+     * @param  list<int>  $student_ids
+     * @return array{
+     *     eligible: list<array{id: int, matric_no: string, from_level: int, to_level: int}>,
+     *     excluded: list<array{id: int, matric_no: string, reason: string}>
+     * }
+     */
+    public function previewPromotion(User $actor, array $student_ids): array
+    {
+        $this->authoriseCreate($actor);
+        $ids = $this->promotionIds($student_ids);
+        $students = Student::query()
+            ->visibleTo($actor)
+            ->with('programme')
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->get();
+
+        if ($students->count() !== count($ids)) {
+            throw ValidationException::withMessages(['student' => self::MESSAGE_MISSING]);
+        }
+
+        return $this->classifyPromotion($students);
+    }
+
+    /**
+     * Promote the previewed students, or refuse when that set has changed.
+     *
+     * The eligible rows move in one transaction. One audit row is written
+     * for each student. Nothing is written when the check fails.
+     *
+     * @param  list<int>  $student_ids
+     * @param  list<int>  $expected_eligible_ids
+     */
+    public function commitPromotion(User $actor, array $student_ids, array $expected_eligible_ids, Request $request): void
+    {
+        $this->authoriseCreate($actor);
+        $ids = $this->promotionIds($student_ids);
+        $expected = $this->idList($expected_eligible_ids);
+
+        DB::transaction(function () use ($actor, $ids, $expected, $request): void {
+            $students = Student::query()
+                ->visibleTo($actor)
+                ->with('programme')
+                ->whereIn('id', $ids)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            if ($students->count() !== count($ids)) {
+                throw ValidationException::withMessages(['student' => self::MESSAGE_MISSING]);
+            }
+
+            $preview = $this->classifyPromotion($students);
+            $eligible_ids = array_column($preview['eligible'], 'id');
+            $expected_sorted = $expected;
+            sort($eligible_ids);
+            sort($expected_sorted);
+
+            if ($eligible_ids !== $expected_sorted) {
+                throw ValidationException::withMessages(['promotion' => self::MESSAGE_PROMOTION_CHANGED]);
+            }
+
+            foreach ($preview['eligible'] as $row) {
+                $student = $students->firstWhere('id', $row['id']);
+
+                if (! $student instanceof Student) {
+                    throw ValidationException::withMessages(['student' => self::MESSAGE_MISSING]);
+                }
+
+                $student->level = $row['to_level'];
+                $student->save();
+                $this->audit->record(
+                    $actor->id,
+                    self::ACTION_PROMOTED,
+                    'students',
+                    $row['id'],
+                    ['level' => $row['from_level']],
+                    ['level' => $row['to_level']],
+                    $this->audit->ipFromRequest($request),
+                );
+            }
         });
     }
 
@@ -612,6 +715,117 @@ class StudentService
         }
 
         return $matches[1];
+    }
+
+    /**
+     * Distinct positive ids, capped at 200.
+     *
+     * @param  list<mixed>  $student_ids
+     * @return list<int>
+     */
+    private function promotionIds(array $student_ids): array
+    {
+        $ids = $this->idList($student_ids);
+
+        if ($ids === []) {
+            throw ValidationException::withMessages(['student' => self::MESSAGE_MISSING]);
+        }
+
+        if (count($ids) > self::PROMOTION_CAP) {
+            throw ValidationException::withMessages(['promotion' => self::MESSAGE_PROMOTION_CAP]);
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  list<mixed>  $values
+     * @return list<int>
+     */
+    private function idList(array $values): array
+    {
+        $ids = [];
+
+        foreach ($values as $value) {
+            if (is_int($value) && $value > 0) {
+                $ids[] = $value;
+
+                continue;
+            }
+
+            if (is_string($value) && preg_match('/^[1-9]\d*$/', $value) === 1) {
+                $ids[] = (int) $value;
+
+                continue;
+            }
+
+            throw ValidationException::withMessages(['student' => self::MESSAGE_MISSING]);
+        }
+
+        $ids = array_values(array_unique($ids));
+        sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * Split a locked set into students who move up and students who stay.
+     *
+     * @param  Collection<int, Student>  $students
+     * @return array{
+     *     eligible: list<array{id: int, matric_no: string, from_level: int, to_level: int}>,
+     *     excluded: list<array{id: int, matric_no: string, reason: string}>
+     * }
+     */
+    private function classifyPromotion(Collection $students): array
+    {
+        $eligible = [];
+        $excluded = [];
+
+        foreach ($students as $student) {
+            $reason = $this->promotionBlock($student);
+
+            if ($reason !== null) {
+                $excluded[] = [
+                    'id' => (int) $student->getKey(),
+                    'matric_no' => $student->matric_no,
+                    'reason' => $reason,
+                ];
+
+                continue;
+            }
+
+            $eligible[] = [
+                'id' => (int) $student->getKey(),
+                'matric_no' => $student->matric_no,
+                'from_level' => (int) $student->level,
+                'to_level' => (int) $student->level + 100,
+            ];
+        }
+
+        return [
+            'eligible' => $eligible,
+            'excluded' => $excluded,
+        ];
+    }
+
+    /**
+     * Why this student stays at the current level, or null when they can move.
+     */
+    private function promotionBlock(Student $student): ?string
+    {
+        if ($student->status !== StudentStatus::Active) {
+            return self::MESSAGE_PROMOTION_INACTIVE;
+        }
+
+        $years = min((int) $student->programme->duration_years, 6);
+        $next = (int) $student->level + 100;
+
+        if ($next > ($years * 100)) {
+            return self::MESSAGE_PROMOTION_LEVEL;
+        }
+
+        return null;
     }
 
     /**
