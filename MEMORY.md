@@ -219,7 +219,7 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 
 ## Current Task
 
-**TASK-065** is done on `phase-7-onboarding` and is not pushed. Stop A is waiting for continue before TASK-066. `StudentService::create` allocates the matric number and `CredentialService::issue` sets the temporary password, `must_change_password`, and `temp_password_expires_at` in that same transaction. Resend locks the user row, enforces a 60-second database-cache cool-down, and requires confirmation when the student has already chosen a password. A graduated student is mapped to a deactivated user; whether a graduate should still sign in is an open question for the Registrar.
+**TASK-066** is done on `phase-7-onboarding` and is not pushed. Stop B is the add-student form at `/staff/students/create`. `StudentService::create` still allocates the matric number and issues credentials in one transaction. A failed create rolls back the user, the student, the counter, and the outbox row. The resend cool-down is the database cache key `credentials-resend:{user id}` for 60 seconds. A graduated student is mapped to a deactivated user; whether a graduate should still sign in is an open question for the Registrar.
 
 Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 

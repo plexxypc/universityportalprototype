@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Staff\Pages\AcademicSessionsPage;
+use App\Filament\Staff\Pages\AddStudentPage;
 use App\Filament\Staff\Pages\CoursesPage;
 use App\Filament\Staff\Pages\DepartmentsPage;
 use App\Filament\Staff\Pages\EmailOutboxPage;
@@ -294,6 +295,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
     $staff_pages = [
         NotificationsPage::class,
         EmailOutboxPage::class,
+        AddStudentPage::class,
         InstitutionSettingsPage::class,
         AcademicSessionsPage::class,
         SemestersPage::class,
