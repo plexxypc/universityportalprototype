@@ -141,7 +141,7 @@
   - Phase 4 carry-over: authorised document download uses the Document policy.
   - Phase 4 carry-over: TEST_PLAN section 2. A document download must reject another user's record id. No download route exists yet.
 - [ ] TASK-071 Import engine: CSV and Excel parsers with size/row limits
-- [ ] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, no cross-host redirects)
+- [ ] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, redirects only to docs.google.com and hosts ending in .googleusercontent.com, validated address pinned)
 - [ ] TASK-073 Import wizard steps 1–2 (Livewire): choose source and preview
 - [ ] TASK-074 Import wizard step 3: column mapping with auto-match
 - [ ] TASK-075 Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table

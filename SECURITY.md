@@ -73,7 +73,7 @@
 
 - Staff-only permission; every batch audited with actor, source and counts.
 - **File limits:** CSV/XLSX up to 5 MB and 5,000 rows; reject others. Validate extension and MIME type; parse server-side only.
-- **Google Sheet source (SSRF protection):** accept only `https://docs.google.com/spreadsheets/d/<id>` URLs; extract the id and build the export URL on the server; never fetch a user-supplied URL directly; block redirects to other hosts; enforce timeout and response size cap; public "anyone with the link can view" sheets only; no Google credentials stored.
+- **Google Sheet source (SSRF protection):** accept only `https://docs.google.com/spreadsheets/d/<id>` URLs; extract the id and gid and build the export URL on the server; never fetch a user-supplied URL directly. Follow redirects only to `docs.google.com` and hosts ending in `.googleusercontent.com`, HTTPS only, at most 3 hops, checking every hop. Resolve each hop, refuse private, loopback, link-local, and cloud-metadata addresses, and pin the validated address for the connection so a later lookup cannot switch it. Enforce connect and total timeouts and a response size cap while streaming. Public "anyone with the link can view" sheets only; no Google credentials stored.
 - Validate every row (types, lengths, formats, existence of programme/level) before any write.
 - **CSV/Excel injection:** values starting with `=`, `+`, `-`, `@`, tab or carriage return are neutralised on export (`CsvSafe`) and escaped on display.
 - Imports are idempotent on email and matric number; duplicates handled per chosen option.

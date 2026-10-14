@@ -25,4 +25,10 @@ final class SpreadsheetLimits
     public const int MAX_UNCOMPRESSED_BYTES = 20_971_520;
 
     public const int MAX_CONTENT_TYPES_BYTES = 1_048_576;
+
+    public const int CONNECT_TIMEOUT_SECONDS = 5;
+
+    public const int TOTAL_TIMEOUT_SECONDS = 15;
+
+    public const int MAX_REDIRECTS = 3;
 }

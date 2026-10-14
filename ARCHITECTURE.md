@@ -162,17 +162,20 @@ Login form (identifier + password)
 ### 8.1 Student import (chunked)
 ```
 Upload CSV/XLSX or paste Google Sheet URL
-  → parse server-side → preview + detected columns
-  → user maps columns → RowValidator checks every row → per-row result table
-  → create import_batches (status: processing)
-  → browser loops: commitChunk(batch, rows 0–24), (25–49) ...
+  → parse server-side → store rows in a private staged file keyed by a random token the actor owns
+  → preview + detected columns
+  → user maps columns; the server applies that map to the staged rows
+  → RowValidator checks every row → per-row result table
+  → first commit creates import_batches (status: Processing)
+  → browser loops: commitChunk(token) only
+       the server reads the next 25 rows from the staged file and re-validates each row
        per row, in a transaction: next matric (counters row, lockForUpdate)
-         → create user + student + guardian → create invoice for current session
-         → CredentialService → enqueue welcome email
+         → create user + student + guardian
+         → CredentialService enqueues the welcome email when the actor chose send now
   → finalise batch: counts + failed-row report
   → queue worker sends the emails in the background, respecting the provider's daily limit
 ```
-Google Sheet source: accept only `https://docs.google.com/spreadsheets/d/<id>/...`; the server builds `https://docs.google.com/spreadsheets/d/<id>/export?format=csv&gid=<gid>`; timeout, size cap, no redirects to other hosts (SSRF guard).
+Google Sheet source: accept only `https://docs.google.com/spreadsheets/d/<id>` links. The server extracts the sheet id and gid and builds `https://docs.google.com/spreadsheets/d/<id>/export?format=csv&gid=<gid>`. It never requests the pasted URL. Redirects are followed only to `docs.google.com` and hosts ending in `.googleusercontent.com`, HTTPS only, at most 3 hops, and every hop is checked again. Each hop resolves the host, refuses private, loopback, link-local, and cloud-metadata addresses, and pins the validated address for the connection so a later lookup cannot switch it. Connect timeout, total timeout, and a streamed response size cap apply. Public "anyone with the link can view" sheets only. No Google credentials are stored. Invoices are not created here; that waits for TASK-081.
 
 ### 8.2 Payment
 
