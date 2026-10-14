@@ -124,19 +124,19 @@
 
 ## Phase 7: Student onboarding and records [PRD §6, ADM, STU]
 
-- [ ] TASK-064 `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`)
+- [x] TASK-064 `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`)
   - Phase 3 carry-over: set `users.name` from the student's three name parts.
   - Phase 3 carry-over: default a blank entry session to the current session.
   - Phase 6 carry-over: the counters key must follow `MatricPattern::counterParts()`. Include the department code when the pattern contains `{DEPT}`, and the year when it contains `{YEAR}`. A pattern that uses only one of those tokens must not share a counter with a pattern that uses the other, so two departments cannot receive the same matric number. `{SEQ}` has no zero padding. `{SEQ4}` pads to four digits and does not shorten a number past 9999.
-- [ ] TASK-065 `CredentialService`: temporary password, expiry, welcome email, **resend credentials**
+- [x] TASK-065 `CredentialService`: temporary password, expiry, welcome email, **resend credentials**
   - Phase 5 carry-over: the welcome email goes through MailService with the credentials template and login_id (matric number for students, email address for staff). Add a test that runs the REAL student-creation path and sweeps for the temporary password as in SecretHuntTest; resending credentials must supersede older unsent rows; there is currently no command or service that creates a student with a temporary password.
-- [ ] TASK-066 Single "Add student" form
-- [ ] TASK-067 Student list: search, filters (faculty, department, programme, level, status), pagination
-- [ ] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
-- [ ] TASK-069 Edit student; suspend/reactivate; level promotion (single and bulk)
+- [x] TASK-066 Single "Add student" form
+- [x] TASK-067 Student list: search, filters (faculty, department, programme, level, status), pagination
+- [x] TASK-068 Student record page with tabs (Profile, Courses, Fees and payments, Results, Attendance, Documents, Activity)
+- [x] TASK-069 Edit student; suspend/reactivate; level promotion (single and bulk)
   - Phase 4 carry-over: suspending or reactivating a student must also update `users.status` (login checks the user, not the student row).
   - Phase 5 carry-over: audit the users.status change through the audit helper in the same transaction (action auth.status_changed).
-- [ ] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
+- [x] TASK-070 Guardians form and secure document upload (type, size, filename checks; private disk; authorised download)
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
   - Phase 4 carry-over: authorised document download uses the Document policy.
   - Phase 4 carry-over: TEST_PLAN section 2. A document download must reject another user's record id. No download route exists yet.
@@ -152,6 +152,7 @@
 - [ ] TASK-079 Applicants: manual add and import (reuse engine), list, status changes
 - [ ] TASK-080 Applicants: admit and convert to student (single and bulk), admission email
 - [ ] TASK-081 Auto-generate invoice for the current session when a student is created
+  - Depends on invoice numbering from TASK-096. `StudentService::create` does not create an invoice. Call the invoice service from here only after TASK-096.
 - [ ] TASK-082 Onboarding tests: validation, duplicates, idempotent re-run, concurrent matric generation, Journey 1 browser smoke test
 
 ## Phase 8: Student portal core [PORTAL-1,2,8,9,10]
@@ -179,6 +180,7 @@
 - [ ] TASK-096 Invoice generation: single and bulk by programme/level/session, with preview and confirm
   - Phase 3 carry-over: at most one non-cancelled invoice per student per session.
   - Phase 3 carry-over: allocate the invoice number from `counters` inside the creating transaction.
+  - TASK-081 waits on the invoice number allocated here. `StudentService::create` does not create an invoice until this numbering exists.
 - [ ] TASK-097 Adjustments: scholarship, discount, waiver with reason and audit
 - [ ] TASK-098 Student fees page and invoice detail
 - [ ] TASK-099 `PaymentGateway` interface (`initialize`, `verify`, `parseNotification`) and **Demo Gateway** (checkout page and signed event)

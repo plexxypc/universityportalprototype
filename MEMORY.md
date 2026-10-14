@@ -219,9 +219,13 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 
 ## Current Task
 
-**TASK-057** is next on `phase-6-setup`. TASK-054, TASK-055, and TASK-056 are committed and not pushed. Faculties, departments, and programmes are still to build, then the course catalogue, then Stop 1. Institution settings: profile, logo upload, matric pattern, unit limits, approval toggle, attendance threshold, and the withhold-results toggle. Deadlines stay on semesters. While `institution_settings` is empty, reads fall back to `config/portal.php`, including matric pattern `{DEPT}/{YEAR}/{SEQ4}`. Login limits stay in `AuthService`. The expired-temporary-password rule stays on TASK-039. `must_change_password` and `temp_password_expires_at` are set together on the bootstrap command; the general rule remains TASK-065.
+**TASK-070** is done on `phase-7-onboarding` and is not pushed. Guardians use `Phone::normalise` and the audit stores field names only. Documents are sniffed as PDF, JPEG, or PNG, limited to 5 MB and 2000 pixels, stored under a random name, and limited to ten uploads a minute per account. Download uses a generated filename, the sniffed content type, `attachment`, `nosniff`, and `no-store`. A missing document id and another account's id both return 404. Deleting a student who still has documents is refused. On 13 October 2026, `composer check` before this commit passed against `127.0.0.1` / `university_portal_testing`: Pint passed, Larastan reported 0 errors, Pest passed **786 tests**, **782 passed**, **4 skipped**, and **4586 assertions**. A graduated student is mapped to a deactivated user; whether a graduate should still sign in is an open question for the Registrar.
 
 Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
+
+## Open questions
+
+Graduated students currently cannot sign in. Confirm with the Registrar whether they should still see results and statements.
 
 ## Key Decisions in Force
 

@@ -11,7 +11,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 1, 2 | When a role assignment sets both scope ids, the department belongs to that faculty | TASK-135 | Role assignment with faculty/department scope |
 | 1 | Phone normalised to `+234` | TASK-075 | Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table |
 | 1 | `staff_no` pattern | TASK-132 | `StaffService`: create/update with credentials (reuse `CredentialService`) |
-| 1 | `must_change_password` and `temp_password_expires_at` are set together | TASK-065 | `CredentialService`: temporary password, expiry, welcome email, resend credentials |
+| 1 | `must_change_password` and `temp_password_expires_at` are set together | TASK-065 | `CredentialService`: temporary password, expiry, welcome email, resend credentials (`it sets the password flag and the expiry together`) |
 | 1 | Block login when the temporary password has expired | TASK-039 | Login page and login action (`it blocks login when the temporary password has expired`) |
 | 1 | Deactivating a staff profile deactivates the user | TASK-137 | Activate/deactivate staff |
 | 1 | Deactivating a staff profile revokes sessions | TASK-137 | Activate/deactivate staff |
@@ -25,13 +25,13 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 2 | Prerequisite cycles. A two-course cycle is stored | TASK-058 | The database cannot reject the cycle, so PrerequisiteGraph does. Test: `it rejects a cycle of two or more courses` |
 | 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules. Test: `it accepts only a degree from the closed list` |
 | 2 | What payment satisfies `require_minimum_payment` | TASK-094 | Optional "minimum payment before registration" setting |
-| 3 | `users.name` is set from the student's three name parts | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`) |
+| 3 | `users.name` is set from the student's three name parts | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it builds the user name from the three name parts` |
 | 3 | On conversion, copy the applicant onto the new user and student | TASK-080 | Applicants: admit and convert to student (single and bulk), admission email |
 | 3 | Reject an applicant email that already exists on `users` | TASK-075 | Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table |
-| 3 | Default a blank entry session to the current session | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`) |
-| 3, 6 | Generate `matric_no` from `counters` with `lockForUpdate` | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`) |
-| 3 | A document's owner row exists. Deleting an applicant or student is refused, or the documents are removed first | TASK-070 | Guardians form and secure document upload (type, size, filename checks; private disk; authorised download) |
-| 3 | Document type and the 5 MB limit, on the local disk | TASK-070 | Guardians form and secure document upload (type, size, filename checks; private disk; authorised download) |
+| 3 | Default a blank entry session to the current session | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it defaults a blank entry session to the current session` |
+| 3, 6 | Generate `matric_no` from `counters` with `lockForUpdate` | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it allocates the matric number from the counter for the pattern` |
+| 3 | A document's owner row exists. Deleting an applicant or student is refused, or the documents are removed first | TASK-070 | Guardians form and secure document upload (type, size, filename checks; private disk; authorised download). Test: `it refuses to delete a student who still has documents and audits a removal` |
+| 3 | Document type and the 5 MB limit, on the local disk | TASK-070 | Guardians form and secure document upload (type, size, filename checks; private disk; authorised download). Test: `it refuses a document that is not a pdf or image, is over 5 MB, or is too wide` |
 | 3 | Registration minimum and maximum units | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules |
 | 3 | Registration prerequisites | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules |
 | 3 | Registration deadline lock | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules |

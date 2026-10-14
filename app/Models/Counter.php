@@ -12,8 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * One named sequence.
  *
- * The matric generator reads the row with lockForUpdate. That generator is
- * enforced in a service later.
+ * StudentService inserts a missing row, then reads it with lockForUpdate.
  */
 #[Fillable([
     'key',

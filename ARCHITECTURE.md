@@ -318,7 +318,7 @@ MySQL specifics:
 - Money `CHECK` constraints reject a negative amount. A payment, fee-structure amount, invoice line, and adjustment must be at least 1 kobo. The invoice balance check is `paid_kobo + adjustments_kobo <= total_kobo`, because unsigned subtraction wraps.
 - Unique: `users.email`, `staff.staff_no`, `students.matric_no`, `invoices.number`, `payments.reference`, `receipts.number`, `receipts.payment_id` (one receipt per payment), and `payment_events (provider, event_key)`.
 - Every foreign key is `ON DELETE RESTRICT`, except `guardians.student_id`, which is `ON DELETE CASCADE` (ADR-027).
-- Atomic matric numbers: `counters` row per department+year read with `lockForUpdate()` inside the creating transaction.
+- Atomic matric numbers: a `counters` row whose key comes from `MatricPattern::counterParts()`, inserted with `insertOrIgnore` when missing, then read with `lockForUpdate()` inside the creating transaction.
 - Index foreign keys and frequent filters (matric_no, email, status, session/semester, invoice status).
 
 ## 11. Errors and observability
