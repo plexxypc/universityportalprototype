@@ -24,6 +24,9 @@
     <php>
         <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing" force="true"/>
+        <!-- Pest captures stdout, so Symfony must not spawn stty to measure the terminal. -->
+        <env name="COLUMNS" value="80" force="true"/>
+        <env name="LINES" value="24" force="true"/>
         <env name="APP_KEY" value="base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=" force="true"/>
         <env name="APP_DEBUG" value="false" force="true"/>
         <server name="APP_ENV" value="testing"/>

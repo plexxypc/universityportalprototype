@@ -75,6 +75,8 @@ class StudentService
 
     public const string MESSAGE_EMAIL_TAKEN = 'An account with this email already exists.';
 
+    public const string MESSAGE_MATRIC_TAKEN = 'This matric number is already in use.';
+
     public const string MESSAGE_PROGRAMME = 'Choose a programme.';
 
     public const string MESSAGE_LEVEL = 'This level is not valid for a %d-year programme.';
@@ -143,16 +145,17 @@ class StudentService
      * Create the user and the student together.
      *
      * A blank entry session uses the current academic session. The matric
-     * number is allocated inside this transaction and is not returned as a
-     * password or a credential.
+     * number is allocated inside this transaction when the import did not
+     * supply one. queue_credentials keeps the add-student form's welcome
+     * email. Import send-later leaves the generated password and queues nothing.
      *
      * @param  array<string, mixed>  $input
      */
-    public function create(User $actor, array $input, Request $request): CreatedStudent
+    public function create(User $actor, array $input, Request $request, bool $queue_credentials = true, ?int $import_batch_id = null): CreatedStudent
     {
         $this->authoriseCreate($actor);
 
-        $created = DB::transaction(function () use ($actor, $input, $request): CreatedStudent {
+        $created = DB::transaction(function () use ($actor, $input, $request, $queue_credentials, $import_batch_id): CreatedStudent {
             $this->authoriseCreate($actor);
             $parsed = $this->parsed($input, true);
             $session = $this->entrySession($parsed['entry_session_id']);
@@ -161,9 +164,18 @@ class StudentService
             $this->assertEmailAvailable($parsed['email'], null);
 
             $user = $this->newUser($parsed);
-            $matric = $this->allocateMatric($programme, $session);
-            $student = $this->newStudent($user, $programme, $session, $parsed, $matric);
-            $delivery = $this->credentials->issue($actor, $user, $matric, $request);
+            $matric = $this->requestedMatric($input) ?? $this->allocateMatric($programme, $session);
+            $student = $this->newStudent($user, $programme, $session, $parsed, $matric, $import_batch_id);
+
+            if ($queue_credentials) {
+                $delivery = $this->credentials->issue($actor, $user, $matric, $request);
+            } else {
+                $user->must_change_password = true;
+                $user->temp_password_expires_at = now()->addDays(CredentialService::EXPIRY_DAYS);
+                $user->save();
+                $delivery = new CredentialDelivery(CredentialDelivery::NOT_SENT);
+            }
+
             $audit = $this->creationAudit($parsed, $programme, $session, $matric);
 
             $this->audit->record(
@@ -437,6 +449,74 @@ class StudentService
     }
 
     /**
+     * Field errors for one import row, using the add-student rules.
+     *
+     * This does not write. Programme, level, and email ownership are checked
+     * by the caller. date_of_birth must already be Y-m-d or empty.
+     *
+     * @param  array<string, mixed>  $input
+     * @return list<array{field: string, message: string}>
+     */
+    public function importProfileErrors(array $input): array
+    {
+        $errors = [];
+        $this->capture($errors, fn () => $this->namePart($input['first_name'] ?? null, 'first_name', self::MESSAGE_FIRST_NAME, true));
+        $this->capture($errors, fn () => $this->namePart($input['last_name'] ?? null, 'last_name', self::MESSAGE_LAST_NAME, true));
+        $this->capture($errors, fn () => $this->namePart($input['other_names'] ?? null, 'other_names', self::MESSAGE_NAME_LENGTH, false));
+        $this->capture($errors, fn () => $this->email($input['email'] ?? null));
+        $this->capture($errors, fn () => $this->phone($input['phone'] ?? null));
+        $this->capture($errors, fn () => $this->gender($input['gender'] ?? null));
+        $this->capture($errors, fn () => $this->dateOfBirth($input['date_of_birth'] ?? null));
+        $this->capture($errors, fn () => $this->stateOfOrigin($input['state_of_origin'] ?? null));
+        $this->capture($errors, fn () => $this->address($input['address'] ?? null));
+
+        if ($this->hasField($errors, 'first_name') || $this->hasField($errors, 'last_name') || $this->hasField($errors, 'other_names')) {
+            return $errors;
+        }
+
+        $first = $this->namePart($input['first_name'] ?? null, 'first_name', self::MESSAGE_FIRST_NAME, true);
+        $last = $this->namePart($input['last_name'] ?? null, 'last_name', self::MESSAGE_LAST_NAME, true);
+        $other = $this->namePart($input['other_names'] ?? null, 'other_names', self::MESSAGE_NAME_LENGTH, false);
+
+        if ($first === null || $last === null) {
+            return $errors;
+        }
+
+        if (mb_strlen($this->displayName($first, $other, $last)) > 255) {
+            $errors[] = ['field' => 'first_name', 'message' => self::MESSAGE_NAME_LENGTH];
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Level error for a programme, or null when the level is allowed.
+     */
+    public function importLevelError(Programme $programme, mixed $level): ?string
+    {
+        try {
+            $this->assertLevel($programme, $this->levelNumber($level));
+        } catch (ValidationException $exception) {
+            $message = $exception->errors()['level'][0] ?? self::MESSAGE_LEVEL_NUMBER;
+
+            return is_string($message) ? $message : self::MESSAGE_LEVEL_NUMBER;
+        }
+
+        return null;
+    }
+
+    /**
+     * Guardian rows checked with the same rules as the guardian form.
+     *
+     * @param  list<array<string, mixed>>  $guardians
+     * @return list<array{name: string, phone: string|null, email: string|null, relationship: string}>
+     */
+    public function guardiansForImport(array $guardians): array
+    {
+        return $this->guardianRows($guardians);
+    }
+
+    /**
      * Delete a student who has no documents.
      *
      * Documents have no foreign key, so a student with files is refused
@@ -609,16 +689,48 @@ class StudentService
      *     entry_session_id: ?int
      * }  $parsed
      */
-    private function newStudent(User $user, Programme $programme, AcademicSession $session, array $parsed, string $matric): Student
+    private function newStudent(User $user, Programme $programme, AcademicSession $session, array $parsed, string $matric, ?int $import_batch_id = null): Student
     {
         $student = new Student;
         $student->user_id = (int) $user->id;
         $student->matric_no = $matric;
         $student->status = StudentStatus::Active;
+        $student->import_batch_id = $import_batch_id;
         $this->fillStudent($student, $programme, $session, $parsed);
-        $student->save();
+
+        try {
+            $student->save();
+        } catch (QueryException $exception) {
+            if (($exception->errorInfo[0] ?? null) === '23000' && str_contains($exception->getMessage(), 'students_matric_no_unique')) {
+                throw ValidationException::withMessages(['matric_number' => self::MESSAGE_MATRIC_TAKEN]);
+            }
+
+            throw $exception;
+        }
 
         return $student;
+    }
+
+    /**
+     * A matric supplied by an import, or null when the counter should allocate one.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function requestedMatric(array $input): ?string
+    {
+        $value = $input['matric_number'] ?? null;
+
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        $matric = trim($value);
+
+        if (strlen($matric) > 32) {
+            throw ValidationException::withMessages(['matric_number' => self::MESSAGE_MATRIC_LENGTH]);
+        }
+
+        return $matric;
     }
 
     /**
@@ -796,6 +908,38 @@ class StudentService
     }
 
     /**
+     * @param  list<array{field: string, message: string}>  $errors
+     */
+    private function capture(array &$errors, callable $check): void
+    {
+        try {
+            $check();
+        } catch (ValidationException $exception) {
+            foreach ($exception->errors() as $field => $messages) {
+                $message = $messages[0] ?? '';
+
+                if (is_string($field) && is_string($message) && $message !== '') {
+                    $errors[] = ['field' => $field, 'message' => $message];
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  list<array{field: string, message: string}>  $errors
+     */
+    private function hasField(array $errors, string $field): bool
+    {
+        foreach ($errors as $error) {
+            if ($error['field'] === $field) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $guardians
      * @return list<array{name: string, phone: string|null, email: string|null, relationship: string}>
      */
@@ -808,6 +952,14 @@ class StudentService
             $name = trim((string) ($guardian['name'] ?? ''));
             $relationship = trim((string) ($guardian['relationship'] ?? ''));
 
+            if (mb_strlen($name) > 255) {
+                throw ValidationException::withMessages(['name' => self::MESSAGE_NAME_LENGTH]);
+            }
+
+            if (mb_strlen($relationship) > 64) {
+                throw ValidationException::withMessages(['relationship' => self::MESSAGE_GUARDIAN]);
+            }
+
             if ($name === '' || ! in_array($relationship, $allowed, true)) {
                 throw ValidationException::withMessages(['guardian' => self::MESSAGE_GUARDIAN]);
             }
@@ -818,11 +970,15 @@ class StudentService
                 throw ValidationException::withMessages(['phone' => Phone::MESSAGE]);
             }
 
+            if ($phone !== null && strlen($phone) > 32) {
+                throw ValidationException::withMessages(['phone' => Phone::MESSAGE]);
+            }
+
             $email = trim((string) ($guardian['email'] ?? ''));
 
             if ($email === '') {
                 $email = null;
-            } elseif (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            } elseif (strlen($email) > 255 || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
                 throw ValidationException::withMessages(['email' => self::MESSAGE_EMAIL]);
             }
 

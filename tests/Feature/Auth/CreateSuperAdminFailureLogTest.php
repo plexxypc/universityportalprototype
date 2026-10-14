@@ -7,6 +7,8 @@ use App\Enums\Role;
 use App\Models\RoleAssignment;
 use App\Models\User;
 use App\Services\SuperAdminBootstrapFailure;
+use Illuminate\Database\Connection;
+use Illuminate\Database\MySqlConnection;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
@@ -204,26 +206,20 @@ it('reports database_unreachable without the email, hash, or password', function
     $password = bootstrap_password();
     bootstrap_set_env($email, $hash);
 
-    $port = config('database.connections.mysql.port');
-    $options = config('database.connections.mysql.options');
+    DB::purge('mysql');
+    DB::disconnect('mysql');
+    Connection::resolverFor('mysql', function ($connection, $database, $prefix, $config): never {
+        unset($connection, $database, $prefix, $config);
+
+        throw new PDOException('SQLSTATE[HY000] [2002] Connection refused', 2002);
+    });
 
     try {
-        config([
-            'database.connections.mysql.port' => 1,
-            'database.connections.mysql.options' => array_replace(
-                is_array($options) ? $options : [],
-                [PDO::ATTR_TIMEOUT => 2],
-            ),
-        ]);
-        DB::purge('mysql');
-        DB::disconnect('mysql');
-
         $captured = bootstrap_capture(fn (): ExecutionResult => bootstrap_failure_run());
     } finally {
-        config([
-            'database.connections.mysql.port' => $port,
-            'database.connections.mysql.options' => $options,
-        ]);
+        Connection::resolverFor('mysql', function ($connection, string $database, string $prefix, array $config): MySqlConnection {
+            return new MySqlConnection($connection, $database, $prefix, $config);
+        });
         DB::purge('mysql');
         bootstrap_reopen_transaction();
     }

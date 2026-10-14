@@ -1,6 +1,19 @@
 <?php
 
+use App\Enums\Role;
+use App\Models\RoleAssignment;
+use App\Models\User;
 use Tests\TestCase;
+
+$compiled_views = sys_get_temp_dir().DIRECTORY_SEPARATOR.'university-portal-views';
+
+if (! is_dir($compiled_views)) {
+    mkdir($compiled_views, 0755, true);
+}
+
+putenv('VIEW_COMPILED_PATH='.$compiled_views);
+$_ENV['VIEW_COMPILED_PATH'] = $compiled_views;
+$_SERVER['VIEW_COMPILED_PATH'] = $compiled_views;
 
 /*
 |--------------------------------------------------------------------------
@@ -45,6 +58,27 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * A registrar, or another staff role, for import wizard tests.
+ */
+function import_wizard_actor(Role $role = Role::Registrar): User
+{
+    $user = User::factory()->create();
+    $assignment = RoleAssignment::factory()->for($user, 'user');
+
+    if ($role === Role::FacultyAdmin) {
+        $assignment = $assignment->facultyAdmin();
+    } elseif ($role === Role::DepartmentOfficer) {
+        $assignment = $assignment->departmentOfficer();
+    } else {
+        $assignment = $assignment->state(['role' => $role]);
+    }
+
+    $assignment->create();
+
+    return $user;
 }
 
 /**

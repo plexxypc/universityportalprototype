@@ -89,14 +89,7 @@ it('rolls back the identity migrations and keeps the original users columns', fu
                 'created_at',
                 'updated_at',
             ]))->toBeTrue();
-    });
 
-    expect(Schema::hasTable('staff'))->toBeTrue()
-        ->and(Schema::hasColumn('users', 'status'))->toBeTrue();
-});
-
-it('defaults an existing user to Active when the identity columns are added', function () {
-    without_identity_migrations(function (): void {
         $user_id = DB::table('users')->insertGetId([
             'name' => 'Existing Person',
             'email' => 'existing-person@example.test',
@@ -111,6 +104,9 @@ it('defaults an existing user to Active when the identity columns are added', fu
             DB::table('users')->where('id', $user_id)->delete();
         }
     });
+
+    expect(Schema::hasTable('staff'))->toBeTrue()
+        ->and(Schema::hasColumn('users', 'status'))->toBeTrue();
 });
 
 it('rejects an invalid users status', function () {

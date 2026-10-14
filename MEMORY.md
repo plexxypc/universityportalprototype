@@ -3,7 +3,9 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Monday, 12 October 2026 (Vite disabled on every test application)
+**Last updated:** Wednesday, 14 October 2026 (Pest suite timing)
+
+On 14 October 2026 the full Pest suite on this machine, against `127.0.0.1` / `university_portal_testing`, passed **910 tests**, **906 passed**, **4 skipped**, and **4988 assertions** in **473 seconds**. The same command earlier that day took **750 seconds**. Symfony no longer spawns `stty` while Pest captures stdout (`COLUMNS` and `LINES` in `phpunit.xml`). Blade is compiled once per process. The identity rollback checks share one migration cycle. The spreadsheet writer does not pre-calculate formulas. The unreachable-database bootstrap test throws driver code 2002 instead of opening a socket. `ci.yml` was not changed. The Pest job's 15-minute cap still includes checkout, PHP setup, Composer, and MySQL startup around that suite.
 **Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
@@ -222,6 +224,10 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 **TASK-070** is done on `phase-7-onboarding` and is not pushed. Guardians use `Phone::normalise` and the audit stores field names only. Documents are sniffed as PDF, JPEG, or PNG, limited to 5 MB and 2000 pixels, stored under a random name, and limited to ten uploads a minute per account. Download uses a generated filename, the sniffed content type, `attachment`, `nosniff`, and `no-store`. A missing document id and another account's id both return 404. Deleting a student who still has documents is refused. On 13 October 2026, `composer check` before this commit passed against `127.0.0.1` / `university_portal_testing`: Pint passed, Larastan reported 0 errors, Pest passed **786 tests**, **782 passed**, **4 skipped**, and **4586 assertions**. A graduated student is mapped to a deactivated user; whether a graduate should still sign in is an open question for the Registrar.
 
 Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
+
+## Known issues
+
+On this Windows machine the WinGet PHP 8.5 CLI has empty `curl.cainfo` and `openssl.cafile`. A public Google Sheet download then fails before any row is stored, and the safe log line is `sheet_fetch_failed category=tls hop=1 curl_errno=60`. Certificate verification stays on. The fix is to point both settings at a CA bundle (the file from `https://curl.se/ca/cacert.pem`) and restart PHP. Those two settings are still empty in this CLI, so the same probe would still fail until they are set. The Docker image already installs `ca-certificates` and does not need a change. Do not turn verification off.
 
 ## Open questions
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\EmailStatus;
+use App\Enums\EmailTemplate;
 use App\Enums\Gender;
 use App\Enums\StudentStatus;
 use App\Models\Concerns\ScopesVisibleTo;
@@ -12,6 +14,7 @@ use App\Support\Rbac\VisibilityKind;
 use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -180,6 +183,33 @@ class Student extends Model implements VisibleToUser
     public function results(): HasMany
     {
         return $this->hasMany(Result::class);
+    }
+
+    /**
+     * Accounts with no credentials email, or whose latest credentials email is still queued.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeNeedsCredentials(Builder $query): Builder
+    {
+        $template = EmailTemplate::Credentials->value;
+
+        return $query->where(function (Builder $inner) use ($template): void {
+            $inner->whereDoesntHave('user.emails', function (Builder $mail) use ($template): void {
+                $mail->where('template', $template);
+            })->orWhereExists(function ($sub) use ($template): void {
+                $sub->selectRaw('1')
+                    ->from('email_outbox as credential_mail')
+                    ->whereColumn('credential_mail.user_id', 'students.user_id')
+                    ->where('credential_mail.template', $template)
+                    ->where('credential_mail.status', EmailStatus::Queued->value)
+                    ->whereRaw(
+                        'credential_mail.id = (select max(latest.id) from email_outbox as latest where latest.user_id = students.user_id and latest.template = ?)',
+                        [$template],
+                    );
+            });
+        });
     }
 
     /**
