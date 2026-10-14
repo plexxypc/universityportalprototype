@@ -5,6 +5,16 @@ use App\Models\RoleAssignment;
 use App\Models\User;
 use Tests\TestCase;
 
+$compiled_views = sys_get_temp_dir().DIRECTORY_SEPARATOR.'university-portal-views';
+
+if (! is_dir($compiled_views)) {
+    mkdir($compiled_views, 0755, true);
+}
+
+putenv('VIEW_COMPILED_PATH='.$compiled_views);
+$_ENV['VIEW_COMPILED_PATH'] = $compiled_views;
+$_SERVER['VIEW_COMPILED_PATH'] = $compiled_views;
+
 /*
 |--------------------------------------------------------------------------
 | Test Case

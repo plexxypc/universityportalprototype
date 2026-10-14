@@ -9,6 +9,11 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 abstract class TestCase extends BaseTestCase
 {
     /**
+     * Blade is compiled once per process, outside the application view cache.
+     */
+    private static bool $views_ready = false;
+
+    /**
      * Boot the application and skip the Vite manifest.
      *
      * CI has no public/build and no public/hot. Pages that call @vite,
@@ -20,6 +25,7 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         $this->disable_vite();
+        $this->prepare_compiled_views();
     }
 
     /**
@@ -43,5 +49,21 @@ abstract class TestCase extends BaseTestCase
         if (isset($this->app)) {
             $this->withoutVite();
         }
+    }
+
+    /**
+     * Compile Blade once for this process.
+     *
+     * The compiled path is set before the application boots. The first staff
+     * page otherwise compiles hundreds of templates on that request.
+     */
+    protected function prepare_compiled_views(): void
+    {
+        if (self::$views_ready) {
+            return;
+        }
+
+        $this->artisan('view:cache')->assertSuccessful();
+        self::$views_ready = true;
     }
 }

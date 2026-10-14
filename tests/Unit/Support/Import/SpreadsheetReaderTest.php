@@ -56,6 +56,7 @@ function import_xlsx_path(callable $fill): string
     $spreadsheet = new Spreadsheet;
     $fill($spreadsheet);
     $writer = new Xlsx($spreadsheet);
+    $writer->setPreCalculateFormulas(false);
     $writer->save($target);
     $spreadsheet->disconnectWorksheets();
 
@@ -170,7 +171,6 @@ it('reads the first sheet and does not evaluate a formula', function () {
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setCellValue('A1', 'first_name');
         $sheet->setCellValue('A2', '=1+1');
-        $sheet->getCell('A2')->getCalculatedValue();
         $sheet->setCellValue('B1', 'last_name');
         $sheet->setCellValue('B2', 'Lovelace');
         $other = $spreadsheet->createSheet();
