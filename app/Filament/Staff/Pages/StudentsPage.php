@@ -89,9 +89,22 @@ class StudentsPage extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => Student::query()
-                ->visibleTo($this->actor())
-                ->with(['user', 'programme.department.faculty']))
+            ->query(function (): Builder {
+                $query = Student::query()
+                    ->visibleTo($this->actor())
+                    ->with(['user', 'programme.department.faculty']);
+                $batch = request()->query('import_batch');
+
+                if (is_string($batch) && ctype_digit($batch) && (int) $batch > 0) {
+                    $query->where('import_batch_id', (int) $batch);
+                }
+
+                if (request()->query('needs_credentials') === '1') {
+                    $query->needsCredentials();
+                }
+
+                return $query;
+            })
             ->recordUrl(fn (Student $record): string => StudentRecordPage::getUrl(['student' => $record->getKey()]))
             ->defaultSort('matric_no')
             ->paginated([25])

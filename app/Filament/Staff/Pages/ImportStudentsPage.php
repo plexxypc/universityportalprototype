@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Staff\Pages;
 
 use App\Exceptions\ImportNotFoundException;
+use App\Models\ImportBatch;
+use App\Models\Student;
 use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Services\ImportService;
@@ -211,6 +213,103 @@ class ImportStudentsPage extends Page
 
             return $empty;
         }
+    }
+
+    /**
+     * Import the next chunk. Rows stay in the staged file.
+     */
+    public function commitChunk(): void
+    {
+        try {
+            $result = app(ImportService::class)->commitChunk(
+                $this->actor(),
+                $this->token,
+                $this->duplicate_mode,
+                $this->send_mode,
+                request(),
+            );
+        } catch (ImportNotFoundException) {
+            abort(404);
+        } catch (AuthorizationException) {
+            abort(403);
+        }
+
+        if ($result['finished']) {
+            session(['student-import-batch:'.$this->actor()->id => $result['batch_id']]);
+            $this->step = 'report';
+
+            return;
+        }
+
+        $this->step = 'import';
+    }
+
+    /**
+     * Progress for a batch that is still staged.
+     *
+     * @return array{
+     *     finished: bool,
+     *     processed_rows: int,
+     *     total_rows: int,
+     *     created_count: int,
+     *     updated_count: int,
+     *     skipped_count: int,
+     *     failed_count: int,
+     *     batch_id: int,
+     *     credentials_needed: int
+     * }
+     */
+    public function importProgress(): array
+    {
+        try {
+            return app(ImportService::class)->status($this->actor(), $this->token);
+        } catch (ImportNotFoundException) {
+            abort(404);
+        } catch (AuthorizationException) {
+            abort(403);
+        }
+    }
+
+    /**
+     * The finished batch for this actor. Counts only.
+     *
+     * @return array{created_count: int, updated_count: int, skipped_count: int, failed_count: int, credentials_needed: int, students_url: string}
+     */
+    public function commitReport(): array
+    {
+        $empty = [
+            'created_count' => 0,
+            'updated_count' => 0,
+            'skipped_count' => 0,
+            'failed_count' => 0,
+            'credentials_needed' => 0,
+            'students_url' => '',
+        ];
+        $batch_id = session('student-import-batch:'.$this->actor()->id);
+
+        if (! is_int($batch_id) && ! (is_string($batch_id) && ctype_digit($batch_id))) {
+            return $empty;
+        }
+
+        $batch = ImportBatch::query()
+            ->whereKey((int) $batch_id)
+            ->where('user_id', $this->actor()->id)
+            ->first();
+
+        if (! $batch instanceof ImportBatch) {
+            return $empty;
+        }
+
+        $needed = Student::query()->where('import_batch_id', $batch->id)->needsCredentials()->count();
+
+        return [
+            'created_count' => (int) $batch->created_count,
+            'updated_count' => (int) $batch->updated_count,
+            'skipped_count' => (int) $batch->skipped_count,
+            'failed_count' => (int) $batch->failed_count,
+            'credentials_needed' => $needed,
+            'students_url' => StudentsPage::getUrl().'?needs_credentials=1&import_batch='.$batch->id,
+        ];
     }
 
     /**

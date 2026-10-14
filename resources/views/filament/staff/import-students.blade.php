@@ -173,5 +173,31 @@
                 </table>
             </div>
         @endif
+        <form wire:submit="commitChunk" class="mt-6">
+            <x-filament::button type="submit">
+                Import students
+            </x-filament::button>
+        </form>
+    @elseif ($step === 'import')
+        @php
+            $progress = $this->importProgress();
+        @endphp
+        <p class="mb-2">{{ $progress['processed_rows'] }} of {{ $progress['total_rows'] }} rows processed.</p>
+        <progress class="mb-4 w-full" value="{{ $progress['processed_rows'] }}" max="{{ max(1, $progress['total_rows']) }}"></progress>
+        <p class="mb-4 text-sm">Created {{ $progress['created_count'] }}, updated {{ $progress['updated_count'] }}, skipped {{ $progress['skipped_count'] }}, failed {{ $progress['failed_count'] }}.</p>
+        <form wire:submit="commitChunk">
+            <x-filament::button type="submit">
+                Continue import
+            </x-filament::button>
+        </form>
+    @elseif ($step === 'report')
+        @php
+            $committed = $this->commitReport();
+        @endphp
+        <p class="mb-2">Created {{ $committed['created_count'] }}, updated {{ $committed['updated_count'] }}, skipped {{ $committed['skipped_count'] }}, failed {{ $committed['failed_count'] }}.</p>
+        <p class="mb-4">{{ $committed['credentials_needed'] }} accounts still need credentials.</p>
+        @if ($committed['students_url'] !== '')
+            <a href="{{ $committed['students_url'] }}">View accounts that still need credentials</a>
+        @endif
     @endif
 </x-filament-panels::page>

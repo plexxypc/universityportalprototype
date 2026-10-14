@@ -53,6 +53,57 @@ final class StudentRowValidator
      */
     public function assess(StagedImport $staged, string $duplicate_mode): array
     {
+        $errors = [];
+        $duplicates = [];
+        $ready = 0;
+
+        foreach ($this->actions($staged, $duplicate_mode) as $action) {
+            if ($action['action'] === 'fail') {
+                foreach ($action['errors'] as $error) {
+                    $errors[] = $error;
+                }
+
+                continue;
+            }
+
+            $ready++;
+
+            if ($action['action'] === 'skip' || $action['action'] === 'update') {
+                $duplicates[] = [
+                    'row' => $action['row'],
+                    'field' => $action['match_field'],
+                    'message' => self::MESSAGE_DUPLICATE,
+                ];
+            }
+        }
+
+        return [
+            'errors' => array_slice($errors, 0, self::ERROR_LIMIT),
+            'error_count' => count($errors),
+            'remaining_error_count' => max(0, count($errors) - self::ERROR_LIMIT),
+            'duplicates' => array_slice($duplicates, 0, self::ERROR_LIMIT),
+            'duplicate_count' => count($duplicates),
+            'ready_count' => $ready,
+            'total_rows' => count($staged->rows),
+        ];
+    }
+
+    /**
+     * One decision per data row. Commit reads this and ignores any browser offset.
+     *
+     * @return list<array{
+     *     row: int,
+     *     action: string,
+     *     student_id: ?int,
+     *     match_field: string,
+     *     errors: list<array{row: int, field: string, message: string}>,
+     *     input: array<string, mixed>,
+     *     guardian: ?array{name: string, phone: string, email: string, relationship: string},
+     *     cells: array<string, string>
+     * }>
+     */
+    public function actions(StagedImport $staged, string $duplicate_mode): array
+    {
         $map = $staged->column_map;
 
         if ($map === null) {
@@ -65,9 +116,7 @@ final class StudentRowValidator
         $identity = $this->identity($staged->rows, $map);
         $seen_email = [];
         $seen_matric = [];
-        $errors = [];
-        $duplicates = [];
-        $ready = 0;
+        $actions = [];
 
         foreach ($staged->rows as $offset => $row) {
             $number = $offset + 1;
@@ -83,34 +132,32 @@ final class StudentRowValidator
                 $seen_email,
                 $seen_matric,
             );
+            $matched = $row_errors === [] ? $this->matchedStudent($values, $identity) : null;
+            $action = 'create';
+            $student_id = null;
+            $match_field = 'email';
 
-            if ($row_errors === []) {
-                $ready++;
-                $match = $this->databaseMatch($values, $identity);
-
-                if ($match !== null) {
-                    $duplicates[] = [
-                        'row' => $number,
-                        'field' => $match,
-                        'message' => self::MESSAGE_DUPLICATE,
-                    ];
-                }
+            if ($row_errors !== []) {
+                $action = 'fail';
+            } elseif ($matched instanceof Student) {
+                $action = $duplicate_mode === 'update' ? 'update' : 'skip';
+                $student_id = (int) $matched->id;
+                $match_field = $this->databaseMatch($values, $identity) ?? 'email';
             }
 
-            foreach ($row_errors as $error) {
-                $errors[] = $error;
-            }
+            $actions[] = [
+                'row' => $number,
+                'action' => $action,
+                'student_id' => $student_id,
+                'match_field' => $match_field,
+                'errors' => $row_errors,
+                'input' => $this->input($values, $programmes, $sessions),
+                'guardian' => $this->guardianInput($values),
+                'cells' => $values,
+            ];
         }
 
-        return [
-            'errors' => array_slice($errors, 0, self::ERROR_LIMIT),
-            'error_count' => count($errors),
-            'remaining_error_count' => max(0, count($errors) - self::ERROR_LIMIT),
-            'duplicates' => array_slice($duplicates, 0, self::ERROR_LIMIT),
-            'duplicate_count' => count($duplicates),
-            'ready_count' => $ready,
-            'total_rows' => count($staged->rows),
-        ];
+        return $actions;
     }
 
     /**
@@ -362,6 +409,81 @@ final class StudentRowValidator
         }
 
         return $errors;
+    }
+
+    /**
+     * The student this row matches, when email and matric do not point at two people.
+     *
+     * @param  array<string, string>  $values
+     * @param  array{users: array<string, User>, students_by_user: array<int, Student>, students_by_matric: array<string, Student>}  $identity
+     */
+    private function matchedStudent(array $values, array $identity): ?Student
+    {
+        $email = mb_strtolower($values['email']);
+        $user = $email === '' ? null : ($identity['users'][$email] ?? null);
+        $email_student = $user instanceof User ? ($identity['students_by_user'][(int) $user->id] ?? null) : null;
+        $matric_student = $values['matric_number'] === '' ? null : ($identity['students_by_matric'][$values['matric_number']] ?? null);
+
+        if ($user instanceof User && ! $email_student instanceof Student) {
+            return null;
+        }
+
+        if ($email_student instanceof Student && $matric_student instanceof Student && (int) $email_student->id !== (int) $matric_student->id) {
+            return null;
+        }
+
+        if ($email_student instanceof Student) {
+            return $email_student;
+        }
+
+        return $matric_student instanceof Student ? $matric_student : null;
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     * @param  Collection<string, Programme>  $programmes
+     * @param  Collection<string, AcademicSession>  $sessions
+     * @return array<string, mixed>
+     */
+    private function input(array $values, Collection $programmes, Collection $sessions): array
+    {
+        $date = $this->isoDate($values['date_of_birth']);
+        $programme = $programmes->get($values['programme_code']);
+        $session = $sessions->get($values['entry_session']);
+
+        return [
+            'first_name' => $values['first_name'],
+            'last_name' => $values['last_name'],
+            'other_names' => $values['other_names'],
+            'email' => $values['email'],
+            'phone' => $values['phone'],
+            'gender' => $values['gender'] === '' ? null : ucfirst(mb_strtolower($values['gender'])),
+            'date_of_birth' => $date['ok'] ? $date['value'] : null,
+            'state_of_origin' => $values['state_of_origin'],
+            'address' => $values['address'],
+            'programme_id' => $programme instanceof Programme ? (int) $programme->id : 0,
+            'level' => preg_match('/^\d+$/', $values['level']) === 1 ? (int) $values['level'] : 0,
+            'entry_session_id' => $session instanceof AcademicSession ? (int) $session->id : null,
+            'matric_number' => $values['matric_number'],
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     * @return ?array{name: string, phone: string, email: string, relationship: string}
+     */
+    private function guardianInput(array $values): ?array
+    {
+        if ($values['guardian_name'] === '' && $values['guardian_phone'] === '' && $values['guardian_email'] === '' && $values['guardian_relationship'] === '') {
+            return null;
+        }
+
+        return [
+            'name' => $values['guardian_name'],
+            'phone' => $values['guardian_phone'],
+            'email' => $values['guardian_email'],
+            'relationship' => $values['guardian_relationship'],
+        ];
     }
 
     /**

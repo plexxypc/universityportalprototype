@@ -75,6 +75,8 @@ class StudentService
 
     public const string MESSAGE_EMAIL_TAKEN = 'An account with this email already exists.';
 
+    public const string MESSAGE_MATRIC_TAKEN = 'This matric number is already in use.';
+
     public const string MESSAGE_PROGRAMME = 'Choose a programme.';
 
     public const string MESSAGE_LEVEL = 'This level is not valid for a %d-year programme.';
@@ -143,16 +145,17 @@ class StudentService
      * Create the user and the student together.
      *
      * A blank entry session uses the current academic session. The matric
-     * number is allocated inside this transaction and is not returned as a
-     * password or a credential.
+     * number is allocated inside this transaction when the import did not
+     * supply one. queue_credentials keeps the add-student form's welcome
+     * email. Import send-later leaves the generated password and queues nothing.
      *
      * @param  array<string, mixed>  $input
      */
-    public function create(User $actor, array $input, Request $request): CreatedStudent
+    public function create(User $actor, array $input, Request $request, bool $queue_credentials = true, ?int $import_batch_id = null): CreatedStudent
     {
         $this->authoriseCreate($actor);
 
-        $created = DB::transaction(function () use ($actor, $input, $request): CreatedStudent {
+        $created = DB::transaction(function () use ($actor, $input, $request, $queue_credentials, $import_batch_id): CreatedStudent {
             $this->authoriseCreate($actor);
             $parsed = $this->parsed($input, true);
             $session = $this->entrySession($parsed['entry_session_id']);
@@ -161,9 +164,18 @@ class StudentService
             $this->assertEmailAvailable($parsed['email'], null);
 
             $user = $this->newUser($parsed);
-            $matric = $this->allocateMatric($programme, $session);
-            $student = $this->newStudent($user, $programme, $session, $parsed, $matric);
-            $delivery = $this->credentials->issue($actor, $user, $matric, $request);
+            $matric = $this->requestedMatric($input) ?? $this->allocateMatric($programme, $session);
+            $student = $this->newStudent($user, $programme, $session, $parsed, $matric, $import_batch_id);
+
+            if ($queue_credentials) {
+                $delivery = $this->credentials->issue($actor, $user, $matric, $request);
+            } else {
+                $user->must_change_password = true;
+                $user->temp_password_expires_at = now()->addDays(CredentialService::EXPIRY_DAYS);
+                $user->save();
+                $delivery = new CredentialDelivery(CredentialDelivery::NOT_SENT);
+            }
+
             $audit = $this->creationAudit($parsed, $programme, $session, $matric);
 
             $this->audit->record(
@@ -677,16 +689,48 @@ class StudentService
      *     entry_session_id: ?int
      * }  $parsed
      */
-    private function newStudent(User $user, Programme $programme, AcademicSession $session, array $parsed, string $matric): Student
+    private function newStudent(User $user, Programme $programme, AcademicSession $session, array $parsed, string $matric, ?int $import_batch_id = null): Student
     {
         $student = new Student;
         $student->user_id = (int) $user->id;
         $student->matric_no = $matric;
         $student->status = StudentStatus::Active;
+        $student->import_batch_id = $import_batch_id;
         $this->fillStudent($student, $programme, $session, $parsed);
-        $student->save();
+
+        try {
+            $student->save();
+        } catch (QueryException $exception) {
+            if (($exception->errorInfo[0] ?? null) === '23000' && str_contains($exception->getMessage(), 'students_matric_no_unique')) {
+                throw ValidationException::withMessages(['matric_number' => self::MESSAGE_MATRIC_TAKEN]);
+            }
+
+            throw $exception;
+        }
 
         return $student;
+    }
+
+    /**
+     * A matric supplied by an import, or null when the counter should allocate one.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function requestedMatric(array $input): ?string
+    {
+        $value = $input['matric_number'] ?? null;
+
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        $matric = trim($value);
+
+        if (strlen($matric) > 32) {
+            throw ValidationException::withMessages(['matric_number' => self::MESSAGE_MATRIC_LENGTH]);
+        }
+
+        return $matric;
     }
 
     /**
