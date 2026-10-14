@@ -15,3 +15,6 @@ Schedule::command('portal:heartbeat')->everyMinute();
 
 // Dispatches due outbox rows. The job is the only sender.
 Schedule::command('outbox:send')->everyMinute()->withoutOverlapping();
+
+// Staged spreadsheets hold personal data. Drop files older than 24 hours.
+Schedule::command('imports:prune-staged')->hourly()->withoutOverlapping();

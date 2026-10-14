@@ -11,6 +11,7 @@ use App\Filament\Staff\Pages\FacultiesPage;
 use App\Filament\Staff\Pages\FeeCategoriesPage;
 use App\Filament\Staff\Pages\FeeStructuresPage;
 use App\Filament\Staff\Pages\GradingConfigurationPage;
+use App\Filament\Staff\Pages\ImportStudentsPage;
 use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\NotificationsPage;
 use App\Filament\Staff\Pages\ProgrammesPage;
@@ -300,6 +301,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         StudentsPage::class,
         StudentRecordPage::class,
         AddStudentPage::class,
+        ImportStudentsPage::class,
         InstitutionSettingsPage::class,
         AcademicSessionsPage::class,
         SemestersPage::class,
