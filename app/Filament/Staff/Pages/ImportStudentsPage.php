@@ -8,6 +8,7 @@ use App\Exceptions\ImportNotFoundException;
 use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Services\ImportService;
+use App\Support\Import\ColumnMap;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -45,9 +46,9 @@ class ImportStudentsPage extends Page
     public string $sheet_url = '';
 
     /**
-     * Column index for each portal field. Empty until mapping is confirmed.
+     * Column index for each portal field. Unmapped fields are null.
      *
-     * @var array<string, int>
+     * @var array<string, int|string|null>
      */
     public array $column_map = [];
 
@@ -98,6 +99,7 @@ class ImportStudentsPage extends Page
         }
 
         $this->upload = null;
+        $this->column_map = [];
         $this->step = 'preview';
     }
 
@@ -118,7 +120,58 @@ class ImportStudentsPage extends Page
         }
 
         $this->sheet_url = '';
+        $this->column_map = [];
         $this->step = 'preview';
+    }
+
+    /**
+     * Fill the column map from the staged headers and open the mapping step.
+     */
+    public function openMap(): void
+    {
+        try {
+            $suggested = app(ImportService::class)->suggestMap($this->actor(), $this->token);
+        } catch (ImportNotFoundException) {
+            abort(404);
+        } catch (AuthorizationException) {
+            abort(403);
+        }
+
+        $map = [];
+
+        foreach (ColumnMap::fields() as $field) {
+            $map[$field['key']] = $suggested[$field['key']] ?? null;
+        }
+
+        $this->column_map = $map;
+        $this->step = 'map';
+    }
+
+    /**
+     * Check the column map and store it on the staged file.
+     */
+    public function confirmMap(): void
+    {
+        try {
+            $saved = app(ImportService::class)->confirmMap($this->actor(), $this->token, $this->column_map);
+        } catch (ImportNotFoundException) {
+            abort(404);
+        } catch (AuthorizationException) {
+            abort(403);
+        }
+
+        $this->column_map = $saved;
+        $this->step = 'validate';
+    }
+
+    /**
+     * Portal fields shown on the mapping step.
+     *
+     * @return list<array{key: string, label: string, required: bool}>
+     */
+    public function mappingFields(): array
+    {
+        return ColumnMap::fields();
     }
 
     /**

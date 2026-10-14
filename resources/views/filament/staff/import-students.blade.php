@@ -1,11 +1,18 @@
 <x-filament-panels::page>
+    @php
+        $steps = [
+            'source' => '1. Source',
+            'preview' => '2. Preview',
+            'map' => '3. Map',
+            'validate' => '4. Validate',
+            'import' => '5. Import',
+            'report' => '6. Report',
+        ];
+    @endphp
     <ol class="mb-6 flex flex-wrap gap-2 text-sm">
-        <li class="rounded-full px-3 py-1 {{ $step === 'source' ? 'bg-primary-600 text-white' : '' }}">1. Source</li>
-        <li class="rounded-full px-3 py-1 {{ $step === 'preview' ? 'bg-primary-600 text-white' : '' }}">2. Preview</li>
-        <li class="rounded-full px-3 py-1">3. Map</li>
-        <li class="rounded-full px-3 py-1">4. Validate</li>
-        <li class="rounded-full px-3 py-1">5. Import</li>
-        <li class="rounded-full px-3 py-1">6. Report</li>
+        @foreach ($steps as $name => $label)
+            <li class="rounded-full px-3 py-1 {{ $step === $name ? 'bg-primary-600 text-white' : '' }}">{{ $label }}</li>
+        @endforeach
     </ol>
 
     @if ($step === 'source')
@@ -35,7 +42,7 @@
                 Preview sheet
             </x-filament::button>
         </form>
-    @else
+    @elseif ($step === 'preview')
         @php
             $preview = $this->previewTable();
         @endphp
@@ -67,5 +74,37 @@
                 </table>
             </div>
         @endif
+        <form wire:submit="openMap" class="mt-6">
+            <x-filament::button type="submit">
+                Map columns
+            </x-filament::button>
+        </form>
+    @elseif ($step === 'map')
+        @php
+            $preview = $this->previewTable();
+        @endphp
+        <form wire:submit="confirmMap" class="flex max-w-xl flex-col gap-4">
+            @foreach ($this->mappingFields() as $field)
+                <div wire:key="map-{{ $field['key'] }}">
+                    <label for="map-{{ $field['key'] }}" class="mb-1 block font-medium">
+                        {{ $field['label'] }}@if ($field['required']) * @endif
+                    </label>
+                    <select id="map-{{ $field['key'] }}" wire:model="column_map.{{ $field['key'] }}" class="block w-full rounded-lg border px-3 py-2">
+                        <option value="">Not in this file</option>
+                        @foreach ($preview['headers'] as $index => $header)
+                            <option value="{{ $index }}">{{ $header !== '' ? $header : 'Column '.($index + 1) }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            @endforeach
+            @error('column_map')
+                <p class="text-sm text-danger-600">{{ $message }}</p>
+            @enderror
+            <x-filament::button type="submit">
+                Save mapping
+            </x-filament::button>
+        </form>
+    @elseif ($step === 'validate')
+        <p>Column mapping is saved. The next step checks every row.</p>
     @endif
 </x-filament-panels::page>

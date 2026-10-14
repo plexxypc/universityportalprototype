@@ -8,6 +8,7 @@ use App\Exceptions\ImportFetchException;
 use App\Exceptions\ImportReadException;
 use App\Models\User;
 use App\Policies\StudentPolicy;
+use App\Support\Import\ColumnMap;
 use App\Support\Import\GoogleSheetClient;
 use App\Support\Import\SpreadsheetReader;
 use App\Support\Import\StagedImport;
@@ -123,6 +124,37 @@ final class ImportService
             'source' => $staged->source,
             'original_name' => $staged->original_name,
         ];
+    }
+
+    /**
+     * Suggested column indexes for this actor's staged headers.
+     *
+     * @return array<string, int>
+     */
+    public function suggestMap(User $actor, string $token): array
+    {
+        $this->authorise($actor);
+
+        return ColumnMap::suggest($this->owned($actor, $token)->headers);
+    }
+
+    /**
+     * Store a confirmed column map on the staged file.
+     *
+     * The saved map is the one later chunks read. A tampered Livewire map
+     * is checked here and is not written when it fails.
+     *
+     * @param  array<mixed, mixed>  $column_map
+     * @return array<string, int>
+     */
+    public function confirmMap(User $actor, string $token, array $column_map): array
+    {
+        $this->authorise($actor);
+        $staged = $this->owned($actor, $token);
+        $confirmed = ColumnMap::confirmed($staged->headers, $column_map);
+        $this->store->saveMap((int) $actor->id, $token, $confirmed);
+
+        return $confirmed;
     }
 
     /**
