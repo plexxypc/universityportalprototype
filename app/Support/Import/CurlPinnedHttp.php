@@ -38,6 +38,8 @@ final class CurlPinnedHttp implements PinnedHttp
         int $max_bytes,
     ): PinnedHttpResponse {
         if (BlockedAddress::isBlocked($pinned_ip)) {
+            SheetFetchLog::failed('blocked_address');
+
             throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
         }
 
@@ -46,6 +48,8 @@ final class CurlPinnedHttp implements PinnedHttp
         $port = is_array($parts) ? (int) ($parts['port'] ?? 443) : 0;
 
         if ($host === '' || ($parts['scheme'] ?? '') !== 'https' || $port !== 443) {
+            SheetFetchLog::failed('bad_url');
+
             throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
         }
 
@@ -59,6 +63,8 @@ final class CurlPinnedHttp implements PinnedHttp
         $handle = curl_init($url);
 
         if (! $handle instanceof CurlHandle) {
+            SheetFetchLog::failed('connect');
+
             throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
         }
 
@@ -112,10 +118,16 @@ final class CurlPinnedHttp implements PinnedHttp
         $status = (int) curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
 
         if ($too_large) {
+            SheetFetchLog::failed('too_large');
+
             throw new ImportFetchException(ImportFetchException::MESSAGE_SIZE);
         }
 
         if ($completed !== true) {
+            $errno = curl_errno($handle);
+            $category = $header_bytes > 65_536 ? 'too_large' : SheetFetchLog::curlCategory($errno);
+            SheetFetchLog::failed($category, $errno);
+
             throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
         }
 

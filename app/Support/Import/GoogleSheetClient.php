@@ -33,6 +33,8 @@ final class GoogleSheetClient
      */
     public function fetch(string $link): string
     {
+        SheetFetchLog::clear();
+
         return $this->fetchUrl(GoogleSheetLink::exportUrl($link), 0);
     }
 
@@ -41,6 +43,7 @@ final class GoogleSheetClient
      */
     private function fetchUrl(string $url, int $redirects): string
     {
+        SheetFetchLog::setHop($redirects + 1);
         $hop = $this->hop($url);
         $pinned = $this->pin($hop['host']);
         $response = $this->http->get(
@@ -52,23 +55,27 @@ final class GoogleSheetClient
         );
 
         if ($response->too_large || strlen($response->body) > SpreadsheetLimits::MAX_BYTES) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_SIZE);
+            $this->fail('too_large', ImportFetchException::MESSAGE_SIZE);
         }
 
         if (in_array($response->status, [301, 302, 303, 307, 308], true)) {
             if ($redirects >= SpreadsheetLimits::MAX_REDIRECTS) {
-                throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+                $this->fail('too_many_redirects');
             }
 
             return $this->fetchUrl($this->nextUrl($response->location), $redirects + 1);
         }
 
-        if (in_array($response->status, [401, 403], true) || $this->isPrivate($response)) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_PRIVATE);
+        if (in_array($response->status, [401, 403], true)) {
+            $this->fail('status_'.$response->status, ImportFetchException::MESSAGE_PRIVATE);
+        }
+
+        if ($this->isPrivate($response)) {
+            $this->fail('not_csv', ImportFetchException::MESSAGE_PRIVATE);
         }
 
         if ($response->status !== 200) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('status_'.$response->status);
         }
 
         return $response->body;
@@ -82,32 +89,32 @@ final class GoogleSheetClient
     private function hop(string $url): array
     {
         if (strlen($url) > 2_000) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('bad_url');
         }
 
         $parts = parse_url($url);
 
         if (! is_array($parts) || ($parts['scheme'] ?? '') !== 'https') {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('bad_url');
         }
 
         if (isset($parts['user']) || isset($parts['pass'])) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('bad_url');
         }
 
         $host = strtolower(rtrim((string) ($parts['host'] ?? ''), '.'));
         $port = (int) ($parts['port'] ?? 443);
 
         if ($host === '' || $port !== 443) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('bad_url');
         }
 
         if ($host === 'accounts.google.com' || str_ends_with($host, '.accounts.google.com')) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_PRIVATE);
+            $this->fail('private_sheet', ImportFetchException::MESSAGE_PRIVATE);
         }
 
         if ($host === 'metadata.google.internal' || ! $this->hostAllowed($host)) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('redirect_off_allowlist');
         }
 
         return ['host' => $host, 'port' => $port];
@@ -133,13 +140,23 @@ final class GoogleSheetClient
         $addresses = $this->resolver->addresses($host);
 
         if ($addresses === []) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('dns');
         }
+
+        $blocked = 0;
 
         foreach ($addresses as $address) {
             if (BlockedAddress::isBlocked($address)) {
-                throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+                $blocked++;
             }
+        }
+
+        if ($blocked === count($addresses)) {
+            $this->fail('no_public_address');
+        }
+
+        if ($blocked > 0) {
+            $this->fail('blocked_address');
         }
 
         return $addresses[0];
@@ -153,7 +170,7 @@ final class GoogleSheetClient
         $location = trim((string) $location);
 
         if (preg_match('#\Ahttps://#', $location) !== 1) {
-            throw new ImportFetchException(ImportFetchException::MESSAGE_DOWNLOAD);
+            $this->fail('redirect_off_allowlist');
         }
 
         return $location;
@@ -169,5 +186,15 @@ final class GoogleSheetClient
         }
 
         return str_starts_with(ltrim($response->body), '<');
+    }
+
+    /**
+     * Log one category and raise the fixed message for the wizard.
+     */
+    private function fail(string $category, string $message = ImportFetchException::MESSAGE_DOWNLOAD): never
+    {
+        SheetFetchLog::failed($category);
+
+        throw new ImportFetchException($message);
     }
 }
