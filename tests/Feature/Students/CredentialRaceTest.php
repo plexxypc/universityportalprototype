@@ -463,7 +463,6 @@ it('allocates distinct matric numbers when two imports run at once', function ()
 
     try {
         credential_session();
-        $actor = credential_actor();
         credential_programme('CSC');
         expect(Counter::query()->count())->toBe(0);
 
@@ -477,8 +476,10 @@ it('allocates distinct matric numbers when two imports run at once', function ()
 
         $results = [];
 
+        // Staging replaces that registrar's previous file, so each import has its own actor.
         foreach (['import.race.one@example.com', 'import.race.two@example.com'] as $email) {
-            $token = import_race_token($actor, $email);
+            $importer = credential_actor();
+            $token = import_race_token($importer, $email);
             $tokens[] = $token;
             $ready = tempnam(sys_get_temp_dir(), 'import-ready');
             $result = tempnam(sys_get_temp_dir(), 'import-result');
@@ -494,7 +495,7 @@ it('allocates distinct matric numbers when two imports run at once', function ()
             }
 
             file_put_contents((string) $payload, json_encode([
-                'actor_id' => $actor->id,
+                'actor_id' => $importer->id,
                 'token' => $token,
                 'email' => $email,
             ], JSON_THROW_ON_ERROR));
