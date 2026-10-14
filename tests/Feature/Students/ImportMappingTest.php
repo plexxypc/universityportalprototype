@@ -44,7 +44,7 @@ it('saves the auto-matched map on the staged file and keeps rows out of livewire
         ->assertSet('column_map.guardian_relationship', 5)
         ->call('confirmMap')
         ->assertSet('step', 'validate')
-        ->assertSee('Column mapping is saved');
+        ->assertSee('rows can be imported');
 
     $state = json_encode($page->instance()->all());
     $token = $page->get('token');

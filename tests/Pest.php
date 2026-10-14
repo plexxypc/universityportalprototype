@@ -1,5 +1,8 @@
 <?php
 
+use App\Enums\Role;
+use App\Models\RoleAssignment;
+use App\Models\User;
 use Tests\TestCase;
 
 /*
@@ -45,6 +48,27 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * A registrar, or another staff role, for import wizard tests.
+ */
+function import_wizard_actor(Role $role = Role::Registrar): User
+{
+    $user = User::factory()->create();
+    $assignment = RoleAssignment::factory()->for($user, 'user');
+
+    if ($role === Role::FacultyAdmin) {
+        $assignment = $assignment->facultyAdmin();
+    } elseif ($role === Role::DepartmentOfficer) {
+        $assignment = $assignment->departmentOfficer();
+    } else {
+        $assignment = $assignment->state(['role' => $role]);
+    }
+
+    $assignment->create();
+
+    return $user;
 }
 
 /**

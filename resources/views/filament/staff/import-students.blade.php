@@ -105,6 +105,73 @@
             </x-filament::button>
         </form>
     @elseif ($step === 'validate')
-        <p>Column mapping is saved. The next step checks every row.</p>
+        @php
+            $report = $this->validationReport();
+        @endphp
+        <div class="mb-6 flex max-w-xl flex-col gap-4">
+            <div>
+                <label for="student-import-duplicates" class="mb-1 block font-medium">Existing students</label>
+                <select id="student-import-duplicates" wire:model.live="duplicate_mode" class="block w-full rounded-lg border px-3 py-2">
+                    <option value="skip">Skip existing students</option>
+                    <option value="update">Update existing students</option>
+                </select>
+            </div>
+            <div>
+                <label for="student-import-send" class="mb-1 block font-medium">Credentials emails</label>
+                <select id="student-import-send" wire:model="send_mode" class="block w-full rounded-lg border px-3 py-2">
+                    <option value="now">Send credentials now</option>
+                    <option value="later">Send credentials later</option>
+                </select>
+            </div>
+        </div>
+        <p class="mb-2">{{ $report['ready_count'] }} of {{ $report['total_rows'] }} rows can be imported. {{ $report['error_count'] }} errors.</p>
+        @if ($report['remaining_error_count'] > 0)
+            <p class="mb-4 text-sm">Showing the first 50 errors. {{ $report['remaining_error_count'] }} more are not listed.</p>
+        @endif
+        @if ($report['errors'] !== [])
+            <div class="mb-6 max-w-full overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr>
+                            <th class="border-b px-2 py-2 font-medium">Row</th>
+                            <th class="border-b px-2 py-2 font-medium">Field</th>
+                            <th class="border-b px-2 py-2 font-medium">Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($report['errors'] as $error)
+                            <tr wire:key="import-error-{{ $loop->index }}">
+                                <td class="border-b px-2 py-2">{{ $error['row'] > 0 ? $error['row'] : 'File' }}</td>
+                                <td class="border-b px-2 py-2">{{ $error['field'] }}</td>
+                                <td class="border-b px-2 py-2">{{ $error['message'] }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+        <p class="mb-2">{{ $report['duplicate_count'] }} rows match an existing student.</p>
+        @if ($report['duplicates'] !== [])
+            <div class="max-w-full overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr>
+                            <th class="border-b px-2 py-2 font-medium">Row</th>
+                            <th class="border-b px-2 py-2 font-medium">Field</th>
+                            <th class="border-b px-2 py-2 font-medium">Note</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($report['duplicates'] as $duplicate)
+                            <tr wire:key="import-duplicate-{{ $loop->index }}">
+                                <td class="border-b px-2 py-2">{{ $duplicate['row'] }}</td>
+                                <td class="border-b px-2 py-2">{{ $duplicate['field'] }}</td>
+                                <td class="border-b px-2 py-2">{{ $duplicate['message'] }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
     @endif
 </x-filament-panels::page>

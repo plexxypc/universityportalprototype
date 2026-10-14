@@ -437,6 +437,74 @@ class StudentService
     }
 
     /**
+     * Field errors for one import row, using the add-student rules.
+     *
+     * This does not write. Programme, level, and email ownership are checked
+     * by the caller. date_of_birth must already be Y-m-d or empty.
+     *
+     * @param  array<string, mixed>  $input
+     * @return list<array{field: string, message: string}>
+     */
+    public function importProfileErrors(array $input): array
+    {
+        $errors = [];
+        $this->capture($errors, fn () => $this->namePart($input['first_name'] ?? null, 'first_name', self::MESSAGE_FIRST_NAME, true));
+        $this->capture($errors, fn () => $this->namePart($input['last_name'] ?? null, 'last_name', self::MESSAGE_LAST_NAME, true));
+        $this->capture($errors, fn () => $this->namePart($input['other_names'] ?? null, 'other_names', self::MESSAGE_NAME_LENGTH, false));
+        $this->capture($errors, fn () => $this->email($input['email'] ?? null));
+        $this->capture($errors, fn () => $this->phone($input['phone'] ?? null));
+        $this->capture($errors, fn () => $this->gender($input['gender'] ?? null));
+        $this->capture($errors, fn () => $this->dateOfBirth($input['date_of_birth'] ?? null));
+        $this->capture($errors, fn () => $this->stateOfOrigin($input['state_of_origin'] ?? null));
+        $this->capture($errors, fn () => $this->address($input['address'] ?? null));
+
+        if ($this->hasField($errors, 'first_name') || $this->hasField($errors, 'last_name') || $this->hasField($errors, 'other_names')) {
+            return $errors;
+        }
+
+        $first = $this->namePart($input['first_name'] ?? null, 'first_name', self::MESSAGE_FIRST_NAME, true);
+        $last = $this->namePart($input['last_name'] ?? null, 'last_name', self::MESSAGE_LAST_NAME, true);
+        $other = $this->namePart($input['other_names'] ?? null, 'other_names', self::MESSAGE_NAME_LENGTH, false);
+
+        if ($first === null || $last === null) {
+            return $errors;
+        }
+
+        if (mb_strlen($this->displayName($first, $other, $last)) > 255) {
+            $errors[] = ['field' => 'first_name', 'message' => self::MESSAGE_NAME_LENGTH];
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Level error for a programme, or null when the level is allowed.
+     */
+    public function importLevelError(Programme $programme, mixed $level): ?string
+    {
+        try {
+            $this->assertLevel($programme, $this->levelNumber($level));
+        } catch (ValidationException $exception) {
+            $message = $exception->errors()['level'][0] ?? self::MESSAGE_LEVEL_NUMBER;
+
+            return is_string($message) ? $message : self::MESSAGE_LEVEL_NUMBER;
+        }
+
+        return null;
+    }
+
+    /**
+     * Guardian rows checked with the same rules as the guardian form.
+     *
+     * @param  list<array<string, mixed>>  $guardians
+     * @return list<array{name: string, phone: string|null, email: string|null, relationship: string}>
+     */
+    public function guardiansForImport(array $guardians): array
+    {
+        return $this->guardianRows($guardians);
+    }
+
+    /**
      * Delete a student who has no documents.
      *
      * Documents have no foreign key, so a student with files is refused
@@ -796,6 +864,38 @@ class StudentService
     }
 
     /**
+     * @param  list<array{field: string, message: string}>  $errors
+     */
+    private function capture(array &$errors, callable $check): void
+    {
+        try {
+            $check();
+        } catch (ValidationException $exception) {
+            foreach ($exception->errors() as $field => $messages) {
+                $message = $messages[0] ?? '';
+
+                if (is_string($field) && is_string($message) && $message !== '') {
+                    $errors[] = ['field' => $field, 'message' => $message];
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  list<array{field: string, message: string}>  $errors
+     */
+    private function hasField(array $errors, string $field): bool
+    {
+        foreach ($errors as $error) {
+            if ($error['field'] === $field) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $guardians
      * @return list<array{name: string, phone: string|null, email: string|null, relationship: string}>
      */
@@ -808,6 +908,14 @@ class StudentService
             $name = trim((string) ($guardian['name'] ?? ''));
             $relationship = trim((string) ($guardian['relationship'] ?? ''));
 
+            if (mb_strlen($name) > 255) {
+                throw ValidationException::withMessages(['name' => self::MESSAGE_NAME_LENGTH]);
+            }
+
+            if (mb_strlen($relationship) > 64) {
+                throw ValidationException::withMessages(['relationship' => self::MESSAGE_GUARDIAN]);
+            }
+
             if ($name === '' || ! in_array($relationship, $allowed, true)) {
                 throw ValidationException::withMessages(['guardian' => self::MESSAGE_GUARDIAN]);
             }
@@ -818,11 +926,15 @@ class StudentService
                 throw ValidationException::withMessages(['phone' => Phone::MESSAGE]);
             }
 
+            if ($phone !== null && strlen($phone) > 32) {
+                throw ValidationException::withMessages(['phone' => Phone::MESSAGE]);
+            }
+
             $email = trim((string) ($guardian['email'] ?? ''));
 
             if ($email === '') {
                 $email = null;
-            } elseif (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            } elseif (strlen($email) > 255 || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
                 throw ValidationException::withMessages(['email' => self::MESSAGE_EMAIL]);
             }
 

@@ -13,6 +13,7 @@ use App\Support\Import\GoogleSheetClient;
 use App\Support\Import\SpreadsheetReader;
 use App\Support\Import\StagedImport;
 use App\Support\Import\StagedImportStore;
+use App\Support\Import\StudentRowValidator;
 use Carbon\CarbonInterface;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\UploadedFile;
@@ -39,6 +40,7 @@ final class ImportService
     public function __construct(
         private readonly SpreadsheetReader $reader,
         private readonly StagedImportStore $store,
+        private readonly StudentRowValidator $rows,
     ) {}
 
     /**
@@ -155,6 +157,30 @@ final class ImportService
         $this->store->saveMap((int) $actor->id, $token, $confirmed);
 
         return $confirmed;
+    }
+
+    /**
+     * Check every staged row. The column map is read from the staged file.
+     *
+     * @return array{
+     *     errors: list<array{row: int, field: string, message: string}>,
+     *     error_count: int,
+     *     remaining_error_count: int,
+     *     duplicates: list<array{row: int, field: string, message: string}>,
+     *     duplicate_count: int,
+     *     ready_count: int,
+     *     total_rows: int
+     * }
+     */
+    public function validateSheet(User $actor, string $token, string $duplicate_mode): array
+    {
+        $this->authorise($actor);
+
+        if (! in_array($duplicate_mode, ['skip', 'update'], true)) {
+            throw ValidationException::withMessages(['duplicate_mode' => StudentRowValidator::MESSAGE_MODE]);
+        }
+
+        return $this->rows->assess($this->owned($actor, $token), $duplicate_mode);
     }
 
     /**

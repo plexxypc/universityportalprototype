@@ -5,8 +5,6 @@ declare(strict_types=1);
 use App\Enums\Role;
 use App\Exceptions\ImportNotFoundException;
 use App\Filament\Staff\Pages\ImportStudentsPage;
-use App\Models\RoleAssignment;
-use App\Models\User;
 use App\Services\ImportService;
 use App\Support\Import\GoogleSheetClient;
 use App\Support\Import\HostResolver;
@@ -31,24 +29,6 @@ beforeEach(function (): void {
     $this->withoutVite();
     Storage::fake('local');
 });
-
-function import_wizard_actor(Role $role = Role::Registrar): User
-{
-    $user = User::factory()->create();
-    $assignment = RoleAssignment::factory()->for($user, 'user');
-
-    if ($role === Role::FacultyAdmin) {
-        $assignment = $assignment->facultyAdmin();
-    } elseif ($role === Role::DepartmentOfficer) {
-        $assignment = $assignment->departmentOfficer();
-    } else {
-        $assignment = $assignment->state(['role' => $role]);
-    }
-
-    $assignment->create();
-
-    return $user;
-}
 
 function import_wizard_csv(): UploadedFile
 {

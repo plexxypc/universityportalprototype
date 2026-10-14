@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Services\ImportService;
 use App\Support\Import\ColumnMap;
+use App\Support\Import\StudentRowValidator;
 use BackedEnum;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -162,6 +163,54 @@ class ImportStudentsPage extends Page
 
         $this->column_map = $saved;
         $this->step = 'validate';
+    }
+
+    /**
+     * Row errors from the staged file. This return value is not stored.
+     *
+     * @return array{
+     *     errors: list<array{row: int, field: string, message: string}>,
+     *     error_count: int,
+     *     remaining_error_count: int,
+     *     duplicates: list<array{row: int, field: string, message: string}>,
+     *     duplicate_count: int,
+     *     ready_count: int,
+     *     total_rows: int
+     * }
+     */
+    public function validationReport(): array
+    {
+        $empty = [
+            'errors' => [],
+            'error_count' => 0,
+            'remaining_error_count' => 0,
+            'duplicates' => [],
+            'duplicate_count' => 0,
+            'ready_count' => 0,
+            'total_rows' => 0,
+        ];
+
+        if ($this->token === '' || $this->step !== 'validate') {
+            return $empty;
+        }
+
+        try {
+            return app(ImportService::class)->validateSheet($this->actor(), $this->token, $this->duplicate_mode);
+        } catch (ImportNotFoundException) {
+            abort(404);
+        } catch (AuthorizationException) {
+            abort(403);
+        } catch (ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first();
+            $empty['errors'] = [[
+                'row' => 0,
+                'field' => 'column_map',
+                'message' => is_string($message) ? $message : StudentRowValidator::MESSAGE_MAP,
+            ]];
+            $empty['error_count'] = 1;
+
+            return $empty;
+        }
     }
 
     /**
