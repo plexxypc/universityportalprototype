@@ -128,6 +128,36 @@ function assert_password_change_keeps_this_browser(User $user, string $home): vo
         ->assertSee('Your password has been changed.');
 }
 
+it('signs out a browser that still holds the previous password hash', function () {
+    config(['session.driver' => 'database']);
+
+    $student = change_student([
+        'must_change_password' => false,
+        'temp_password_expires_at' => null,
+    ]);
+    $cookie = (string) config('session.cookie');
+
+    $this->actingAs($student->user)->get('/student')->assertOk();
+
+    $session_id = session()->getId();
+    session()->save();
+
+    expect(session('password_hash_web'))->not->toBeNull()
+        ->and(DB::table('sessions')->where('id', $session_id)->exists())->toBeTrue();
+
+    $student->user->forceFill([
+        'password' => change_new_password(),
+    ])->save();
+
+    $this->app['auth']->forgetGuards();
+
+    $this->withCookie($cookie, $session_id)
+        ->get('/student')
+        ->assertRedirect(route('login', ['expired' => '1']));
+
+    $this->assertGuest();
+});
+
 it('changes a student password and keeps only this browser signed in', function () {
     $student = change_student();
 
