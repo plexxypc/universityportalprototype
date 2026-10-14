@@ -38,8 +38,17 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 3 | Auto-approve when approval is off | TASK-091 | Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled |
 | 3 | Copy `credit_units` onto the item at registration time | TASK-090 | Submit, status handling, confirmation email and notification |
 | 3 | `total_units` equals the sum of the items | TASK-090 | Submit, status handling, confirmation email and notification |
-| 3 | Import commits in chunks of 25, with duplicate skip or update | TASK-076 | Chunked commit (25 rows per request) with progress bar, duplicate options (skip/update), send-emails now/later; `import_batches` records |
-| 3 | Import failure report | TASK-077 | Import report page and downloadable failed-rows CSV; audit entry per batch |
+| 3 | Import commits in chunks of 25, with duplicate skip or update | TASK-076 | Chunked commit (25 rows per request) with progress bar, duplicate options (skip/update), send-emails now/later; `import_batches` records. Tests: `it creates a student from the staged file and leaves mail queued`, `it resumes from processed rows and will not run two commits at once` |
+| 3 | A formula cell is stored as the formula text | TASK-071 | Tests: `it keeps a csv formula as text`, `it reads the first sheet and does not evaluate a formula` |
+| 3 | A Google Sheet download stays on the allow-list and pins each hop | TASK-072 | Tests: `it pins each redirect hop and does not use a later private answer`, `it refuses redirects off the allow-list without resolving them`, `it names an allow-list miss, a private address, and a non-https redirect` |
+| 3 | The staged file is private, owned by the actor, and deleted after 24 hours | TASK-073 | Tests: `it previews a csv for a registrar and keeps rows out of livewire state`, `it returns the same not-found result for a missing, forged, or foreign token`, `it deletes staged files older than 24 hours and keeps a new one` |
+| 3 | An import update cannot change the email | TASK-075 | Test: `it refuses an email change in update mode and a matric owned by someone else` |
+| 3 | The first in-file duplicate is the one that can be imported | TASK-075 | Test: `it reports a missing email, an unknown programme, a bad date, and the first in-file copy` |
+| 3 | Two commits of one batch cannot run together | TASK-076 | Test: `it resumes from processed rows and will not run two commits at once` |
+| 3 | Two imports do not share a matric number | TASK-076 | Test: `it allocates distinct matric numbers when two imports run at once` (process-based; skipped where `pcntl` and `posix` are missing) |
+| 3 | The log mailer is refused before the first insert when credentials are sent now | TASK-076 | Test: `it refuses the log mailer before the first insert` |
+| 3 | Import failure report | TASK-077 | Import report page and downloadable failed-rows CSV; one audit row per batch with counts only. Tests: `it downloads failed rows for the owner only and stores one audit row of counts` |
+| 3 | CSV and Excel templates use the PRD 6.2 columns and CsvSafe | TASK-078 | Tests: `it builds csv and excel templates from the import columns through csv safe`, `it serves the templates and the google form guide to a registrar` |
 | 4 | Item lines sum to `total_kobo` | TASK-096 | Invoice generation: single and bulk by programme/level/session, with preview and confirm |
 | 4 | Adjustments sum to `adjustments_kobo` | TASK-097 | Adjustments: scholarship, discount, waiver with reason and audit |
 | 4 | Successful payments sum to `paid_kobo` | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |

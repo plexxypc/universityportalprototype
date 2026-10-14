@@ -12,6 +12,9 @@
     />
 
     @if ($step === 'source')
+        <p class="mb-4 max-w-xl text-small text-muted">
+            <a class="font-semibold text-primary-600 underline-offset-2 hover:underline" href="{{ \App\Filament\Staff\Pages\ImportGuidePage::getUrl() }}">Google Form guide and templates</a>
+        </p>
         <form wire:submit="stageUpload" class="mb-8 flex max-w-xl flex-col gap-space-16">
             <x-field name="upload" label="CSV or Excel file" :error="$errors->first('upload')">
                 <x-input name="upload" type="file" accept=".csv,.xlsx" wire:model="upload" />

@@ -24,6 +24,8 @@ Route::middleware([
     Route::get('/staff/downloads/ping', [PingController::class, 'staff_downloads'])->name('staff.downloads.ping');
     Route::get('/staff/downloads/documents/{document}', DocumentDownloadController::class)->name('staff.downloads.document');
     Route::get('/staff/downloads/imports/{batch}', [ImportDownloadController::class, 'failures'])->whereNumber('batch')->name('staff.downloads.import-failures');
+    Route::get('/staff/downloads/import-template.csv', [ImportDownloadController::class, 'templateCsv'])->name('staff.downloads.import-template-csv');
+    Route::get('/staff/downloads/import-template.xlsx', [ImportDownloadController::class, 'templateXlsx'])->name('staff.downloads.import-template-xlsx');
 });
 
 Route::redirect('/staff/login', '/login')->name('staff.login');
