@@ -223,6 +223,10 @@ The full list is [`docs/SERVICE_RULES.md`](docs/SERVICE_RULES.md). Each rule is 
 
 Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to pursue that production host), TASK-004 (bursary payment provider), TASK-005 (Brevo, optional), and TASK-006 (demo institution name, code, and logo).
 
+## Open questions
+
+Graduated students currently cannot sign in. Confirm with the Registrar whether they should still see results and statements.
+
 ## Key Decisions in Force
 
 - Stack: Laravel (PHP 8.4+), Filament staff panel, Blade + Livewire student portal, Tailwind, MySQL 8, Pest. `composer.lock` requires PHP 8.4.1 or newer.
