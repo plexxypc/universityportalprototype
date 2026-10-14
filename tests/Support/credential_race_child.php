@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Models\Programme;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\CredentialService;
+use App\Services\ImportService;
 use App\Services\StudentService;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Database\QueryException;
@@ -17,7 +19,7 @@ use Illuminate\Validation\ValidationException;
  *
  * The parent starts two copies. Each waits for the go file, then writes
  * ok, code, and matric_no. Exception text is not written.
- * Arguments: ready file, go file, result file, mode (matric or resend), payload file.
+ * Arguments: ready file, go file, result file, mode (matric, resend, or import), payload file.
  */
 $ready_file = $argv[1] ?? '';
 $go_file = $argv[2] ?? '';
@@ -85,6 +87,29 @@ for ($attempt = 0; $attempt < 2; $attempt++) {
                 credential_race_request(),
             );
             credential_race_finish($result_file, true, 'issued', $created->student->matric_no);
+
+            exit(0);
+        }
+
+        if ($mode === 'import') {
+            $email = (string) ($payload['email'] ?? '');
+            app(ImportService::class)->commitChunk(
+                credential_race_actor($payload),
+                (string) ($payload['token'] ?? ''),
+                'skip',
+                'later',
+                credential_race_request(),
+            );
+            $student = Student::query()->whereHas(
+                'user',
+                fn ($query) => $query->where('email', $email),
+            )->first();
+            credential_race_finish(
+                $result_file,
+                $student instanceof Student,
+                $student instanceof Student ? 'issued' : 'failed',
+                $student instanceof Student ? $student->matric_no : null,
+            );
 
             exit(0);
         }

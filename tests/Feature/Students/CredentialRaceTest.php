@@ -6,8 +6,12 @@ use App\Models\AuditLog;
 use App\Models\Counter;
 use App\Models\User;
 use App\Services\CredentialService;
+use App\Services\ImportService;
+use App\Support\Import\StagedImportStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -135,6 +139,7 @@ function credential_race_cleanup(): void
 {
     DB::table('email_outbox')->delete();
     DB::table('notifications')->delete();
+    DB::table('guardians')->delete();
     DB::table('audit_logs')->delete();
     DB::table('sessions')->delete();
     DB::table('jobs')->delete();
@@ -142,6 +147,7 @@ function credential_race_cleanup(): void
     DB::table('cache')->delete();
     DB::table('cache_locks')->delete();
     DB::table('students')->delete();
+    DB::table('import_batches')->delete();
     DB::table('counters')->delete();
     DB::table('role_assignments')->delete();
     DB::table('programmes')->delete();
@@ -387,6 +393,158 @@ it('lets only one of two concurrent resends issue a password', function () {
         expect($codes)->toBe(['cooldown', 'issued'])
             ->and($resent)->toBe(1);
     } finally {
+        credential_race_finish($children, $files, $wrapped);
+    }
+});
+
+/**
+ * Stage one student row with a blank matric number.
+ */
+function import_race_token(User $actor, string $email): string
+{
+    $cells = array_fill(0, 17, '');
+    $cells[0] = 'Ada';
+    $cells[1] = 'Lovelace';
+    $cells[3] = $email;
+    $cells[4] = '08012345678';
+    $cells[5] = 'Female';
+    $cells[6] = '03/02/2001';
+    $cells[9] = 'CSC';
+    $cells[10] = '100';
+    $header = 'first_name,last_name,other_names,email,phone,gender,date_of_birth,state_of_origin,address,programme_code,level,entry_session,matric_number,guardian_name,guardian_phone,guardian_email,guardian_relationship';
+    $token = app(ImportService::class)->stageUpload($actor, UploadedFile::fake()->createWithContent(
+        'students.csv',
+        $header."\n".implode(',', $cells)."\n",
+    ));
+    $map = [];
+
+    foreach (range(0, 16) as $index) {
+        $map[[
+            'first_name',
+            'last_name',
+            'other_names',
+            'email',
+            'phone',
+            'gender',
+            'date_of_birth',
+            'state_of_origin',
+            'address',
+            'programme_code',
+            'level',
+            'entry_session',
+            'matric_number',
+            'guardian_name',
+            'guardian_phone',
+            'guardian_email',
+            'guardian_relationship',
+        ][$index]] = $index;
+    }
+
+    app(StagedImportStore::class)->saveMap((int) $actor->id, $token, $map);
+
+    return $token;
+}
+
+it('allocates distinct matric numbers when two imports run at once', function () {
+    if (! credential_race_available()) {
+        test()->markTestSkipped('pcntl and posix are required');
+    }
+
+    $connection = DB::connection();
+    $wrapped = $connection->transactionLevel() > 0;
+
+    if ($wrapped) {
+        $connection->rollBack();
+    }
+
+    $children = [];
+    $files = [];
+    $tokens = [];
+
+    try {
+        credential_session();
+        $actor = credential_actor();
+        credential_programme('CSC');
+        expect(Counter::query()->count())->toBe(0);
+
+        $go = tempnam(sys_get_temp_dir(), 'import-go');
+        expect($go)->toBeString();
+        $files[] = $go;
+
+        if (is_file($go)) {
+            unlink($go);
+        }
+
+        $results = [];
+
+        foreach (['import.race.one@example.com', 'import.race.two@example.com'] as $email) {
+            $token = import_race_token($actor, $email);
+            $tokens[] = $token;
+            $ready = tempnam(sys_get_temp_dir(), 'import-ready');
+            $result = tempnam(sys_get_temp_dir(), 'import-result');
+            $payload = tempnam(sys_get_temp_dir(), 'import-payload');
+            expect($ready)->toBeString()->and($result)->toBeString()->and($payload)->toBeString();
+
+            if (is_file($ready)) {
+                unlink($ready);
+            }
+
+            if (is_file($result)) {
+                unlink($result);
+            }
+
+            file_put_contents((string) $payload, json_encode([
+                'actor_id' => $actor->id,
+                'token' => $token,
+                'email' => $email,
+            ], JSON_THROW_ON_ERROR));
+            $files[] = (string) $ready;
+            $files[] = (string) $result;
+            $files[] = (string) $payload;
+            $results[] = (string) $result;
+            $children[] = credential_race_open('import', (string) $payload, (string) $ready, (string) $go, (string) $result);
+        }
+
+        $ready_deadline = time() + 20;
+        $both_ready = false;
+
+        while (time() < $ready_deadline) {
+            $both_ready = true;
+
+            foreach ($files as $file) {
+                if (str_contains(basename($file), 'import-ready') && ! is_file($file)) {
+                    $both_ready = false;
+                }
+            }
+
+            if ($both_ready) {
+                break;
+            }
+
+            usleep(50000);
+        }
+
+        expect($both_ready)->toBeTrue();
+        file_put_contents((string) $go, '1');
+        credential_race_wait($results);
+        $first = credential_race_read($results[0]);
+        $second = credential_race_read($results[1]);
+        $codes = [$first['code'], $second['code']];
+        sort($codes);
+        $distinct = $first['matric_no'] !== null
+            && $second['matric_no'] !== null
+            && $first['matric_no'] !== $second['matric_no'];
+        $counter = Counter::query()->where('key', 'matric:CSC:2026')->value('value');
+
+        expect($codes)->toBe(['issued', 'issued'])
+            ->and($distinct)->toBeTrue()
+            ->and((int) $counter)->toBe(2);
+    } finally {
+        foreach ($tokens as $token) {
+            Storage::disk('local')->delete('imports/staged/'.$token.'.json');
+            Storage::disk('local')->delete('imports/failed/'.$token.'.csv');
+        }
+
         credential_race_finish($children, $files, $wrapped);
     }
 });

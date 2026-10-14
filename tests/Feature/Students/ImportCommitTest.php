@@ -179,6 +179,66 @@ it('skips or updates a database duplicate and names an in-file copy', function (
         ->and($csv)->toContain("'=Ada");
 });
 
+it('downloads failed rows for the owner only and stores one audit row of counts', function () {
+    $registrar = import_wizard_actor();
+    $token = import_commit_token($registrar, [
+        'Ada,Lovelace,copy@example.test,08012345678,Female,2001-02-03,CSC,100,,,,,',
+        '=Ada,Hopper,copy@example.test,08012345678,Female,2001-02-03,CSC,100,,,,,',
+    ]);
+    $copied = import_commit($registrar, $token, 'skip', 'later');
+    $batch = ImportBatch::query()->find($copied['batch_id']);
+
+    expect($batch)->not->toBeNull()
+        ->and(AuditLog::query()->where('action', ImportService::ACTION_COMPLETED)->count())->toBe(1);
+
+    $audit = AuditLog::query()->where('action', ImportService::ACTION_COMPLETED)->first();
+    $after = json_encode($audit?->after);
+
+    expect($after)->toBeString()
+        ->and($after)->toContain('"failed_count":1')
+        ->and($after)->not->toContain('copy@example.test')
+        ->and($after)->not->toContain('password');
+
+    $response = $this->actingAs($registrar)->get(route('staff.downloads.import-failures', $batch));
+    $body = $response->streamedContent();
+
+    $response->assertOk();
+    expect($body)->toContain('already used on row 1')
+        ->and($body)->toContain("'=Ada")
+        ->and(stripos($body, 'password'))->toBeFalse()
+        ->and((string) $response->headers->get('content-disposition'))->toContain('attachment')
+        ->and((string) $response->headers->get('content-disposition'))->toContain('failed-rows-'.$batch?->id.'.csv')
+        ->and((string) $response->headers->get('content-disposition'))->not->toContain('students.csv')
+        ->and((string) $response->headers->get('cache-control'))->toContain('no-store')
+        ->and((string) $response->headers->get('x-content-type-options'))->toBe('nosniff');
+
+    session(['student-import-batch:'.$registrar->id => $batch?->id]);
+
+    Livewire::actingAs($registrar)
+        ->test(ImportStudentsPage::class)
+        ->set('step', 'report')
+        ->assertSee('Download failed rows')
+        ->assertSeeHtml('aria-current="step"');
+
+    $other = import_wizard_actor();
+    $hidden = $this->actingAs($other)->get(route('staff.downloads.import-failures', $batch));
+    $missing = $this->actingAs($other)->get(route('staff.downloads.import-failures', 999999999));
+    $hidden_body = str_replace('/staff/downloads/imports/'.$batch?->id, '/staff/downloads/imports/ID', (string) $hidden->getContent());
+    $missing_body = str_replace('/staff/downloads/imports/999999999', '/staff/downloads/imports/ID', (string) $missing->getContent());
+
+    expect($hidden->status())->toBe(404)
+        ->and($missing->status())->toBe(404)
+        ->and($hidden_body)->toBe($missing_body);
+
+    $this->actingAs(import_wizard_actor(Role::FacultyAdmin))
+        ->get(route('staff.downloads.import-failures', $batch))
+        ->assertNotFound();
+
+    auth()->logout();
+
+    $this->get(route('staff.downloads.import-failures', $batch))->assertRedirect('/login');
+});
+
 it('resumes from processed rows and will not run two commits at once', function () {
     $registrar = import_wizard_actor();
     $rows = [];

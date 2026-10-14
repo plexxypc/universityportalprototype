@@ -273,7 +273,7 @@ class ImportStudentsPage extends Page
     /**
      * The finished batch for this actor. Counts only.
      *
-     * @return array{created_count: int, updated_count: int, skipped_count: int, failed_count: int, credentials_needed: int, students_url: string}
+     * @return array{created_count: int, updated_count: int, skipped_count: int, failed_count: int, credentials_needed: int, students_url: string, download_url: string}
      */
     public function commitReport(): array
     {
@@ -284,6 +284,7 @@ class ImportStudentsPage extends Page
             'failed_count' => 0,
             'credentials_needed' => 0,
             'students_url' => '',
+            'download_url' => '',
         ];
         $batch_id = session('student-import-batch:'.$this->actor()->id);
 
@@ -309,6 +310,9 @@ class ImportStudentsPage extends Page
             'failed_count' => (int) $batch->failed_count,
             'credentials_needed' => $needed,
             'students_url' => StudentsPage::getUrl().'?needs_credentials=1&import_batch='.$batch->id,
+            'download_url' => $batch->failure_report_path !== null
+                ? route('staff.downloads.import-failures', $batch)
+                : '',
         ];
     }
 

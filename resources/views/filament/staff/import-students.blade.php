@@ -1,46 +1,29 @@
 <x-filament-panels::page>
-    @php
-        $steps = [
-            'source' => '1. Source',
-            'preview' => '2. Preview',
-            'map' => '3. Map',
-            'validate' => '4. Validate',
-            'import' => '5. Import',
-            'report' => '6. Report',
-        ];
-    @endphp
-    <ol class="mb-6 flex flex-wrap gap-2 text-sm">
-        @foreach ($steps as $name => $label)
-            <li class="rounded-full px-3 py-1 {{ $step === $name ? 'bg-primary-600 text-white' : '' }}">{{ $label }}</li>
-        @endforeach
-    </ol>
+    <x-stepper
+        :current="$step"
+        :steps="[
+            ['key' => 'source', 'label' => 'Source'],
+            ['key' => 'preview', 'label' => 'Preview'],
+            ['key' => 'map', 'label' => 'Map columns'],
+            ['key' => 'validate', 'label' => 'Validate'],
+            ['key' => 'import', 'label' => 'Import'],
+            ['key' => 'report', 'label' => 'Report'],
+        ]"
+    />
 
     @if ($step === 'source')
-        <form wire:submit="stageUpload" class="mb-8 flex max-w-xl flex-col gap-4">
-            <div>
-                <label for="student-import-file" class="mb-1 block font-medium">CSV or Excel file</label>
-                <input id="student-import-file" type="file" wire:model="upload" accept=".csv,.xlsx" class="block w-full">
-                @error('upload')
-                    <p class="mt-1 text-sm text-danger-600">{{ $message }}</p>
-                @enderror
-            </div>
-            <x-filament::button type="submit">
-                Preview file
-            </x-filament::button>
+        <form wire:submit="stageUpload" class="mb-8 flex max-w-xl flex-col gap-space-16">
+            <x-field name="upload" label="CSV or Excel file" :error="$errors->first('upload')">
+                <x-input name="upload" type="file" accept=".csv,.xlsx" wire:model="upload" />
+            </x-field>
+            <x-button type="submit">Preview file</x-button>
         </form>
 
-        <form wire:submit="stageSheet" class="flex max-w-xl flex-col gap-4">
-            <div>
-                <label for="student-import-sheet" class="mb-1 block font-medium">Google Sheets link</label>
-                <input id="student-import-sheet" type="url" wire:model="sheet_url" class="block w-full rounded-lg border px-3 py-2" placeholder="https://docs.google.com/spreadsheets/d/…">
-                <p class="mt-1 text-sm">The sheet must be shared as anyone with the link can view.</p>
-                @error('sheet_url')
-                    <p class="mt-1 text-sm text-danger-600">{{ $message }}</p>
-                @enderror
-            </div>
-            <x-filament::button type="submit" color="gray">
-                Preview sheet
-            </x-filament::button>
+        <form wire:submit="stageSheet" class="flex max-w-xl flex-col gap-space-16">
+            <x-field name="sheet_url" label="Google Sheets link" help="The sheet must be shared as anyone with the link can view." :error="$errors->first('sheet_url')">
+                <x-input name="sheet_url" type="url" inputmode="url" wire:model="sheet_url" />
+            </x-field>
+            <x-button type="submit" variant="secondary">Preview sheet</x-button>
         </form>
     @elseif ($step === 'preview')
         @php
@@ -75,54 +58,53 @@
             </div>
         @endif
         <form wire:submit="openMap" class="mt-6">
-            <x-filament::button type="submit">
-                Map columns
-            </x-filament::button>
+            <x-button type="submit">Map columns</x-button>
         </form>
     @elseif ($step === 'map')
         @php
             $preview = $this->previewTable();
         @endphp
-        <form wire:submit="confirmMap" class="flex max-w-xl flex-col gap-4">
+        <form wire:submit="confirmMap" class="flex max-w-xl flex-col gap-space-16">
             @foreach ($this->mappingFields() as $field)
-                <div wire:key="map-{{ $field['key'] }}">
-                    <label for="map-{{ $field['key'] }}" class="mb-1 block font-medium">
-                        {{ $field['label'] }}@if ($field['required']) * @endif
-                    </label>
-                    <select id="map-{{ $field['key'] }}" wire:model="column_map.{{ $field['key'] }}" class="block w-full rounded-lg border px-3 py-2">
+                <x-field
+                    wire:key="map-{{ $field['key'] }}"
+                    name="column_map_{{ $field['key'] }}"
+                    :label="$field['label']"
+                    :required="$field['required']"
+                >
+                    <x-select name="column_map_{{ $field['key'] }}" wire:model="column_map.{{ $field['key'] }}">
                         <option value="">Not in this file</option>
                         @foreach ($preview['headers'] as $index => $header)
                             <option value="{{ $index }}">{{ $header !== '' ? $header : 'Column '.($index + 1) }}</option>
                         @endforeach
-                    </select>
-                </div>
+                    </x-select>
+                </x-field>
             @endforeach
-            @error('column_map')
-                <p class="text-sm text-danger-600">{{ $message }}</p>
-            @enderror
-            <x-filament::button type="submit">
-                Save mapping
-            </x-filament::button>
+            @if ($errors->first('column_map') !== '')
+                <p class="flex items-start gap-space-8 text-small font-normal text-danger-text">
+                    <x-ui.icon name="alert" class="mt-0.5 size-4 shrink-0" />
+                    <span>{{ $errors->first('column_map') }}</span>
+                </p>
+            @endif
+            <x-button type="submit">Save mapping</x-button>
         </form>
     @elseif ($step === 'validate')
         @php
             $report = $this->validationReport();
         @endphp
-        <div class="mb-6 flex max-w-xl flex-col gap-4">
-            <div>
-                <label for="student-import-duplicates" class="mb-1 block font-medium">Existing students</label>
-                <select id="student-import-duplicates" wire:model.live="duplicate_mode" class="block w-full rounded-lg border px-3 py-2">
+        <div class="mb-6 flex max-w-xl flex-col gap-space-16">
+            <x-field name="duplicate_mode" label="Existing students">
+                <x-select name="duplicate_mode" wire:model.live="duplicate_mode">
                     <option value="skip">Skip existing students</option>
                     <option value="update">Update existing students</option>
-                </select>
-            </div>
-            <div>
-                <label for="student-import-send" class="mb-1 block font-medium">Credentials emails</label>
-                <select id="student-import-send" wire:model="send_mode" class="block w-full rounded-lg border px-3 py-2">
+                </x-select>
+            </x-field>
+            <x-field name="send_mode" label="Credentials emails" :error="$errors->first('send_mode')">
+                <x-select name="send_mode" wire:model="send_mode">
                     <option value="now">Send credentials now</option>
                     <option value="later">Send credentials later</option>
-                </select>
-            </div>
+                </x-select>
+            </x-field>
         </div>
         <p class="mb-2">{{ $report['ready_count'] }} of {{ $report['total_rows'] }} rows can be imported. {{ $report['error_count'] }} errors.</p>
         @if ($report['remaining_error_count'] > 0)
@@ -174,9 +156,7 @@
             </div>
         @endif
         <form wire:submit="commitChunk" class="mt-6">
-            <x-filament::button type="submit">
-                Import students
-            </x-filament::button>
+            <x-button type="submit">Import students</x-button>
         </form>
     @elseif ($step === 'import')
         @php
@@ -186,9 +166,7 @@
         <progress class="mb-4 w-full" value="{{ $progress['processed_rows'] }}" max="{{ max(1, $progress['total_rows']) }}"></progress>
         <p class="mb-4 text-sm">Created {{ $progress['created_count'] }}, updated {{ $progress['updated_count'] }}, skipped {{ $progress['skipped_count'] }}, failed {{ $progress['failed_count'] }}.</p>
         <form wire:submit="commitChunk">
-            <x-filament::button type="submit">
-                Continue import
-            </x-filament::button>
+            <x-button type="submit">Continue import</x-button>
         </form>
     @elseif ($step === 'report')
         @php
@@ -196,8 +174,13 @@
         @endphp
         <p class="mb-2">Created {{ $committed['created_count'] }}, updated {{ $committed['updated_count'] }}, skipped {{ $committed['skipped_count'] }}, failed {{ $committed['failed_count'] }}.</p>
         <p class="mb-4">{{ $committed['credentials_needed'] }} accounts still need credentials.</p>
-        @if ($committed['students_url'] !== '')
-            <a href="{{ $committed['students_url'] }}">View accounts that still need credentials</a>
-        @endif
+        <div class="flex max-w-full flex-wrap gap-space-12">
+            @if ($committed['download_url'] !== '')
+                <x-button href="{{ $committed['download_url'] }}" variant="secondary">Download failed rows</x-button>
+            @endif
+            @if ($committed['students_url'] !== '')
+                <x-button href="{{ $committed['students_url'] }}" variant="primary">View accounts that still need credentials</x-button>
+            @endif
+        </div>
     @endif
 </x-filament-panels::page>
