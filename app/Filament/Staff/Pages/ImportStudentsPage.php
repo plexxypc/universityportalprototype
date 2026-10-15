@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Staff\Pages;
 
+use App\Enums\ImportTarget;
 use App\Exceptions\ImportNotFoundException;
 use App\Models\ImportBatch;
 use App\Models\Student;
@@ -59,6 +60,11 @@ class ImportStudentsPage extends Page
 
     public string $send_mode = 'now';
 
+    /**
+     * Shown on the page. Commit uses the target stored when the file was staged.
+     */
+    public string $target = 'Student';
+
     public ?TemporaryUploadedFile $upload = null;
 
     /**
@@ -93,7 +99,7 @@ class ImportStudentsPage extends Page
         }
 
         try {
-            $this->token = app(ImportService::class)->stageUpload($actor, $this->upload);
+            $this->token = app(ImportService::class)->stageUpload($actor, $this->upload, $this->importTarget());
         } catch (AuthorizationException) {
             abort(403);
         } catch (ValidationException $exception) {
@@ -114,7 +120,7 @@ class ImportStudentsPage extends Page
         $actor = $this->actor();
 
         try {
-            $this->token = app(ImportService::class)->stageSheet($actor, $this->sheet_url);
+            $this->token = app(ImportService::class)->stageSheet($actor, $this->sheet_url, $this->importTarget());
         } catch (AuthorizationException) {
             abort(403);
         } catch (ValidationException $exception) {
@@ -242,6 +248,22 @@ class ImportStudentsPage extends Page
         }
 
         $this->step = 'import';
+    }
+
+    /**
+     * The target written onto the staged file. The public target property is ignored.
+     */
+    public function importTarget(): ImportTarget
+    {
+        return ImportTarget::Student;
+    }
+
+    /**
+     * Student import asks when to send credentials. Applicant import does not.
+     */
+    public function showsCredentials(): bool
+    {
+        return $this->importTarget() === ImportTarget::Student;
     }
 
     /**

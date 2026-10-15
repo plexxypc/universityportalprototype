@@ -194,6 +194,8 @@ it('has the communications and audit tables', function () {
         ]))->toBeTrue()
         ->and(Schema::hasColumns('email_outbox', [
             'recipient_email',
+            'related_type',
+            'related_id',
             'template',
             'subject',
             'body_html',

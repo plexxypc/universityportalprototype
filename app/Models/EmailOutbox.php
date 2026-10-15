@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 #[Fillable([
     'user_id',
+    'related_type',
+    'related_id',
     'recipient_email',
     'template',
     'subject',

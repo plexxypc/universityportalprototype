@@ -506,6 +506,60 @@ class StudentService
     }
 
     /**
+     * Normalised profile fields, using the add-student rules.
+     *
+     * This does not write. Programme, level, and email ownership stay with
+     * the caller. date_of_birth must already be Y-m-d or empty.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array{
+     *     first_name: string,
+     *     last_name: string,
+     *     other_names: ?string,
+     *     email: string,
+     *     phone: ?string,
+     *     gender: ?Gender,
+     *     date_of_birth: ?string,
+     *     state_of_origin: ?string,
+     *     address: ?string
+     * }
+     */
+    public function normalisedProfile(array $input): array
+    {
+        $errors = $this->importProfileErrors($input);
+
+        if ($errors !== []) {
+            $messages = [];
+
+            foreach ($errors as $error) {
+                $messages[$error['field']][] = $error['message'];
+            }
+
+            throw ValidationException::withMessages($messages);
+        }
+
+        $first = $this->namePart($input['first_name'] ?? null, 'first_name', self::MESSAGE_FIRST_NAME, true);
+        $last = $this->namePart($input['last_name'] ?? null, 'last_name', self::MESSAGE_LAST_NAME, true);
+        $other = $this->namePart($input['other_names'] ?? null, 'other_names', self::MESSAGE_NAME_LENGTH, false);
+
+        if ($first === null || $last === null) {
+            throw ValidationException::withMessages(['first_name' => self::MESSAGE_FIRST_NAME]);
+        }
+
+        return [
+            'first_name' => $first,
+            'last_name' => $last,
+            'other_names' => $other,
+            'email' => $this->email($input['email'] ?? null),
+            'phone' => $this->phone($input['phone'] ?? null),
+            'gender' => $this->gender($input['gender'] ?? null),
+            'date_of_birth' => $this->dateOfBirth($input['date_of_birth'] ?? null),
+            'state_of_origin' => $this->stateOfOrigin($input['state_of_origin'] ?? null),
+            'address' => $this->address($input['address'] ?? null),
+        ];
+    }
+
+    /**
      * Guardian rows checked with the same rules as the guardian form.
      *
      * @param  list<array<string, mixed>>  $guardians

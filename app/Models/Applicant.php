@@ -7,6 +7,10 @@ namespace App\Models;
 use App\Enums\ApplicantStatus;
 use App\Enums\Gender;
 use App\Enums\ImportSource;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\ApplicantFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -35,10 +39,12 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
     'source',
     'import_batch_id',
 ])]
-class Applicant extends Model
+class Applicant extends Model implements VisibleToUser
 {
     /** @use HasFactory<ApplicantFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast gender, date of birth, status, and source.
@@ -103,5 +109,19 @@ class Applicant extends Model
     public function documents(): MorphMany
     {
         return $this->morphMany(Document::class, 'owner');
+    }
+
+    /**
+     * Applicants follow the student records cell.
+     *
+     * A lecturer and a student see no applicants. Faculty and department
+     * scope uses the programme, the same way a student list does.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['student_records'],
+            kind: VisibilityKind::Applicant,
+        );
     }
 }

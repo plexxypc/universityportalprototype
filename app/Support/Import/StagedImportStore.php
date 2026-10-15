@@ -28,7 +28,7 @@ final class StagedImportStore
      *
      * @return string The new token.
      */
-    public function put(int $user_id, string $source, string $original_name, ParsedSheet $sheet): string
+    public function put(int $user_id, string $source, string $original_name, ParsedSheet $sheet, string $target = 'Student'): string
     {
         $token = bin2hex(random_bytes(32));
         $this->deleteOwnedBy($user_id);
@@ -36,6 +36,7 @@ final class StagedImportStore
         $payload = [
             'user_id' => $user_id,
             'source' => $source,
+            'target' => $target,
             'original_name' => $original_name,
             'created_at' => now()->toIso8601String(),
             'headers' => $sheet->headers,
@@ -202,6 +203,7 @@ final class StagedImportStore
         $rows = $this->rowList($payload['rows'] ?? null);
         $map = $payload['column_map'] ?? null;
         $batch = $payload['import_batch_id'] ?? null;
+        $target = $payload['target'] ?? 'Student';
 
         return new StagedImport(
             $token,
@@ -213,6 +215,7 @@ final class StagedImportStore
             $rows,
             is_array($map) ? $this->map($map) : null,
             is_int($batch) ? $batch : (is_string($batch) && ctype_digit($batch) ? (int) $batch : null),
+            is_string($target) && $target !== '' ? $target : 'Student',
         );
     }
 

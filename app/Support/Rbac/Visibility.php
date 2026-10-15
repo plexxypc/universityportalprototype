@@ -306,7 +306,7 @@ final class Visibility
                     $sub->select('id')->from('departments')->whereIn('faculty_id', $facultyIds);
                 },
             ),
-            VisibilityKind::Student => $branch->whereIn(
+            VisibilityKind::Student, VisibilityKind::Applicant => $branch->whereIn(
                 $branch->qualifyColumn('programme_id'),
                 function ($sub) use ($facultyIds): void {
                     $sub->select('programmes.id')
@@ -348,7 +348,7 @@ final class Visibility
                     $sub->select('faculty_id')->from('departments')->whereIn('id', $departmentIds);
                 },
             ),
-            VisibilityKind::Student => $branch->whereIn(
+            VisibilityKind::Student, VisibilityKind::Applicant => $branch->whereIn(
                 $branch->qualifyColumn('programme_id'),
                 function ($sub) use ($departmentIds): void {
                     $sub->select('id')->from('programmes')->whereIn('department_id', $departmentIds);
