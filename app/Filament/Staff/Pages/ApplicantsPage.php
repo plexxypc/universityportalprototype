@@ -15,6 +15,7 @@ use App\Services\ApplicantService;
 use App\Support\StatusTone;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
@@ -30,6 +31,7 @@ use Filament\Tables\Table;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 use UnitEnum;
 
@@ -165,6 +167,68 @@ class ApplicantsPage extends Page implements HasTable
                         }
 
                         Notification::make()->success()->title('Status updated.')->send();
+                    }),
+                Action::make('convert')
+                    ->label('Admit and convert')
+                    ->requiresConfirmation()
+                    ->modalDescription('This creates one student account. The admission email is sent only if this applicant has not already received it.')
+                    ->visible(fn (Applicant $record): bool => $this->canManage() && $this->canConvertRecord($record))
+                    ->authorize(fn (): bool => $this->canManage())
+                    ->action(function (Applicant $record): void {
+                        try {
+                            $created = app(ApplicantService::class)->convert(
+                                $this->actor(),
+                                (int) $record->getKey(),
+                                request(),
+                            );
+                        } catch (AuthorizationException) {
+                            abort(403);
+                        } catch (ValidationException $exception) {
+                            Notification::make()
+                                ->danger()
+                                ->title($this->firstError($exception))
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->success()
+                            ->title(app(ApplicantService::class)->createdMessage($created))
+                            ->send();
+                    }),
+            ])
+            ->bulkActions([
+                BulkAction::make('convert')
+                    ->label('Admit and convert')
+                    ->requiresConfirmation()
+                    ->visible(fn (): bool => $this->canManage())
+                    ->authorize(fn (): bool => $this->canManage())
+                    ->modalDescription(function (Collection $records): string {
+                        return app(ApplicantService::class)->previewMessage($this->actor(), $this->selectedIds($records));
+                    })
+                    ->action(function (Collection $records): void {
+                        try {
+                            $batch = app(ApplicantService::class)->convertMany(
+                                $this->actor(),
+                                $this->selectedIds($records),
+                                request(),
+                            );
+                        } catch (AuthorizationException) {
+                            abort(403);
+                        } catch (ValidationException $exception) {
+                            Notification::make()
+                                ->danger()
+                                ->title($this->firstError($exception))
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->success()
+                            ->title(app(ApplicantService::class)->bulkMessage($batch))
+                            ->send();
                     }),
             ])
             ->filters([
@@ -309,6 +373,45 @@ class ApplicantsPage extends Page implements HasTable
     private function canManage(): bool
     {
         return app(ApplicantPolicy::class)->create($this->actor());
+    }
+
+    /**
+     * Applied, Under review, and Admitted can be admitted and converted.
+     */
+    private function canConvertRecord(Applicant $applicant): bool
+    {
+        return in_array($applicant->status, [
+            ApplicantStatus::Applied,
+            ApplicantStatus::UnderReview,
+            ApplicantStatus::Admitted,
+        ], true);
+    }
+
+    /**
+     * @param  Collection<int, mixed>  $records
+     * @return list<int>
+     */
+    private function selectedIds(Collection $records): array
+    {
+        $ids = [];
+
+        foreach ($records as $record) {
+            if ($record instanceof Applicant) {
+                $ids[] = (int) $record->getKey();
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * The first validation message, for a notification title.
+     */
+    private function firstError(ValidationException $exception): string
+    {
+        $message = collect($exception->errors())->flatten()->first();
+
+        return is_string($message) ? $message : ApplicantService::MESSAGE_TRANSITION;
     }
 
     /**

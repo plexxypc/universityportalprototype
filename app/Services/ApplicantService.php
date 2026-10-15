@@ -12,6 +12,7 @@ use App\Models\AcademicSession;
 use App\Models\Applicant;
 use App\Models\EmailOutbox;
 use App\Models\Programme;
+use App\Models\Student;
 use App\Models\User;
 use App\Policies\ApplicantPolicy;
 use App\Support\Audit;
@@ -24,10 +25,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Adds applicants, moves them through the status pipeline, and records audits.
+ * Adds applicants, moves them through the status pipeline, and converts them.
  *
  * Profile audits list changed field names for email, phone, and date of
  * birth. A refused transition stores the applicant id and the two statuses.
+ * Admit-and-convert copies the applicant onto one user and one student.
  */
 final class ApplicantService
 {
@@ -54,6 +56,12 @@ final class ApplicantService
     public const string MESSAGE_CONVERTED = 'This applicant is already a student.';
 
     public const string MESSAGE_EMAIL_CHANGE = 'Update cannot change the email address.';
+
+    public const string ACTION_CONVERTED = 'applicants.converted';
+
+    public const string MESSAGE_LOG_MAILER = 'Bulk conversion cannot send welcome emails with the log mailer.';
+
+    public const int CHUNK_SIZE = 25;
 
     /**
      * Statuses a manager may set from each current status.
@@ -284,6 +292,260 @@ final class ApplicantService
             self::RELATED_TYPE,
             (int) $applicant->getKey(),
         );
+    }
+
+    /**
+     * Admit an applicant and create the student account in one transaction.
+     *
+     * Applied, Under review, and Admitted can convert. The admission email
+     * is queued only when this applicant has not already received one.
+     * A second convert writes a refusal and does not create another account.
+     */
+    public function convert(User $actor, int $applicant_id, Request $request): CreatedStudent
+    {
+        $refused_message = null;
+
+        $created = DB::transaction(function () use ($actor, $applicant_id, $request, &$refused_message): ?CreatedStudent {
+            $locked = $this->locked($actor, $applicant_id);
+
+            if (! $this->canConvert($locked->status)) {
+                $this->auditRefusal($actor, $locked, ApplicantStatus::Converted, $request);
+                $refused_message = $locked->status === ApplicantStatus::Converted
+                    ? self::MESSAGE_CONVERTED
+                    : self::MESSAGE_TRANSITION;
+
+                return null;
+            }
+
+            $before_status = $locked->status->value;
+            $created_student = $this->students->create(
+                $actor,
+                $this->studentInput($locked),
+                $request,
+                true,
+                $locked->import_batch_id !== null ? (int) $locked->import_batch_id : null,
+            );
+            $student = $created_student->student;
+            $this->linkApplicant($student, (int) $locked->getKey());
+            $locked->status = ApplicantStatus::Converted;
+            $locked->save();
+            $this->queueAdmission($locked, (int) $student->user_id);
+            $id = (int) $locked->getKey();
+            $this->audit->record(
+                $actor->id,
+                self::ACTION_CONVERTED,
+                'applicants',
+                $id,
+                [
+                    'applicant_id' => $id,
+                    'status' => $before_status,
+                ],
+                [
+                    'applicant_id' => $id,
+                    'status' => ApplicantStatus::Converted->value,
+                    'student_id' => (int) $student->getKey(),
+                ],
+                $this->audit->ipFromRequest($request),
+            );
+            $fresh = $student->fresh(['user', 'programme.department']);
+
+            return new CreatedStudent($fresh instanceof Student ? $fresh : $student, $created_student->delivery);
+        });
+
+        if (! $created instanceof CreatedStudent) {
+            throw ValidationException::withMessages([
+                'applicant' => $refused_message ?? self::MESSAGE_TRANSITION,
+            ]);
+        }
+
+        return $created;
+    }
+
+    /**
+     * Eligible applicant ids for a bulk conversion. This does not write.
+     *
+     * Ids that are missing, out of scope, or not in a convertible status
+     * are counted as skipped. The caller cannot tell those cases apart.
+     *
+     * @param  array<int, mixed>  $applicant_ids
+     * @return array{eligible: list<int>, skipped: int}
+     */
+    public function preview(User $actor, array $applicant_ids): array
+    {
+        $this->authoriseManage($actor);
+        $ids = $this->idList($applicant_ids);
+
+        if ($ids === []) {
+            return ['eligible' => [], 'skipped' => 0];
+        }
+
+        $convertible = [];
+
+        foreach (Applicant::query()->visibleTo($actor)->whereKey($ids)->get() as $applicant) {
+            if ($this->canConvert($applicant->status)) {
+                $convertible[(int) $applicant->getKey()] = true;
+            }
+        }
+
+        $eligible = [];
+
+        foreach ($ids as $id) {
+            if (isset($convertible[$id])) {
+                $eligible[] = $id;
+            }
+        }
+
+        return [
+            'eligible' => $eligible,
+            'skipped' => count($ids) - count($eligible),
+        ];
+    }
+
+    /**
+     * The confirmation sentence for a bulk conversion.
+     *
+     * @param  array<int, mixed>  $applicant_ids
+     */
+    public function previewMessage(User $actor, array $applicant_ids): string
+    {
+        $plan = $this->preview($actor, $applicant_ids);
+        $count = count($plan['eligible']);
+        $noun = $count === 1 ? 'applicant' : 'applicants';
+
+        return $count.' '.$noun.' will be admitted and converted. '.$plan['skipped'].' will be skipped.';
+    }
+
+    /**
+     * Convert each eligible applicant in its own transaction, 25 at a time.
+     *
+     * Production with the log mailer is refused before any applicant is
+     * locked or written. A forged id is dropped by preview.
+     *
+     * @param  array<int, mixed>  $applicant_ids
+     */
+    public function convertMany(User $actor, array $applicant_ids, Request $request): ConversionBatch
+    {
+        $this->authoriseManage($actor);
+
+        if ($this->mail->refusesSecretTemplate(EmailTemplate::Credentials->value)) {
+            throw ValidationException::withMessages(['credentials' => self::MESSAGE_LOG_MAILER]);
+        }
+
+        $plan = $this->preview($actor, $applicant_ids);
+        $converted = 0;
+        $failures = [];
+
+        foreach (array_chunk($plan['eligible'], self::CHUNK_SIZE) as $chunk) {
+            foreach ($chunk as $id) {
+                try {
+                    $this->convert($actor, $id, $request);
+                    $converted++;
+                } catch (ValidationException $exception) {
+                    $message = collect($exception->errors())->flatten()->first();
+                    $failures[] = is_string($message) ? $message : self::MESSAGE_TRANSITION;
+                }
+            }
+        }
+
+        return new ConversionBatch($converted, $plan['skipped'], $failures);
+    }
+
+    /**
+     * The on-screen result for one conversion. It matches the add-student sentence.
+     */
+    public function createdMessage(CreatedStudent $created): string
+    {
+        $matric = $created->student->matric_no;
+        $email = match ($created->delivery->state) {
+            CredentialDelivery::SENT => 'The welcome email was sent.',
+            CredentialDelivery::NOT_SENT => 'The welcome email was not sent.',
+            default => 'The welcome email is queued.',
+        };
+
+        return 'Student '.$matric.' was created. '.$email;
+    }
+
+    /**
+     * The on-screen result for a bulk conversion.
+     */
+    public function bulkMessage(ConversionBatch $batch): string
+    {
+        $converted_noun = $batch->converted === 1 ? 'applicant was converted' : 'applicants were converted';
+        $message = $batch->converted.' '.$converted_noun.'. '.$batch->skipped.' skipped.';
+        $failure_count = count($batch->failures);
+
+        if ($failure_count > 0) {
+            $message .= ' '.$failure_count.' could not be converted.';
+        }
+
+        return $message;
+    }
+
+    /**
+     * Applied, Under review, and Admitted may become students.
+     */
+    private function canConvert(ApplicantStatus $status): bool
+    {
+        return in_array($status, [
+            ApplicantStatus::Applied,
+            ApplicantStatus::UnderReview,
+            ApplicantStatus::Admitted,
+        ], true);
+    }
+
+    /**
+     * @param  array<int, mixed>  $applicant_ids
+     * @return list<int>
+     */
+    private function idList(array $applicant_ids): array
+    {
+        $ids = [];
+
+        foreach ($applicant_ids as $applicant_id) {
+            if (is_numeric($applicant_id) && (int) $applicant_id > 0) {
+                $ids[] = (int) $applicant_id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function studentInput(Applicant $applicant): array
+    {
+        return [
+            'first_name' => $applicant->first_name,
+            'last_name' => $applicant->last_name,
+            'other_names' => $applicant->other_names,
+            'email' => $applicant->email,
+            'phone' => $applicant->phone,
+            'gender' => $applicant->gender instanceof Gender ? $applicant->gender->value : null,
+            'date_of_birth' => $applicant->date_of_birth?->toDateString(),
+            'state_of_origin' => $applicant->state_of_origin,
+            'address' => $applicant->address,
+            'programme_id' => (int) $applicant->programme_id,
+            'level' => (int) $applicant->level,
+            'entry_session_id' => $applicant->entry_session_id,
+        ];
+    }
+
+    /**
+     * Point the new student at this applicant. A duplicate link rolls the account back.
+     */
+    private function linkApplicant(Student $student, int $applicant_id): void
+    {
+        try {
+            $student->applicant_id = $applicant_id;
+            $student->save();
+        } catch (QueryException $exception) {
+            if (($exception->errorInfo[0] ?? null) === '23000' && str_contains($exception->getMessage(), 'students_applicant_id_unique')) {
+                throw ValidationException::withMessages(['applicant' => self::MESSAGE_CONVERTED]);
+            }
+
+            throw $exception;
+        }
     }
 
     /**

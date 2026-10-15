@@ -15,8 +15,11 @@ use App\Models\EmailOutbox;
 use App\Models\Faculty;
 use App\Models\Programme;
 use App\Models\RoleAssignment;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\ApplicantService;
+use App\Services\CredentialDelivery;
+use Filament\Notifications\Notification;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -237,4 +240,260 @@ it('shows a lecturer no applicants and lets a registrar open the add page', func
         ->assertSee('No applicants yet');
 
     Livewire::actingAs(applicant_actor())->test(AddApplicantPage::class)->assertOk();
+});
+
+it('copies an applicant onto one student and sends admission once from an earlier status', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme']), applicant_request());
+
+    $plain = '';
+    EmailOutbox::created(function (EmailOutbox $row) use (&$plain): void {
+        if ($row->template !== EmailTemplate::Credentials->value || $plain !== '') {
+            return;
+        }
+
+        $secrets = $row->secrets;
+        $password = is_array($secrets) ? ($secrets['temporary_password'] ?? '') : '';
+        $plain = is_string($password) ? $password : '';
+    });
+
+    $created = $service->convert($actor, (int) $applicant->id, applicant_request());
+    $student = $created->student->fresh(['user']);
+    $admission = EmailOutbox::query()->where('template', EmailTemplate::Admission->value)->first();
+    $has_secret = $plain !== '';
+    $applicant_audit = '';
+    $all_audit = '';
+
+    foreach (AuditLog::query()->get(['entity', 'before', 'after']) as $row) {
+        $encoded = json_encode($row->before).json_encode($row->after);
+        $all_audit .= $encoded;
+
+        if ($row->entity === 'applicants') {
+            $applicant_audit .= $encoded;
+        }
+    }
+
+    $admission_text = (string) $admission?->body_html.(string) $admission?->body_text;
+    $leaked = $has_secret && (str_contains($admission_text, $plain) || str_contains($all_audit, $plain));
+
+    expect($student)->not->toBeNull()
+        ->and($student?->applicant_id)->toBe($applicant->id)
+        ->and($student?->user?->email)->toBe('ada.applicant@example.test')
+        ->and($student?->user?->phone)->toBe('+2348012345678')
+        ->and($student?->first_name)->toBe('Ada')
+        ->and($student?->programme_id)->toBe($branch['programme']->id)
+        ->and($student?->level)->toBe(100)
+        ->and($applicant->refresh()->status)->toBe(ApplicantStatus::Converted)
+        ->and(EmailOutbox::query()->where('template', EmailTemplate::Admission->value)->count())->toBe(1)
+        ->and($admission?->related_type)->toBe(ApplicantService::RELATED_TYPE)
+        ->and($admission?->related_id)->toBe($applicant->id)
+        ->and($admission?->secrets)->toBeNull()
+        ->and($admission_text)->toContain($branch['programme']->name)
+        ->and($has_secret)->toBeTrue()
+        ->and($leaked)->toBeFalse()
+        ->and($applicant_audit)->not->toContain('ada.applicant@example.test')
+        ->and($applicant_audit)->not->toContain('+2348012345678')
+        ->and($applicant_audit)->not->toContain('2004-05-01')
+        ->and(User::query()->where('email', 'ada.applicant@example.test')->count())->toBe(1);
+});
+
+it('does not send a second admission email when the applicant was already admitted', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme']), applicant_request());
+    $service->changeStatus($actor, (int) $applicant->id, ApplicantStatus::Admitted->value, '', applicant_request());
+
+    $service->convert($actor, (int) $applicant->id, applicant_request());
+
+    expect(EmailOutbox::query()->where('template', EmailTemplate::Admission->value)->count())->toBe(1)
+        ->and(EmailOutbox::query()->where('template', EmailTemplate::Credentials->value)->count())->toBe(1)
+        ->and($applicant->refresh()->status)->toBe(ApplicantStatus::Converted);
+});
+
+it('creates one account when convert is repeated and audits the refusal', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme']), applicant_request());
+    $service->convert($actor, (int) $applicant->id, applicant_request());
+
+    expect(fn () => $service->convert($actor, (int) $applicant->id, applicant_request()))
+        ->toThrow(ValidationException::class, ApplicantService::MESSAGE_CONVERTED);
+
+    $audit = AuditLog::query()->where('action', ApplicantService::ACTION_REFUSED)->latest('id')->first();
+
+    expect(User::query()->where('email', 'ada.applicant@example.test')->count())->toBe(1)
+        ->and(Student::query()->count())->toBe(1)
+        ->and($audit?->before)->toEqual([
+            'applicant_id' => $applicant->id,
+            'status' => ApplicantStatus::Converted->value,
+        ])
+        ->and($audit?->after)->toEqual([
+            'applicant_id' => $applicant->id,
+            'status' => ApplicantStatus::Converted->value,
+        ]);
+});
+
+it('leaves an applicant unconverted when the email already belongs to a user', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme']), applicant_request());
+    User::factory()->create(['email' => 'ada.applicant@example.test']);
+
+    expect(fn () => $service->convert($actor, (int) $applicant->id, applicant_request()))
+        ->toThrow(ValidationException::class, ApplicantService::MESSAGE_EMAIL_TAKEN);
+
+    expect($applicant->refresh()->status)->toBe(ApplicantStatus::Applied)
+        ->and(Student::query()->count())->toBe(0)
+        ->and(User::query()->where('email', 'ada.applicant@example.test')->count())->toBe(1);
+});
+
+it('rolls the account, the outbox row, and the status back when admission fails after the user exists', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $applicant = app(ApplicantService::class)->create($actor, applicant_input($branch['programme']), applicant_request());
+    app()->instance('applicant.convert.fail_admission', true);
+    $credentials_existed = false;
+    EmailOutbox::creating(function (EmailOutbox $row) use (&$credentials_existed): void {
+        if (! app()->bound('applicant.convert.fail_admission') || $row->template !== EmailTemplate::Admission->value) {
+            return;
+        }
+
+        $credentials_existed = EmailOutbox::query()->where('template', EmailTemplate::Credentials->value)->exists();
+
+        throw new RuntimeException('admission failed after the account was created');
+    });
+
+    try {
+        expect(fn () => app(ApplicantService::class)->convert($actor, (int) $applicant->id, applicant_request()))
+            ->toThrow(RuntimeException::class);
+    } finally {
+        app()->forgetInstance('applicant.convert.fail_admission');
+    }
+
+    expect($credentials_existed)->toBeTrue()
+        ->and(User::query()->where('email', 'ada.applicant@example.test')->exists())->toBeFalse()
+        ->and(Student::query()->count())->toBe(0)
+        ->and(EmailOutbox::query()->count())->toBe(0)
+        ->and($applicant->refresh()->status)->toBe(ApplicantStatus::Applied);
+});
+
+it('refuses bulk conversion before any write when production uses the log mailer', function () {
+    $this->app['env'] = 'production';
+    config(['mail.default' => 'log', 'queue.default' => 'sync']);
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $applicant = app(ApplicantService::class)->create($actor, applicant_input($branch['programme']), applicant_request());
+    $users = User::query()->count();
+
+    expect(fn () => app(ApplicantService::class)->convertMany($actor, [(int) $applicant->id], applicant_request()))
+        ->toThrow(ValidationException::class, ApplicantService::MESSAGE_LOG_MAILER);
+
+    expect(User::query()->count())->toBe($users)
+        ->and(Student::query()->count())->toBe(0)
+        ->and(EmailOutbox::query()->count())->toBe(0)
+        ->and($applicant->refresh()->status)->toBe(ApplicantStatus::Applied)
+        ->and(AuditLog::query()->where('action', ApplicantService::ACTION_CONVERTED)->count())->toBe(0);
+});
+
+it('creates the student and reports the welcome email as not sent for one conversion', function () {
+    $this->app['env'] = 'production';
+    config(['mail.default' => 'log', 'queue.default' => 'sync']);
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme'], [
+        'email' => 'single.convert@example.test',
+    ]), applicant_request());
+
+    $created = $service->convert($actor, (int) $applicant->id, applicant_request());
+
+    expect($created->delivery->state)->toBe(CredentialDelivery::NOT_SENT)
+        ->and($service->createdMessage($created))->toBe(
+            'Student '.$created->student->matric_no.' was created. The welcome email was not sent.',
+        )
+        ->and($applicant->refresh()->status)->toBe(ApplicantStatus::Converted)
+        ->and(Student::query()->count())->toBe(1);
+});
+
+it('drops a forged id and converts only the eligible applicant', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme']), applicant_request());
+    $rejected = Applicant::factory()->rejected()->create([
+        'programme_id' => $branch['programme']->id,
+        'entry_session_id' => $applicant->entry_session_id,
+        'email' => 'rejected.applicant@example.test',
+    ]);
+    $plan = $service->preview($actor, [(int) $applicant->id, (int) $rejected->id, 999999]);
+
+    expect($plan['eligible'])->toBe([(int) $applicant->id])
+        ->and($plan['skipped'])->toBe(2)
+        ->and($service->previewMessage($actor, [(int) $applicant->id, (int) $rejected->id, 999999]))
+        ->toBe('1 applicant will be admitted and converted. 2 will be skipped.');
+
+    $batch = $service->convertMany($actor, [(int) $applicant->id, (int) $rejected->id, 999999], applicant_request());
+
+    expect($batch->converted)->toBe(1)
+        ->and($batch->skipped)->toBe(2)
+        ->and($batch->failures)->toBe([])
+        ->and($rejected->refresh()->status)->toBe(ApplicantStatus::Rejected)
+        ->and(Student::query()->count())->toBe(1);
+});
+
+it('refuses a faculty admin who tries to convert an applicant', function () {
+    $branch = applicant_branch();
+    $applicant = app(ApplicantService::class)->create(
+        applicant_actor(),
+        applicant_input($branch['programme']),
+        applicant_request(),
+    );
+
+    expect(fn () => app(ApplicantService::class)->convert(
+        applicant_actor(Role::FacultyAdmin),
+        (int) $applicant->id,
+        applicant_request(),
+    ))->toThrow(AuthorizationException::class);
+
+    expect($applicant->refresh()->status)->toBe(ApplicantStatus::Applied)
+        ->and(Student::query()->count())->toBe(0);
+});
+
+it('shows the not-sent message for one conversion and refuses bulk on the log mailer', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $single = app(ApplicantService::class)->create($actor, applicant_input($branch['programme'], [
+        'email' => 'page.single@example.test',
+    ]), applicant_request());
+    $bulk = app(ApplicantService::class)->create($actor, applicant_input($branch['programme'], [
+        'email' => 'page.bulk@example.test',
+    ]), applicant_request());
+    $this->app['env'] = 'production';
+    config(['mail.default' => 'log', 'queue.default' => 'sync']);
+
+    Livewire::actingAs($actor)
+        ->test(ApplicantsPage::class)
+        ->callTableAction('convert', $single);
+
+    $student = Student::query()->first();
+
+    expect($student)->not->toBeNull()
+        ->and($single->refresh()->status)->toBe(ApplicantStatus::Converted);
+
+    Notification::assertNotified('Student '.$student?->matric_no.' was created. The welcome email was not sent.');
+
+    Livewire::actingAs($actor)
+        ->test(ApplicantsPage::class)
+        ->callTableBulkAction('convert', [$bulk]);
+
+    expect($bulk->refresh()->status)->toBe(ApplicantStatus::Applied)
+        ->and(Student::query()->count())->toBe(1)
+        ->and(User::query()->where('email', 'page.bulk@example.test')->exists())->toBeFalse();
+
+    Notification::assertNotified(ApplicantService::MESSAGE_LOG_MAILER);
 });
