@@ -140,15 +140,15 @@
   - Phase 3 carry-over: a document's owner row must exist; refuse deleting that applicant or student, or remove the documents first.
   - Phase 4 carry-over: authorised document download uses the Document policy.
   - Phase 4 carry-over: TEST_PLAN section 2. A document download must reject another user's record id. No download route exists yet.
-- [ ] TASK-071 Import engine: CSV and Excel parsers with size/row limits
-- [ ] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, redirects only to docs.google.com and hosts ending in .googleusercontent.com, validated address pinned)
-- [ ] TASK-073 Import wizard steps 1–2 (Livewire): choose source and preview
-- [ ] TASK-074 Import wizard step 3: column mapping with auto-match
-- [ ] TASK-075 Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table
+- [x] TASK-071 Import engine: CSV and Excel parsers with size/row limits
+- [x] TASK-072 Import engine: Google Sheet source (host allow-list, export URL builder, timeout, redirects only to docs.google.com and hosts ending in .googleusercontent.com, validated address pinned)
+- [x] TASK-073 Import wizard steps 1–2 (Livewire): choose source and preview
+- [x] TASK-074 Import wizard step 3: column mapping with auto-match
+- [x] TASK-075 Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table
   - Phase 3 carry-over: normalise every saved phone number to `+234`.
-- [ ] TASK-076 Chunked commit (25 rows per request) with progress bar, duplicate options (skip/update), send-emails now/later; `import_batches` records
-- [ ] TASK-077 Import report page and downloadable failed-rows CSV; audit entry per batch
-- [ ] TASK-078 Downloadable templates (CSV and Excel) and in-app Google Form guide page
+- [x] TASK-076 Chunked commit (25 rows per request) with progress bar, duplicate options (skip/update), send-emails now/later; `import_batches` records
+- [x] TASK-077 Import report page and downloadable failed-rows CSV; audit entry per batch
+- [x] TASK-078 Downloadable templates (CSV and Excel) and in-app Google Form guide page
 - [x] TASK-079 Applicants: manual add and import (reuse engine), list, status changes
 - [x] TASK-080 Applicants: admit and convert to student (single and bulk), admission email
 - [ ] TASK-081 Auto-generate invoice for the current session when a student is created
