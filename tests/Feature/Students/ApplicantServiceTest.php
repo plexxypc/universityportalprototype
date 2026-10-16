@@ -7,6 +7,7 @@ use App\Enums\EmailTemplate;
 use App\Enums\Role;
 use App\Filament\Staff\Pages\AddApplicantPage;
 use App\Filament\Staff\Pages\ApplicantsPage;
+use App\Filament\Staff\Pages\EmailOutboxPage;
 use App\Models\AcademicSession;
 use App\Models\Applicant;
 use App\Models\AuditLog;
@@ -23,6 +24,8 @@ use Filament\Notifications\Notification;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 
@@ -496,4 +499,187 @@ it('shows the not-sent message for one conversion and refuses bulk on the log ma
         ->and(User::query()->where('email', 'page.bulk@example.test')->exists())->toBeFalse();
 
     Notification::assertNotified(ApplicantService::MESSAGE_LOG_MAILER);
+});
+
+/**
+ * Each allowed step in the pipeline.
+ *
+ * @return array<string, array{0: string, 1: string}>
+ */
+function applicant_allowed_transitions(): array
+{
+    return [
+        'Applied to Under review' => ['Applied', 'Under review'],
+        'Applied to Admitted' => ['Applied', 'Admitted'],
+        'Applied to Rejected' => ['Applied', 'Rejected'],
+        'Under review to Admitted' => ['Under review', 'Admitted'],
+        'Under review to Rejected' => ['Under review', 'Rejected'],
+        'Admitted to Rejected' => ['Admitted', 'Rejected'],
+    ];
+}
+
+/**
+ * Every other pair, including a repeated status and a typed address.
+ *
+ * @return array<string, array{0: string, 1: string}>
+ */
+function applicant_refused_transitions(): array
+{
+    $allowed = [
+        'Applied' => ['Under review', 'Admitted', 'Rejected'],
+        'Under review' => ['Admitted', 'Rejected'],
+        'Admitted' => ['Rejected'],
+        'Rejected' => [],
+        'Converted' => [],
+    ];
+    $cases = [];
+
+    foreach ($allowed as $from => $next) {
+        foreach (array_keys($allowed) as $to) {
+            if (in_array($to, $next, true)) {
+                continue;
+            }
+
+            $cases[$from.' to '.$to] = [$from, $to];
+        }
+    }
+
+    $cases['Applied to a typed address'] = ['Applied', 'ada@example.test'];
+
+    return $cases;
+}
+
+it('allows every applicant status transition', function (string $from, string $to): void {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme'], [
+        'email' => 'allow.'.md5($from.$to).'@example.test',
+    ]), applicant_request());
+    $applicant->status = ApplicantStatus::from($from);
+    $applicant->save();
+    $reason = $to === ApplicantStatus::Rejected->value ? 'The documents were incomplete.' : '';
+
+    $service->changeStatus($actor, (int) $applicant->id, $to, $reason, applicant_request());
+    $audit = AuditLog::query()->where('action', ApplicantService::ACTION_STATUS)->latest('id')->first();
+
+    expect($applicant->refresh()->status->value)->toBe($to)
+        ->and($audit?->after['status'] ?? null)->toBe($to)
+        ->and(EmailOutbox::query()->where('template', EmailTemplate::Admission->value)->count())
+        ->toBe($to === ApplicantStatus::Admitted->value ? 1 : 0);
+
+    if ($to === ApplicantStatus::Rejected->value) {
+        expect($audit?->after['reason'] ?? null)->toBe('The documents were incomplete.');
+    }
+})->with(applicant_allowed_transitions());
+
+it('refuses every other status transition and audits only the id and the statuses', function (string $from, string $to): void {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme'], [
+        'email' => 'refuse.'.md5($from.$to).'@example.test',
+    ]), applicant_request());
+    $applicant->status = ApplicantStatus::from($from);
+    $applicant->save();
+
+    expect(fn () => $service->changeStatus($actor, (int) $applicant->id, $to, '', applicant_request()))
+        ->toThrow(ValidationException::class, ApplicantService::MESSAGE_TRANSITION);
+
+    $attempted = ApplicantStatus::tryFrom($to);
+    $audit = AuditLog::query()->where('action', ApplicantService::ACTION_REFUSED)->latest('id')->first();
+    $encoded = json_encode($audit?->before).json_encode($audit?->after);
+
+    expect($applicant->refresh()->status->value)->toBe($from)
+        ->and($audit?->before)->toEqual([
+            'applicant_id' => (int) $applicant->id,
+            'status' => $from,
+        ])
+        ->and($audit?->after)->toEqual([
+            'applicant_id' => (int) $applicant->id,
+            'status' => $attempted instanceof ApplicantStatus ? $attempted->value : $from,
+        ])
+        ->and($encoded)->not->toContain('ada@example.test')
+        ->and($encoded)->not->toContain('refuse.');
+})->with(applicant_refused_transitions());
+
+it('keeps a converted applicant read-only', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $service = app(ApplicantService::class);
+    $applicant = $service->create($actor, applicant_input($branch['programme'], [
+        'email' => 'readonly.applicant@example.test',
+    ]), applicant_request());
+    $service->convert($actor, (int) $applicant->id, applicant_request());
+
+    expect(fn () => $service->update($actor, (int) $applicant->id, applicant_input($branch['programme'], [
+        'email' => 'readonly.applicant@example.test',
+        'last_name' => 'Changed',
+    ]), applicant_request()))->toThrow(ValidationException::class, ApplicantService::MESSAGE_CONVERTED);
+
+    expect(fn () => $service->changeStatus($actor, (int) $applicant->id, ApplicantStatus::Rejected->value, 'No longer admitted.', applicant_request()))
+        ->toThrow(ValidationException::class, ApplicantService::MESSAGE_TRANSITION);
+
+    expect($applicant->refresh()->status)->toBe(ApplicantStatus::Converted)
+        ->and($applicant->last_name)->toBe('Lovelace');
+
+    $this->actingAs($actor)
+        ->get('/staff/applicants/create?applicant='.$applicant->id)
+        ->assertNotFound();
+
+    Livewire::actingAs($actor)->test(ApplicantsPage::class)
+        ->assertTableActionHidden('edit', $applicant)
+        ->assertTableActionHidden('changeStatus', $applicant)
+        ->assertTableActionHidden('convert', $applicant);
+});
+
+it('returns the same not-found page for a missing applicant id and a forged one', function () {
+    $actor = applicant_actor();
+    $missing = $this->actingAs($actor)->get('/staff/applicants/create?applicant=999999');
+    $forged = $this->actingAs($actor)->get('/staff/applicants/create?applicant=999998');
+
+    expect($missing->status())->toBe(404)
+        ->and($forged->status())->toBe($missing->status());
+
+    expect(fn () => app(ApplicantService::class)->changeStatus($actor, 999998, ApplicantStatus::Admitted->value, '', applicant_request()))
+        ->toThrow(ValidationException::class, ApplicantService::MESSAGE_MISSING);
+});
+
+it('does not show outbox relation columns on the page, in json, in health, or in the log', function () {
+    $branch = applicant_branch();
+    $actor = applicant_actor();
+    $logged = '';
+    Log::listen(function (MessageLogged $event) use (&$logged): void {
+        $encoded = json_encode([$event->message, $event->context]);
+
+        if (is_string($encoded)) {
+            $logged .= $encoded;
+        }
+    });
+    $applicant = app(ApplicantService::class)->create($actor, applicant_input($branch['programme'], [
+        'email' => 'hidden.relation@example.test',
+    ]), applicant_request());
+    app(ApplicantService::class)->changeStatus(
+        $actor,
+        (int) $applicant->id,
+        ApplicantStatus::Admitted->value,
+        '',
+        applicant_request(),
+    );
+    $row = EmailOutbox::query()->where('template', EmailTemplate::Admission->value)->first();
+    $admin = applicant_actor(Role::SuperAdmin);
+    $page = Livewire::actingAs($admin)->test(EmailOutboxPage::class)->html();
+    $health = $this->get('/health')->getContent();
+    $health = is_string($health) ? $health : '';
+    $serialised = $row instanceof EmailOutbox ? $row->toJson() : '';
+
+    expect(str_contains($page, 'related_type'))->toBeFalse()
+        ->and(str_contains($page, 'related_id'))->toBeFalse()
+        ->and(str_contains($serialised, 'related_type'))->toBeFalse()
+        ->and(str_contains($serialised, 'related_id'))->toBeFalse()
+        ->and(str_contains($health, 'related_type'))->toBeFalse()
+        ->and(str_contains($health, 'related_id'))->toBeFalse()
+        ->and(str_contains($logged, 'related_type'))->toBeFalse()
+        ->and(str_contains($logged, 'related_id'))->toBeFalse()
+        ->and($row?->related_type)->toBe(ApplicantService::RELATED_TYPE);
 });

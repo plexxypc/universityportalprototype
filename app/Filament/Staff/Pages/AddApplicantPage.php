@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Staff\Pages;
 
+use App\Enums\ApplicantStatus;
 use App\Enums\Gender;
 use App\Models\AcademicSession;
 use App\Models\Applicant;
@@ -94,7 +95,7 @@ class AddApplicantPage extends Page
 
         $applicant = Applicant::query()->visibleTo($actor)->whereKey((int) $raw)->first();
 
-        if (! $applicant instanceof Applicant) {
+        if (! $applicant instanceof Applicant || $applicant->status === ApplicantStatus::Converted) {
             abort(404);
         }
 
