@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 #[Fillable([
     'user_id',
+    'related_type',
+    'related_id',
     'recipient_email',
     'template',
     'subject',
@@ -48,6 +50,8 @@ class EmailOutbox extends Model
         'secrets',
         'body_html',
         'body_text',
+        'related_type',
+        'related_id',
     ];
 
     /**

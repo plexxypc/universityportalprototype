@@ -71,8 +71,14 @@ final class MailService
      *
      * @param  array<string, mixed>  $data
      */
-    public function send(string $template, string $recipient, array $data, ?int $user_id = null): EmailOutbox
-    {
+    public function send(
+        string $template,
+        string $recipient,
+        array $data,
+        ?int $user_id = null,
+        ?string $related_type = null,
+        ?int $related_id = null,
+    ): EmailOutbox {
         if (! $this->messages->isKnown($template)) {
             throw new InvalidArgumentException(MailError::UNKNOWN_TEMPLATE);
         }
@@ -95,13 +101,15 @@ final class MailService
             $body_text = $stored->text;
         }
 
-        return DB::transaction(function () use ($template, $recipient, $data, $user_id, $subject, $secret, $body_html, $body_text): EmailOutbox {
+        return DB::transaction(function () use ($template, $recipient, $data, $user_id, $related_type, $related_id, $subject, $secret, $body_html, $body_text): EmailOutbox {
             if ($secret && $user_id !== null) {
                 $this->supersedeQueued($user_id, $template);
             }
 
             $row = EmailOutbox::query()->create([
                 'user_id' => $user_id,
+                'related_type' => $related_type,
+                'related_id' => $related_id,
                 'recipient_email' => $recipient,
                 'template' => $template,
                 'subject' => $subject,

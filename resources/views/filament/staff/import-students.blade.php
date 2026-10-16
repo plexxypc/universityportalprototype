@@ -96,18 +96,20 @@
             $report = $this->validationReport();
         @endphp
         <div class="mb-6 flex max-w-xl flex-col gap-space-16">
-            <x-field name="duplicate_mode" label="Existing students">
+            <x-field name="duplicate_mode" label="Existing rows">
                 <x-select name="duplicate_mode" wire:model.live="duplicate_mode">
-                    <option value="skip">Skip existing students</option>
-                    <option value="update">Update existing students</option>
+                    <option value="skip">Skip existing rows</option>
+                    <option value="update">Update existing rows</option>
                 </x-select>
             </x-field>
-            <x-field name="send_mode" label="Credentials emails" :error="$errors->first('send_mode')">
-                <x-select name="send_mode" wire:model="send_mode">
-                    <option value="now">Send credentials now</option>
-                    <option value="later">Send credentials later</option>
-                </x-select>
-            </x-field>
+            @if ($this->showsCredentials())
+                <x-field name="send_mode" label="Credentials emails" :error="$errors->first('send_mode')">
+                    <x-select name="send_mode" wire:model="send_mode">
+                        <option value="now">Send credentials now</option>
+                        <option value="later">Send credentials later</option>
+                    </x-select>
+                </x-field>
+            @endif
         </div>
         <p class="mb-2">{{ $report['ready_count'] }} of {{ $report['total_rows'] }} rows can be imported. {{ $report['error_count'] }} errors.</p>
         @if ($report['remaining_error_count'] > 0)
@@ -135,7 +137,7 @@
                 </table>
             </div>
         @endif
-        <p class="mb-2">{{ $report['duplicate_count'] }} rows match an existing student.</p>
+        <p class="mb-2">{{ $report['duplicate_count'] }} rows match an existing record.</p>
         @if ($report['duplicates'] !== [])
             <div class="max-w-full overflow-x-auto">
                 <table class="w-full text-left text-sm">
@@ -159,7 +161,7 @@
             </div>
         @endif
         <form wire:submit="commitChunk" class="mt-6">
-            <x-button type="submit">Import students</x-button>
+            <x-button type="submit">{{ $this->showsCredentials() ? 'Import students' : 'Import applicants' }}</x-button>
         </form>
     @elseif ($step === 'import')
         @php
@@ -176,12 +178,12 @@
             $committed = $this->commitReport();
         @endphp
         <p class="mb-2">Created {{ $committed['created_count'] }}, updated {{ $committed['updated_count'] }}, skipped {{ $committed['skipped_count'] }}, failed {{ $committed['failed_count'] }}.</p>
-        <p class="mb-4">{{ $committed['credentials_needed'] }} accounts still need credentials.</p>
+        <p class="mb-4">{{ $this->showsCredentials() ? $committed['credentials_needed'].' accounts still need credentials.' : 'No accounts were created.' }}</p>
         <div class="flex max-w-full flex-wrap gap-space-12">
             @if ($committed['download_url'] !== '')
                 <x-button href="{{ $committed['download_url'] }}" variant="secondary">Download failed rows</x-button>
             @endif
-            @if ($committed['students_url'] !== '')
+            @if ($this->showsCredentials() && $committed['students_url'] !== '')
                 <x-button href="{{ $committed['students_url'] }}" variant="primary">View accounts that still need credentials</x-button>
             @endif
         </div>

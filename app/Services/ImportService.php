@@ -16,6 +16,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Support\Audit;
+use App\Support\Import\ApplicantRowValidator;
 use App\Support\Import\ColumnMap;
 use App\Support\Import\FailedRowCsv;
 use App\Support\Import\GoogleSheetClient;
@@ -33,7 +34,11 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Stages a student spreadsheet and reads it back for the actor who owns it.
+ * Stages a spreadsheet and reads it back for the actor who owns it.
+ *
+ * The target is stored on the staged file when the upload is accepted.
+ * Commit reads that target. A later change on the page cannot switch an
+ * applicant file into student accounts.
  *
  * Parsed rows stay in the private staged file. Callers pass a token.
  */
@@ -63,7 +68,9 @@ final class ImportService
         private readonly SpreadsheetReader $reader,
         private readonly StagedImportStore $store,
         private readonly StudentRowValidator $rows,
+        private readonly ApplicantRowValidator $applicant_rows,
         private readonly StudentService $students,
+        private readonly ApplicantService $applicants,
         private readonly MailService $mail,
         private readonly Audit $audit,
         private readonly FailedRowCsv $failures,
@@ -72,7 +79,7 @@ final class ImportService
     /**
      * Parse an upload and stage it for this actor.
      */
-    public function stageUpload(User $actor, UploadedFile $file): string
+    public function stageUpload(User $actor, UploadedFile $file, ImportTarget $target = ImportTarget::Student): string
     {
         $this->authorise($actor);
         $this->limitSources($actor);
@@ -110,13 +117,14 @@ final class ImportService
             $extension,
             $this->originalName($file->getClientOriginalName(), $extension),
             $sheet,
+            $target->value,
         );
     }
 
     /**
      * Download a public Google Sheet and stage its CSV.
      */
-    public function stageSheet(User $actor, string $link): string
+    public function stageSheet(User $actor, string $link, ImportTarget $target = ImportTarget::Student): string
     {
         $this->authorise($actor);
         $this->limitSources($actor);
@@ -132,7 +140,7 @@ final class ImportService
             throw ValidationException::withMessages(['sheet_url' => $exception->getMessage()]);
         }
 
-        return $this->store->put((int) $actor->id, 'google_sheet', 'Google Sheet', $sheet);
+        return $this->store->put((int) $actor->id, 'google_sheet', 'Google Sheet', $sheet, $target->value);
     }
 
     /**
@@ -206,7 +214,13 @@ final class ImportService
             throw ValidationException::withMessages(['duplicate_mode' => StudentRowValidator::MESSAGE_MODE]);
         }
 
-        return $this->rows->assess($this->owned($actor, $token), $duplicate_mode);
+        $staged = $this->owned($actor, $token);
+
+        if ($staged->target === ImportTarget::Applicant->value) {
+            return $this->applicant_rows->assess($staged, $duplicate_mode);
+        }
+
+        return $this->rows->assess($staged, $duplicate_mode);
     }
 
     /**
@@ -247,12 +261,16 @@ final class ImportService
         }
 
         try {
-            if ($send_mode === 'now' && $this->mail->refusesSecretTemplate(EmailTemplate::Credentials->value)) {
+            if ($staged->target !== ImportTarget::Applicant->value
+                && $send_mode === 'now'
+                && $this->mail->refusesSecretTemplate(EmailTemplate::Credentials->value)) {
                 throw ValidationException::withMessages(['send_mode' => self::MESSAGE_LOG_MAILER]);
             }
 
             $batch = $this->batch($actor, $staged);
-            $actions = $this->rows->actions($staged, $duplicate_mode);
+            $actions = $staged->target === ImportTarget::Applicant->value
+                ? $this->applicant_rows->actions($staged, $duplicate_mode)
+                : $this->rows->actions($staged, $duplicate_mode);
             $slice = array_slice($actions, (int) $batch->processed_rows, self::CHUNK_ROWS);
 
             foreach ($slice as $action) {
@@ -341,6 +359,12 @@ final class ImportService
             return;
         }
 
+        if ($batch->target === ImportTarget::Applicant) {
+            $this->applyApplicant($actor, $batch, $token, $action, $request);
+
+            return;
+        }
+
         $previous = (string) config('queue.default');
 
         if ($action['action'] === 'create' && $send_mode === 'now') {
@@ -391,13 +415,58 @@ final class ImportService
         $batch->created_count = (int) $batch->created_count + 1;
     }
 
+    /**
+     * Create or update one applicant. Credentials are not sent.
+     *
+     * @param  array{
+     *     row: int,
+     *     action: string,
+     *     applicant_id?: ?int,
+     *     errors: list<array{row: int, field: string, message: string}>,
+     *     input: array<string, mixed>,
+     *     cells: array<string, string>
+     * }  $action
+     */
+    private function applyApplicant(User $actor, ImportBatch $batch, string $token, array $action, Request $request): void
+    {
+        $input = $action['input'];
+        $input['source'] = $batch->source->value;
+
+        try {
+            DB::transaction(function () use ($actor, $batch, $action, $input, $request): void {
+                if ($action['action'] === 'update' && ($action['applicant_id'] ?? null) !== null) {
+                    $this->applicants->update($actor, (int) $action['applicant_id'], $input, $request);
+
+                    return;
+                }
+
+                $this->applicants->create($actor, $input, $request, (int) $batch->id);
+            });
+        } catch (ValidationException $exception) {
+            $field = array_key_first($exception->errors()) ?? 'row';
+            $message = $exception->errors()[$field][0] ?? ApplicantService::MESSAGE_MISSING;
+            $this->failures->append($token, $action['row'], is_string($field) ? $field : 'row', is_string($message) ? $message : ApplicantService::MESSAGE_MISSING, $action['cells']);
+            $batch->failed_count = (int) $batch->failed_count + 1;
+
+            return;
+        }
+
+        if ($action['action'] === 'update') {
+            $batch->updated_count = (int) $batch->updated_count + 1;
+
+            return;
+        }
+
+        $batch->created_count = (int) $batch->created_count + 1;
+    }
+
     private function batch(User $actor, StagedImport $staged): ImportBatch
     {
         if ($staged->import_batch_id === null) {
             $batch = new ImportBatch;
             $batch->user_id = (int) $actor->id;
             $batch->source = $this->source($staged->source);
-            $batch->target = ImportTarget::Student;
+            $batch->target = ImportTarget::tryFrom($staged->target) ?? ImportTarget::Student;
             $batch->status = ImportBatchStatus::Processing;
             $batch->total_rows = count($staged->rows);
             $batch->original_name = $staged->original_name;
@@ -439,7 +508,7 @@ final class ImportService
                 null,
                 [
                     'source' => $batch->source->value,
-                    'target' => ImportTarget::Student->value,
+                    'target' => $batch->target->value,
                     'created_count' => (int) $batch->created_count,
                     'updated_count' => (int) $batch->updated_count,
                     'skipped_count' => (int) $batch->skipped_count,
@@ -476,7 +545,7 @@ final class ImportService
             'skipped_count' => (int) $batch->skipped_count,
             'failed_count' => (int) $batch->failed_count,
             'batch_id' => (int) $batch->id,
-            'credentials_needed' => $finished
+            'credentials_needed' => $finished && $batch->target === ImportTarget::Student
                 ? Student::query()->where('import_batch_id', $batch->id)->needsCredentials()->count()
                 : 0,
         ];

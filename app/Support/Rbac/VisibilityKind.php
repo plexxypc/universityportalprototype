@@ -10,6 +10,7 @@ namespace App\Support\Rbac;
 enum VisibilityKind
 {
     case Student;
+    case Applicant;
     case StudentId;
     case Result;
     case Attendance;

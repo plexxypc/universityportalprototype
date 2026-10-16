@@ -24,5 +24,6 @@ final readonly class StagedImport
         public array $rows,
         public ?array $column_map,
         public ?int $import_batch_id,
+        public string $target = 'Student',
     ) {}
 }

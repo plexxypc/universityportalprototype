@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Filament\Staff\Pages\AcademicSessionsPage;
+use App\Filament\Staff\Pages\AddApplicantPage;
 use App\Filament\Staff\Pages\AddStudentPage;
+use App\Filament\Staff\Pages\ApplicantsPage;
 use App\Filament\Staff\Pages\CoursesPage;
 use App\Filament\Staff\Pages\DepartmentsPage;
 use App\Filament\Staff\Pages\EmailOutboxPage;
@@ -11,6 +13,7 @@ use App\Filament\Staff\Pages\FacultiesPage;
 use App\Filament\Staff\Pages\FeeCategoriesPage;
 use App\Filament\Staff\Pages\FeeStructuresPage;
 use App\Filament\Staff\Pages\GradingConfigurationPage;
+use App\Filament\Staff\Pages\ImportApplicantsPage;
 use App\Filament\Staff\Pages\ImportStudentsPage;
 use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\NotificationsPage;
@@ -302,6 +305,9 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         StudentRecordPage::class,
         AddStudentPage::class,
         ImportStudentsPage::class,
+        ApplicantsPage::class,
+        AddApplicantPage::class,
+        ImportApplicantsPage::class,
         InstitutionSettingsPage::class,
         AcademicSessionsPage::class,
         SemestersPage::class,

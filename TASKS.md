@@ -149,11 +149,12 @@
 - [ ] TASK-076 Chunked commit (25 rows per request) with progress bar, duplicate options (skip/update), send-emails now/later; `import_batches` records
 - [ ] TASK-077 Import report page and downloadable failed-rows CSV; audit entry per batch
 - [ ] TASK-078 Downloadable templates (CSV and Excel) and in-app Google Form guide page
-- [ ] TASK-079 Applicants: manual add and import (reuse engine), list, status changes
-- [ ] TASK-080 Applicants: admit and convert to student (single and bulk), admission email
+- [x] TASK-079 Applicants: manual add and import (reuse engine), list, status changes
+- [x] TASK-080 Applicants: admit and convert to student (single and bulk), admission email
 - [ ] TASK-081 Auto-generate invoice for the current session when a student is created
   - Depends on invoice numbering from TASK-096. `StudentService::create` does not create an invoice. Call the invoice service from here only after TASK-096.
-- [ ] TASK-082 Onboarding tests: validation, duplicates, idempotent re-run, concurrent matric generation, Journey 1 browser smoke test
+  - Moved to TASK-096 (Phase 10).
+- [x] TASK-082 Onboarding tests: validation, duplicates, idempotent re-run, concurrent matric generation, Journey 1 browser smoke test
 
 ## Phase 8: Student portal core [PORTAL-1,2,8,9,10]
 
@@ -181,6 +182,7 @@
   - Phase 3 carry-over: at most one non-cancelled invoice per student per session.
   - Phase 3 carry-over: allocate the invoice number from `counters` inside the creating transaction.
   - TASK-081 waits on the invoice number allocated here. `StudentService::create` does not create an invoice until this numbering exists.
+  - Phase 7 carry-over: invoice generation must also run when a student is created or an applicant is converted, inside that same transaction. TASK-081 moved here. `StudentService::create` still does not create an invoice.
 - [ ] TASK-097 Adjustments: scholarship, discount, waiver with reason and audit
 - [ ] TASK-098 Student fees page and invoice detail
 - [ ] TASK-099 `PaymentGateway` interface (`initialize`, `verify`, `parseNotification`) and **Demo Gateway** (checkout page and signed event)

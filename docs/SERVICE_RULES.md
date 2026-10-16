@@ -26,7 +26,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules. Test: `it accepts only a degree from the closed list` |
 | 2 | What payment satisfies `require_minimum_payment` | TASK-094 | Optional "minimum payment before registration" setting |
 | 3 | `users.name` is set from the student's three name parts | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it builds the user name from the three name parts` |
-| 3 | On conversion, copy the applicant onto the new user and student | TASK-080 | Applicants: admit and convert to student (single and bulk), admission email |
+| 3 | On conversion, copy the applicant onto the new user and student | TASK-080 | Applicants: admit and convert to student (single and bulk), admission email. Test: `it copies an applicant onto one student and sends admission once from an earlier status` |
 | 3 | Reject an applicant email that already exists on `users` | TASK-075 | Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table |
 | 3 | Default a blank entry session to the current session | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it defaults a blank entry session to the current session` |
 | 3, 6 | Generate `matric_no` from `counters` with `lockForUpdate` | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it allocates the matric number from the counter for the pattern` |
