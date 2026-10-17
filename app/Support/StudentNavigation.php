@@ -5,25 +5,39 @@ declare(strict_types=1);
 namespace App\Support;
 
 /**
- * Placeholder destinations for the student shell.
+ * Student navigation shared by the sidebar and the bottom bar.
  *
- * Real routes arrive with the student portal. These items only label the chrome.
+ * Courses, Fees, and Results stay visible and disabled until those pages exist.
  */
 final class StudentNavigation
 {
     /**
-     * Primary student navigation, shared by the sidebar and the bottom bar.
+     * Primary student navigation.
      *
-     * @return list<array{id: string, label: string, icon: string}>
+     * A disabled item has no route. The bar always has five items.
+     *
+     * @return list<array{id: string, label: string, icon: string, route: ?string, enabled: bool}>
      */
     public static function items(): array
     {
         return [
-            ['id' => 'home', 'label' => 'Home', 'icon' => 'home'],
-            ['id' => 'courses', 'label' => 'Courses', 'icon' => 'book'],
-            ['id' => 'fees', 'label' => 'Fees', 'icon' => 'card'],
-            ['id' => 'results', 'label' => 'Results', 'icon' => 'file'],
-            ['id' => 'more', 'label' => 'More', 'icon' => 'more'],
+            ['id' => 'home', 'label' => 'Home', 'icon' => 'home', 'route' => 'student.home', 'enabled' => true],
+            ['id' => 'courses', 'label' => 'Courses', 'icon' => 'book', 'route' => null, 'enabled' => false],
+            ['id' => 'fees', 'label' => 'Fees', 'icon' => 'card', 'route' => null, 'enabled' => false],
+            ['id' => 'results', 'label' => 'Results', 'icon' => 'file', 'route' => null, 'enabled' => false],
+            ['id' => 'more', 'label' => 'More', 'icon' => 'more', 'route' => 'student.more', 'enabled' => true],
+        ];
+    }
+
+    /**
+     * Pages that exist, for More and the dashboard quick actions.
+     *
+     * @return list<array{label: string, route: string}>
+     */
+    public static function pages(): array
+    {
+        return [
+            ['label' => 'Notifications', 'route' => 'student.notifications'],
         ];
     }
 }

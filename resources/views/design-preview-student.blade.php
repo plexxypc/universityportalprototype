@@ -1,5 +1,9 @@
 @extends('layouts.student')
 
+@php
+    request()->attributes->set('design_preview_student', true);
+@endphp
+
 @section('title', 'Fees')
 
 @section('current', 'fees')

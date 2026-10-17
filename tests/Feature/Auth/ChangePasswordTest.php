@@ -163,7 +163,7 @@ it('changes a student password and keeps only this browser signed in', function 
 
     assert_password_change_keeps_this_browser($student->user, '/student');
 
-    test()->get('/student')->assertSee('Student portal');
+    test()->get('/student')->assertSee('CSC/2026/0001')->assertDontSee('Ada Okonkwo');
 });
 
 it('changes a staff password and keeps only this browser signed in', function () {

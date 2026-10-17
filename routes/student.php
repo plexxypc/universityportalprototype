@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\PingController;
+use App\Http\Controllers\Student\HomeController;
+use App\Http\Controllers\Student\MoreController;
 use App\Http\Controllers\Student\NotificationController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -16,7 +18,8 @@ Route::middleware([
     EnsurePasswordChanged::class,
     EnsurePortalArea::class.':student',
 ])->group(function (): void {
-    Route::view('/student', 'student.home')->name('student.home');
+    Route::get('/student', HomeController::class)->name('student.home');
+    Route::get('/student/more', MoreController::class)->name('student.more');
 
     Route::get('/student/notifications', [NotificationController::class, 'index'])
         ->name('student.notifications');
