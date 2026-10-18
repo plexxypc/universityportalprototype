@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Support\Audit;
+use App\Support\CurrentStudent;
 use App\Support\InstitutionLogo;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
@@ -52,6 +53,10 @@ class DocumentService
 
     public const string MESSAGE_FILE_GONE = 'This file is no longer stored.';
 
+    public const string MESSAGE_COUNT = 'You already have the maximum of 20 documents.';
+
+    public const string MESSAGE_TOTAL = 'Your documents already use the 50 MB limit.';
+
     public function __construct(
         private readonly Audit $audit,
         private readonly InstitutionLogo $images,
@@ -74,34 +79,44 @@ class DocumentService
         return DB::transaction(function () use ($actor, $student_id, $document_kind, $contents, $checked, $request): Document {
             $student = $this->lockedStudent($actor, $student_id);
             $this->limitUploads($actor);
-            $extension = $checked['extension'];
-            $path = 'documents/'.bin2hex(random_bytes(16)).'.'.$extension;
-            Storage::disk('local')->put($path, $contents);
 
-            $document = new Document;
-            $document->owner_type = DocumentOwner::Student;
-            $document->owner_id = (int) $student->getKey();
-            $document->kind = $document_kind->value;
-            $document->path = $path;
-            $document->mime = $checked['mime'];
-            $document->size = strlen($contents);
-            $document->save();
+            return $this->storeDocument($actor, $student, $document_kind, $contents, $checked, $request);
+        });
+    }
 
-            $this->audit->record(
-                $actor->id,
-                self::ACTION_UPLOADED,
-                'documents',
-                (int) $document->getKey(),
-                null,
-                [
-                    'kind' => $document->kind,
-                    'mime' => $document->mime,
-                    'size' => $document->size,
-                ],
-                $this->audit->ipFromRequest($request),
-            );
+    /**
+     * Store one sniffed document for the signed-in student.
+     *
+     * The student comes from the authenticated user. At most 20 files and
+     * 50 MB in total. The student cannot remove a file.
+     */
+    public function uploadOwn(
+        User $actor,
+        string $kind,
+        string $contents,
+        ?string $declared_mime,
+        Request $request,
+    ): Document {
+        $student = CurrentStudent::require();
 
-            return $document;
+        if ((int) $student->user_id !== (int) $actor->id) {
+            throw new AuthorizationException;
+        }
+
+        $document_kind = $this->kind($kind);
+        $checked = $this->inspect($contents, $declared_mime);
+
+        return DB::transaction(function () use ($actor, $student, $document_kind, $contents, $checked, $request): Document {
+            $locked = Student::query()->whereKey($student->getKey())->lockForUpdate()->first();
+
+            if (! $locked instanceof Student || (int) $locked->user_id !== (int) $actor->id) {
+                throw new AuthorizationException;
+            }
+
+            $this->limitUploads($actor);
+            $this->enforceOwnCaps($locked, strlen($contents));
+
+            return $this->storeDocument($actor, $locked, $document_kind, $contents, $checked, $request);
         });
     }
 
@@ -227,6 +242,88 @@ class DocumentService
         }
 
         RateLimiter::hit($key, 60);
+    }
+
+    /**
+     * Refuse a student upload that would pass 20 files or 50 MB.
+     */
+    private function enforceOwnCaps(Student $student, int $bytes): void
+    {
+        $rows = Document::query()
+            ->where('owner_type', DocumentOwner::Student)
+            ->where('owner_id', $student->getKey())
+            ->lockForUpdate()
+            ->get(['size']);
+        $max_count = (int) config('portal.uploads.document_max_count');
+        $max_total = (int) config('portal.uploads.document_max_total_kilobytes') * 1024;
+
+        if ($rows->count() >= $max_count) {
+            throw ValidationException::withMessages(['document' => self::MESSAGE_COUNT]);
+        }
+
+        $total = 0;
+
+        foreach ($rows as $row) {
+            $size = $row->getAttribute('size');
+
+            if (! is_int($size) && ! (is_string($size) && preg_match('/\A\d+\z/', $size) === 1)) {
+                throw ValidationException::withMessages(['document' => self::MESSAGE_TOTAL]);
+            }
+
+            $size = (int) $size;
+
+            if ($size < 0 || $total > $max_total - $size) {
+                throw ValidationException::withMessages(['document' => self::MESSAGE_TOTAL]);
+            }
+
+            $total += $size;
+        }
+
+        if ($bytes < 0 || $total > $max_total - $bytes) {
+            throw ValidationException::withMessages(['document' => self::MESSAGE_TOTAL]);
+        }
+    }
+
+    /**
+     * Write the file and the row. The caller holds the student lock.
+     *
+     * @param  array{extension: string, mime: string}  $checked
+     */
+    private function storeDocument(
+        User $actor,
+        Student $student,
+        DocumentKind $document_kind,
+        string $contents,
+        array $checked,
+        Request $request,
+    ): Document {
+        $path = 'documents/'.bin2hex(random_bytes(16)).'.'.$checked['extension'];
+        Storage::disk('local')->put($path, $contents);
+
+        $document = new Document;
+        $document->owner_type = DocumentOwner::Student;
+        $document->owner_id = (int) $student->getKey();
+        $document->kind = $document_kind->value;
+        $document->path = $path;
+        $document->mime = $checked['mime'];
+        $document->size = strlen($contents);
+        $document->save();
+
+        $this->audit->record(
+            $actor->id,
+            self::ACTION_UPLOADED,
+            'documents',
+            (int) $document->getKey(),
+            null,
+            [
+                'kind' => $document->kind,
+                'mime' => $document->mime,
+                'size' => $document->size,
+            ],
+            $this->audit->ipFromRequest($request),
+        );
+
+        return $document;
     }
 
     private function lockedStudent(User $actor, int $student_id): Student

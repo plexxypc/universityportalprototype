@@ -38,6 +38,7 @@ final class StudentNavigation
     {
         return [
             ['label' => 'Profile', 'route' => 'student.profile'],
+            ['label' => 'Documents', 'route' => 'student.documents'],
             ['label' => 'Notifications', 'route' => 'student.notifications'],
         ];
     }

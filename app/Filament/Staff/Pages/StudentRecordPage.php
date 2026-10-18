@@ -4,16 +4,19 @@ declare(strict_types=1);
 
 namespace App\Filament\Staff\Pages;
 
+use App\Enums\DocumentOwner;
 use App\Enums\Gender;
 use App\Enums\Role;
 use App\Enums\StudentStatus;
 use App\Models\AcademicSession;
 use App\Models\AuditLog;
+use App\Models\Document;
 use App\Models\Programme;
 use App\Models\Student;
 use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Services\CredentialService;
+use App\Services\DocumentService;
 use App\Services\StudentService;
 use App\Support\NigerianStates;
 use Filament\Actions\Action;
@@ -29,6 +32,7 @@ use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
@@ -100,7 +104,9 @@ class StudentRecordPage extends Page
                 Tab::make('Fees and payments')->schema([Text::make(self::MODULE_LATER)]),
                 Tab::make('Results')->schema([Text::make(self::MODULE_LATER)]),
                 Tab::make('Attendance')->schema([Text::make(self::MODULE_LATER)]),
-                Tab::make('Documents')->schema([Text::make(self::MODULE_LATER)]),
+                Tab::make('Documents')->schema([
+                    View::make('filament.staff.student-documents'),
+                ]),
                 Tab::make('Activity')->schema([
                     Text::make(fn (): string => $this->activityText()),
                 ]),
@@ -389,6 +395,52 @@ class StudentRecordPage extends Page
             fn (string $line): Text => Text::make($line),
             $lines,
         );
+    }
+
+    /**
+     * Documents on this student record. Download uses the existing route.
+     *
+     * @return list<array{id: int, kind: string, mime: string, url: string, can_remove: bool}>
+     */
+    public function documentRows(): array
+    {
+        $student = $this->student();
+        $can_remove = $this->canManage();
+
+        return Document::query()
+            ->visibleTo($this->actor())
+            ->where('owner_type', DocumentOwner::Student)
+            ->where('owner_id', $student->getKey())
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (Document $document): array => [
+                'id' => (int) $document->getKey(),
+                'kind' => (string) $document->kind,
+                'mime' => (string) $document->mime,
+                'url' => route('staff.downloads.document', $document),
+                'can_remove' => $can_remove,
+            ])
+            ->all();
+    }
+
+    /**
+     * Remove one document on this record. The Registrar and Super Admin may do this.
+     */
+    public function removeDocument(int $document_id): void
+    {
+        $document = Document::query()->visibleTo($this->actor())->whereKey($document_id)->first();
+
+        if (! $document instanceof Document
+            || $document->owner_type !== DocumentOwner::Student
+            || (int) $document->owner_id !== $this->student_id) {
+            abort(404);
+        }
+
+        $this->runStudentAction(function () use ($document_id): void {
+            app(DocumentService::class)->remove($this->actor(), $document_id, request());
+        });
+
+        Notification::make()->success()->title('Document removed.')->send();
     }
 
     private function student(): Student
