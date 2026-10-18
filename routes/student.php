@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\PingController;
+use App\Http\Controllers\Student\AnnouncementController;
 use App\Http\Controllers\Student\DocumentController;
 use App\Http\Controllers\Student\HomeController;
 use App\Http\Controllers\Student\MoreController;
@@ -28,6 +29,7 @@ Route::middleware([
     Route::get('/student/documents/{document}', DocumentDownloadController::class)
         ->whereNumber('document')
         ->name('student.documents.download');
+    Route::get('/student/announcements', AnnouncementController::class)->name('student.announcements');
 
     Route::get('/student/notifications', [NotificationController::class, 'index'])
         ->name('student.notifications');

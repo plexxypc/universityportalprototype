@@ -284,6 +284,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         'student.profile',
         'student.documents',
         'student.documents.download',
+        'student.announcements',
         'student.notifications',
         'student.notifications.read-all',
         'student.notifications.read',
