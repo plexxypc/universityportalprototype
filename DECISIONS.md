@@ -344,3 +344,17 @@
 **Reason:** The database stores decimals, and a float would move a boundary such as 69.50. Hundredths keep those edges exact. The two rounding rules are the ones the Registrar still has to confirm, so they stay provisional and the method signatures already have a place for a different mode.
 
 **Consequences:** TASK-059 implements the calculator. TASK-060 checks that a saved scheme matches these edges and versions the scheme. The default scheme is not inserted by a migration.
+
+## ADR-031: Registration notices
+
+**Status:** Accepted.
+
+**Decision:** ADR-029 listed the in-app notification types. Two types are added for course registration. No new email template is added.
+
+1. **Types.** `NotificationType` also allows `registration_submitted` and `registration_rejected`. `registration_confirmed` stays the approval notice.
+2. **Text.** Each notice stores only `title`, `message`, and `link`. The rejection reason stays on `course_registrations.rejection_reason`. It is not copied into the notification.
+3. **Email.** `registration_confirmed` is sent only when the registration becomes Approved, and only once for that transition. Submit and rejection do not send email.
+
+**Reason:** The existing confirmation email says the registration is confirmed. Sending it on submit would be false while approval is still required. The student still needs an in-app notice for submit and for rejection.
+
+**Consequences:** TASK-090 sends `registration_submitted` on submit when approval is required, and `registration_confirmed` plus the existing email when the row becomes Approved. TASK-091 sends `registration_rejected` on rejection.

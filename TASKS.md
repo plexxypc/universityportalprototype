@@ -170,6 +170,7 @@
 - [ ] TASK-089 Student course registration UI (core pre-selected, electives, live unit total, sticky summary)
 - [ ] TASK-090 Submit, status handling, confirmation email and notification
   - Phase 3 carry-over: copy `credit_units` onto the registration item when it is saved.
+  - Service part: `saveDraft` and `submit`. A repeat of the same courses writes nothing. The confirmation email is sent only when the row becomes Approved. The student page is Part B.
 - [ ] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
 - [ ] TASK-092 Add/drop within window; admin reopen for an individual student
 - [ ] TASK-093 Registration slip PDF

@@ -14,6 +14,7 @@ use App\Models\RoleAssignment;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\RegistrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -102,6 +103,34 @@ it('creates, lists, counts unread, and marks one read', function () {
         ->and($created->fresh()?->read_at)->not->toBeNull()
         ->and($service->unreadCount($owner))->toBe(0)
         ->and(AuditLog::query()->count())->toBe($before);
+});
+
+it('allows registration submitted and registration rejected', function () {
+    $owner = notification_student();
+    $submitted = app(NotificationService::class)->create($owner, NotificationType::RegistrationSubmitted->value, [
+        'title' => RegistrationService::NOTICE_SUBMITTED_TITLE,
+        'message' => RegistrationService::NOTICE_SUBMITTED_MESSAGE,
+        'link' => RegistrationService::NOTICE_LINK,
+    ]);
+    $rejected = app(NotificationService::class)->create($owner, NotificationType::RegistrationRejected->value, [
+        'title' => RegistrationService::NOTICE_REJECTED_TITLE,
+        'message' => RegistrationService::NOTICE_REJECTED_MESSAGE,
+        'link' => RegistrationService::NOTICE_LINK,
+    ]);
+
+    expect($submitted->type)->toBe(NotificationType::RegistrationSubmitted)
+        ->and($submitted->data)->toBe([
+            'title' => RegistrationService::NOTICE_SUBMITTED_TITLE,
+            'message' => RegistrationService::NOTICE_SUBMITTED_MESSAGE,
+            'link' => RegistrationService::NOTICE_LINK,
+        ])
+        ->and($rejected->type)->toBe(NotificationType::RegistrationRejected)
+        ->and($rejected->data)->toBe([
+            'title' => RegistrationService::NOTICE_REJECTED_TITLE,
+            'message' => RegistrationService::NOTICE_REJECTED_MESSAGE,
+            'link' => RegistrationService::NOTICE_LINK,
+        ])
+        ->and(array_key_exists('reason', $rejected->data ?? []))->toBeFalse();
 });
 
 it('refuses an unknown notification type', function () {

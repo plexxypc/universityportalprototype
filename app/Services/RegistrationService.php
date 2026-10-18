@@ -5,23 +5,35 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\CourseType;
+use App\Enums\EmailTemplate;
+use App\Enums\NotificationType;
+use App\Enums\RegistrationStatus;
 use App\Enums\ResultStatus;
 use App\Enums\StudentStatus;
 use App\Models\Course;
+use App\Models\CourseRegistration;
+use App\Models\CourseRegistrationItem;
 use App\Models\ProgrammeCourse;
 use App\Models\Result;
 use App\Models\Semester;
 use App\Models\Student;
+use App\Models\User;
+use App\Support\Audit;
 use App\Support\Dates;
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Course registration rules.
+ * Course registration rules, draft save, and submit.
  *
- * The student and the semester come from the caller. A later write copies
- * credit units and recomputes the total. This class does not take either
- * from a request.
+ * The student comes from the signed-in account. The semester is the active
+ * semester. Credit units are copied from the catalogue, and the total is
+ * the sum of those copies.
  */
 final class RegistrationService
 {
@@ -47,7 +59,34 @@ final class RegistrationService
 
     public const string MESSAGE_PAYMENT_UNAVAILABLE = 'This rule is not available yet. Turning it on blocks all registrations.';
 
-    public function __construct(private readonly SettingsService $settings) {}
+    public const string MESSAGE_TRANSITION = 'That registration cannot change in that way.';
+
+    public const string ACTION_SAVED = 'registration.saved';
+
+    public const string ACTION_SUBMITTED = 'registration.submitted';
+
+    public const string ACTION_REFUSED = 'registration.transition_refused';
+
+    public const string NOTICE_SUBMITTED_TITLE = 'Registration submitted';
+
+    public const string NOTICE_SUBMITTED_MESSAGE = 'Your course registration has been submitted.';
+
+    public const string NOTICE_CONFIRMED_TITLE = 'Registration confirmed';
+
+    public const string NOTICE_CONFIRMED_MESSAGE = 'Your course registration is confirmed.';
+
+    public const string NOTICE_REJECTED_TITLE = 'Registration not confirmed';
+
+    public const string NOTICE_REJECTED_MESSAGE = 'Your course registration was not confirmed.';
+
+    public const string NOTICE_LINK = '/student/course-registration';
+
+    public function __construct(
+        private readonly SettingsService $settings,
+        private readonly Audit $audit,
+        private readonly NotificationService $notifications,
+        private readonly MailService $mail,
+    ) {}
 
     /**
      * Whether the minimum-payment switch allows registration.
@@ -191,6 +230,34 @@ final class RegistrationService
             ]);
         }
 
+        $items = $this->selectedItems($assessment, $course_ids);
+
+        if ($enforce_units) {
+            $total = 0;
+
+            foreach ($items as $item) {
+                $total += $item['credit_units'];
+            }
+
+            $problem = $this->unitMessage($total, $assessment['core_units'], $assessment['min_units'], $assessment['max_units']);
+
+            if ($problem !== null) {
+                throw ValidationException::withMessages(['total_units' => $problem]);
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * Core courses plus the chosen electives. The window is not checked here.
+     *
+     * @param  array{courses: list<array{course_id: int, code: string, title: string, credit_units: int, type: string, locked: bool, prerequisites_met: bool}>}  $assessment
+     * @param  list<int>  $course_ids
+     * @return list<array{course_id: int, credit_units: int}>
+     */
+    private function selectedItems(array $assessment, array $course_ids): array
+    {
         $by_id = [];
 
         foreach ($assessment['courses'] as $course) {
@@ -215,30 +282,17 @@ final class RegistrationService
             $chosen[$id] = $by_id[$id];
         }
 
+        $items = [];
+
         foreach ($chosen as $course) {
             if (! $course['prerequisites_met']) {
                 throw ValidationException::withMessages(['course_id' => self::MESSAGE_PREREQUISITE]);
             }
-        }
 
-        $total = 0;
-        $items = [];
-
-        foreach ($chosen as $course) {
-            $units = $course['credit_units'];
-            $total += $units;
             $items[] = [
                 'course_id' => $course['course_id'],
-                'credit_units' => $units,
+                'credit_units' => $course['credit_units'],
             ];
-        }
-
-        if ($enforce_units) {
-            $problem = $this->unitMessage($total, $assessment['core_units'], $assessment['min_units'], $assessment['max_units']);
-
-            if ($problem !== null) {
-                throw ValidationException::withMessages(['total_units' => $problem]);
-            }
         }
 
         return $items;
@@ -265,11 +319,357 @@ final class RegistrationService
     }
 
     /**
+     * Save a draft. Limits are not enforced. A submitted or approved row cannot be edited here.
+     *
+     * @param  list<int>  $course_ids
+     */
+    public function saveDraft(User $actor, array $course_ids, Request $request): CourseRegistration
+    {
+        $this->assertCanSubmit($actor);
+
+        return $this->write($actor, $course_ids, $request, false);
+    }
+
+    /**
+     * Submit the registration. Limits are enforced. Approval off approves in this same transaction.
+     *
+     * @param  list<int>  $course_ids
+     */
+    public function submit(User $actor, array $course_ids, Request $request): CourseRegistration
+    {
+        $this->assertCanSubmit($actor);
+
+        return $this->write($actor, $course_ids, $request, true);
+    }
+
+    /**
      * Display sentence. The named instant is when the window closes.
      */
     public static function closesAt(string $label, mixed $instant): string
     {
         return $label.' closes at '.Dates::dateTime($instant).'.';
+    }
+
+    /**
+     * The signed-in student is the only account that may save or submit.
+     */
+    private function assertCanSubmit(User $actor): void
+    {
+        if (! Gate::forUser($actor)->allows('course_registration.submit') || ! $actor->student instanceof Student) {
+            throw new AuthorizationException;
+        }
+    }
+
+    /**
+     * Replace the items, or return the row unchanged when the submit is repeated.
+     *
+     * @param  list<int>  $course_ids
+     */
+    private function write(User $actor, array $course_ids, Request $request, bool $submitting): CourseRegistration
+    {
+        $student = $actor->student;
+
+        if (! $student instanceof Student) {
+            throw new AuthorizationException;
+        }
+
+        $refused = false;
+
+        $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request, $submitting, &$refused): CourseRegistration {
+            $semester = Semester::query()->active()->first();
+
+            if (! $semester instanceof Semester) {
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_NO_SEMESTER]);
+            }
+
+            $registration = $this->lockedRegistration($student, $semester);
+            $approval_required = (bool) $this->settings->effective()['approval_required'];
+            $target = $this->targetStatus($submitting, $approval_required);
+            $assessment = $this->assess($student);
+
+            if ($assessment['state'] === 'not_active') {
+                throw ValidationException::withMessages(['student' => self::MESSAGE_NOT_ACTIVE]);
+            }
+
+            $items = $this->selectedItems($assessment, $course_ids);
+            $resolved_ids = [];
+
+            foreach ($items as $item) {
+                $resolved_ids[] = $item['course_id'];
+            }
+
+            if ($registration instanceof CourseRegistration && $this->sameCourseIds($registration, $target, $resolved_ids)) {
+                return $registration;
+            }
+
+            if (! $assessment['can_start']) {
+                throw ValidationException::withMessages([
+                    'registration' => $assessment['message'] ?? self::MESSAGE_NO_DEADLINE,
+                ]);
+            }
+
+            if ($submitting) {
+                $checked_total = 0;
+
+                foreach ($items as $item) {
+                    $checked_total += $item['credit_units'];
+                }
+
+                $problem = $this->unitMessage(
+                    $checked_total,
+                    $assessment['core_units'],
+                    $assessment['min_units'],
+                    $assessment['max_units'],
+                );
+
+                if ($problem !== null) {
+                    throw ValidationException::withMessages(['total_units' => $problem]);
+                }
+            }
+
+            if (! $registration instanceof CourseRegistration) {
+                $registration = $this->newRegistration($student, $semester);
+            }
+
+            if ($this->sameCourseIds($registration, $target, $resolved_ids)) {
+                return $registration;
+            }
+
+            if (! $this->transitionAllowed($registration->status, $target)) {
+                $this->audit->record(
+                    (int) $actor->id,
+                    self::ACTION_REFUSED,
+                    'course_registrations',
+                    (int) $registration->getKey(),
+                    $this->snapshot($registration),
+                    [
+                        'student_id' => (int) $student->getKey(),
+                        'semester_id' => (int) $semester->getKey(),
+                        'status' => $target->value,
+                        'total_units' => (int) $registration->total_units,
+                    ],
+                    $this->audit->ipFromRequest($request),
+                );
+                $refused = true;
+
+                return $registration;
+            }
+
+            $before = $registration->wasRecentlyCreated ? null : $this->snapshot($registration);
+            $total_units = 0;
+
+            foreach ($items as $item) {
+                $total_units += $item['credit_units'];
+            }
+
+            $this->replaceItems($registration, $items);
+            $registration->status = $target;
+            $registration->total_units = $total_units;
+            $registration->submitted_at = $submitting ? now() : $registration->submitted_at;
+            $registration->decided_at = $target === RegistrationStatus::Approved ? now() : null;
+            $registration->decided_by = null;
+            $registration->rejection_reason = null;
+            $registration->save();
+
+            /** @var array<string, bool|int|string> $after */
+            $after = $this->snapshot($registration);
+
+            if ($submitting && ! $approval_required) {
+                $after['auto_approved'] = true;
+            }
+
+            $this->audit->record(
+                (int) $actor->id,
+                $submitting ? self::ACTION_SUBMITTED : self::ACTION_SAVED,
+                'course_registrations',
+                (int) $registration->getKey(),
+                $before,
+                $after,
+                $this->audit->ipFromRequest($request),
+            );
+
+            if ($submitting && $target === RegistrationStatus::Submitted) {
+                $this->notifications->create($actor, NotificationType::RegistrationSubmitted->value, [
+                    'title' => self::NOTICE_SUBMITTED_TITLE,
+                    'message' => self::NOTICE_SUBMITTED_MESSAGE,
+                    'link' => self::NOTICE_LINK,
+                ]);
+            }
+
+            if ($target === RegistrationStatus::Approved) {
+                $this->notifyApproved($actor, $registration, $semester);
+            }
+
+            return $registration;
+        });
+
+        if ($refused) {
+            throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
+        }
+
+        return $registration;
+    }
+
+    /**
+     * In-app confirmation and one email. The email template is the approved wording.
+     */
+    private function notifyApproved(User $actor, CourseRegistration $registration, Semester $semester): void
+    {
+        $this->notifications->create($actor, NotificationType::RegistrationConfirmed->value, [
+            'title' => self::NOTICE_CONFIRMED_TITLE,
+            'message' => self::NOTICE_CONFIRMED_MESSAGE,
+            'link' => self::NOTICE_LINK,
+        ]);
+
+        $semester->loadMissing('academicSession');
+        $email = $actor->email;
+
+        if ($email === '') {
+            return;
+        }
+
+        $this->mail->send(
+            EmailTemplate::RegistrationConfirmed->value,
+            $email,
+            [
+                'name' => (string) $actor->name,
+                'session_name' => (string) $semester->academicSession?->name,
+                'semester_name' => (string) $semester->name,
+                'total_units' => (int) $registration->total_units,
+            ],
+            (int) $actor->getKey(),
+            'course_registrations',
+            (int) $registration->getKey(),
+        );
+    }
+
+    /**
+     * The row for this student and semester, locked, or null when it does not exist yet.
+     */
+    private function lockedRegistration(Student $student, Semester $semester): ?CourseRegistration
+    {
+        return CourseRegistration::query()
+            ->where('student_id', $student->getKey())
+            ->where('semester_id', $semester->getKey())
+            ->lockForUpdate()
+            ->first();
+    }
+
+    /**
+     * Insert the row. A concurrent insert is re-read under the same lock.
+     */
+    private function newRegistration(Student $student, Semester $semester): CourseRegistration
+    {
+        $registration = new CourseRegistration;
+        $registration->student_id = $student->getKey();
+        $registration->semester_id = $semester->getKey();
+        $registration->status = RegistrationStatus::Draft;
+        $registration->total_units = 0;
+
+        try {
+            $registration->save();
+        } catch (UniqueConstraintViolationException) {
+            $existing = $this->lockedRegistration($student, $semester);
+
+            if (! $existing instanceof CourseRegistration) {
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
+            }
+
+            return $existing;
+        }
+
+        return $registration;
+    }
+
+    /**
+     * @param  list<array{course_id: int, credit_units: int}>  $items
+     */
+    private function replaceItems(CourseRegistration $registration, array $items): void
+    {
+        CourseRegistrationItem::query()
+            ->where('course_registration_id', $registration->getKey())
+            ->delete();
+
+        foreach ($items as $item) {
+            $row = new CourseRegistrationItem;
+            $row->course_registration_id = $registration->getKey();
+            $row->course_id = $item['course_id'];
+            $row->credit_units = $item['credit_units'];
+            $row->save();
+        }
+    }
+
+    /**
+     * True when this row is already in the target status with these course ids.
+     *
+     * Credit units are not compared. A repeat does not copy a later catalogue change.
+     *
+     * @param  list<int>  $course_ids
+     */
+    private function sameCourseIds(CourseRegistration $registration, RegistrationStatus $target, array $course_ids): bool
+    {
+        if ($registration->status !== $target) {
+            return false;
+        }
+
+        $stored = [];
+
+        foreach ($registration->items()->get() as $item) {
+            $stored[] = (int) $item->course_id;
+        }
+
+        $incoming = [];
+
+        foreach ($course_ids as $course_id) {
+            $incoming[] = (int) $course_id;
+        }
+
+        sort($stored);
+        sort($incoming);
+
+        return $stored === $incoming;
+    }
+
+    private function targetStatus(bool $submitting, bool $approval_required): RegistrationStatus
+    {
+        if (! $submitting) {
+            return RegistrationStatus::Draft;
+        }
+
+        if ($approval_required) {
+            return RegistrationStatus::Submitted;
+        }
+
+        return RegistrationStatus::Approved;
+    }
+
+    /**
+     * Draft and rejected rows can be saved or submitted. Submitted and approved cannot.
+     */
+    private function transitionAllowed(RegistrationStatus $from, RegistrationStatus $to): bool
+    {
+        if ($from === RegistrationStatus::Draft || $from === RegistrationStatus::Rejected) {
+            return $to === RegistrationStatus::Draft
+                || $to === RegistrationStatus::Submitted
+                || $to === RegistrationStatus::Approved;
+        }
+
+        return false;
+    }
+
+    /**
+     * Ids, status, and unit total. Reasons and names stay off the audit row.
+     *
+     * @return array{student_id: int, semester_id: int, status: string, total_units: int}
+     */
+    private function snapshot(CourseRegistration $registration): array
+    {
+        return [
+            'student_id' => (int) $registration->student_id,
+            'semester_id' => (int) $registration->semester_id,
+            'status' => $registration->status->value,
+            'total_units' => (int) $registration->total_units,
+        ];
     }
 
     /**
