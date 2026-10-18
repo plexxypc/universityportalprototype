@@ -3,11 +3,21 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Sunday, 18 October 2026 (phase 8 student portal)
+**Last updated:** Sunday, 18 October 2026 (phase 8 wrap-up)
 
-Phase 8 student portal work is committed on `phase-8-student-portal` and has not been pushed. TASK-083 is `5e98964`, TASK-084 is `a6cc564`, TASK-085 is `0aebdb6`, TASK-086 is `4c110de`, and TASK-087 is `c93719d`. TASK-083 through TASK-087 are ticked. The announcements page is an empty state and does not query `announcements`. A browser check on 18 October 2026 used `127.0.0.1` / `university_portal_testing` only.
+Phase 8 student portal core is on `phase-8-student-portal` and is not yet merged. TASK-083 is `5e98964`, TASK-084 is `a6cc564`, TASK-085 is `0aebdb6`, TASK-086 is `4c110de`, and TASK-087 is `c93719d`. TASK-083 through TASK-087 are ticked. The portal-rules note is `5e74e7f`. The tick commit is `f220d3d`. A browser check on 18 October 2026 used `127.0.0.1` / `university_portal_testing` only.
 
+The student pages are Home (the dashboard) at `/student`, More at `/student/more`, Profile, Documents, Notifications, Announcements, and Account settings. The signed-in student comes from `app/Support/CurrentStudent.php`.
 
+A student may edit their own phone, address, and the phone and email of guardians who already exist. Names, email, matric number, programme, level, date of birth, gender, state of origin, and a guardian's name or relationship stay as staff recorded them. Phone numbers go through `App\Support\Phone` and are stored as `+234`.
+
+A student uploads and downloads only their own files. The file is sniffed as PDF, JPEG, or PNG, at most 5 MB. An image must decode and be at most 2000 by 2000 pixels. Stored names are random. Uploads are limited to 10 per minute. Files sit on the private local disk. A student may hold at most 20 documents and 50 MB in total. Those caps are in `config/portal.php` and there is no environment variable for them. A student cannot delete a document. Registrar and Super Admin can list, download, and remove documents on the staff student-record Documents tab. A download returns the same 404 for another student's document id and for a missing id. The local disk is ephemeral (ADR-021).
+
+The notifications page already existed and is wired in the navigation. Mark-read is owner-only. The announcements page is an empty state and does not query `announcements`. That display waits on the Phase 8 carry-over notes under TASK-139 and TASK-141.
+
+On 18 October 2026, the phase 8 wrap-up `composer check` passed against `127.0.0.1` / `university_portal_testing`. `phpunit.xml` forces `DB_HOST=127.0.0.1` and `DB_DATABASE=university_portal_testing`. Pint passed. Larastan reported 0 errors. Pest passed **990 tests**, **985 passed**, **5 skipped**, and **5664 assertions** in **794 seconds**.
+
+The live Aiven database has the Phase 3 migrations, through `2026_10_09_230007_create_audit_logs_table`. Three later migrations are in this repository and are not on the live database. `2026_10_10_191500_add_secrets_to_email_outbox_table` is the Phase 5 secrets migration. It is applied on local `university_portal` and is not on live. `2026_10_12_120000_create_academic_standing_thresholds_table` is the Phase 6 standing-thresholds migration. It is applied on local `university_portal` and on `university_portal_testing`, and it is not on live. `2026_10_15_030000_add_related_to_email_outbox_table` is the Phase 7 outbox related-columns migration. It is applied on local `university_portal` and is not on live. Phase 8 adds no migration. `docs/DEPLOYMENT.md` still says to set `RUN_MIGRATIONS=true` for the one deploy that applies pending migrations, then set it back to `false`.
 
 On 16 October 2026, `2026_10_15_030000_add_related_to_email_outbox_table` was the only pending migration on local `127.0.0.1` / `university_portal` and was applied. `email_outbox.related_type` (`varchar(64)`, nullable) and `related_id` (`bigint unsigned`, nullable) are indexed together with `template` as `email_outbox_related_type_related_id_template_index`. The 11 existing rows (ids 1–11) kept their previous values, and both new columns are null. This migration has not been applied on the live database.
 
@@ -15,6 +25,8 @@ On 14 October 2026 the full Pest suite on this machine, against `127.0.0.1` / `u
 **Demo date:** Wednesday, 07 October 2026 
 
 ## Current Status
+
+Phase 8 student portal core is on `phase-8-student-portal` and is not yet merged. The wrap-up check on 18 October 2026 passed **990 tests**, **985 passed**, **5 skipped**, and **5664 assertions**.
 
 Phase 6 Part B is committed on `phase-6-setup`. TASK-054 through TASK-063 are done in git and ticked in TASKS.md. ADR-030 is provisional. The standing-threshold migration is applied on local `127.0.0.1` / `university_portal` and on `university_portal_testing`. It is not applied on the live database. The default grading scheme is not inserted by that migration. On 12 October 2026, `composer check` before TASK-062 passed against `127.0.0.1` / `university_portal_testing`: Pint passed, Larastan reported 0 errors, Pest passed **714 tests**, **712 passed**, **2 skipped**, and **4030 assertions**. The acceptance checks after TASK-063 add the forged-id, role, scheme, fee, GPA, logo, and navigation tests. `composer check` on the same database then passed **721 tests**, **719 passed**, **2 skipped**, and **4166 assertions**. The first run stopped at the 128MB limit inside `SecretHuntTest`. The completed run used a 512MB process limit. TASK-054 through TASK-063 are ticked.
 
@@ -233,6 +245,8 @@ Still open from Phase 0: TASK-002 (DigitalOcean account; the owner said not to p
 
 ## Known issues
 
+On this Windows machine the full suite can be much slower than CI (about 2 minutes). The last successful `composer check` before this wrap-up was 990 tests, 985 passed, 5 skipped, and 5664 assertions, about 11 minutes, on 18 October 2026 against `127.0.0.1` / `university_portal_testing`. The live Aiven database is missing `2026_10_10_191500_add_secrets_to_email_outbox_table`, `2026_10_12_120000_create_academic_standing_thresholds_table`, and `2026_10_15_030000_add_related_to_email_outbox_table`. ADR-030 stays provisional. A graduated student is mapped to a deactivated user, and whether a graduate should still sign in remains an open question for the Registrar.
+
 On this Windows machine the WinGet PHP 8.5 CLI has empty `curl.cainfo` and `openssl.cafile`. A public Google Sheet download then fails before any row is stored, and the safe log line is `sheet_fetch_failed category=tls hop=1 curl_errno=60`. Certificate verification stays on. The fix is to point both settings at a CA bundle (the file from `https://curl.se/ca/cacert.pem`) and restart PHP. Those two settings are still empty in this CLI, so the same probe would still fail until they are set. The Docker image already installs `ca-certificates` and does not need a change. Do not turn verification off.
 
 ## Open questions
@@ -302,7 +316,7 @@ Graduated students currently cannot sign in. Confirm with the Registrar whether 
 
 ## Next Step
 
-Phase 6 setup tasks TASK-054 through TASK-063 are committed on `phase-6-setup` and ticked in TASKS.md. ADR-030 stays provisional until the Registrar confirms the two rounding notes. Do not treat the live site as having the secrets column or a working mailbox. Run migrations only against local Docker MySQL (`127.0.0.1`, `university_portal` / `university_portal_testing`). The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
+Phase 9 is course registration. Branch it from the updated `main`. Do not start Phase 9 from this wrap-up. ADR-030 stays provisional until the Registrar confirms the two rounding notes. Do not treat the live site as having the secrets column, the standing-thresholds table, the outbox related columns, or a working mailbox. Run migrations only against local Docker MySQL (`127.0.0.1`, `university_portal` / `university_portal_testing`). The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
 
 ## Session Log
 
@@ -352,3 +366,4 @@ Phase 6 setup tasks TASK-054 through TASK-063 are committed on `phase-6-setup` a
 | 12 Oct 2026 | Phase 6 Part B. Prerequisite cycles are refused. Grading, the standing-threshold table, the preview, and fee categories and prices are committed. The standing migration ran on local `university_portal` at `127.0.0.1`. TASKS.md is not ticked. Not pushed. |
 | 12 Oct 2026 | Phase 6 acceptance checks. No feature code changed. `composer check` on `127.0.0.1` / `university_portal_testing` passed (721 tests, 719 passed, 2 skipped, 4166 assertions) at a 512MB process limit. `npm run build` succeeded. TASK-054 through TASK-063 are ticked. `phase-6-setup` is pushed. |
 | 12 Oct 2026 | CI failed because `SetupNavigationTest` refreshes the application and the staff layout then reads the missing Vite manifest. `Tests\TestCase` now skips Vite on every new application. With `public/build` moved aside, Pest passed (721 tests, 719 passed, 2 skipped, 4166 assertions). Not pushed. |
+| 18 Oct 2026 | Phase 8 wrap-up on `phase-8-student-portal`. TASK-083 through TASK-087 are ticked and match the feature commits. No application code changed. `composer check` on `127.0.0.1` / `university_portal_testing` passed (990 tests, 985 passed, 5 skipped, 5664 assertions, Pest 794 seconds). The live database is still missing the secrets, standing-thresholds, and outbox related-columns migrations. Phase 9 has not been started. |
