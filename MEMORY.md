@@ -3,7 +3,11 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Friday, 16 October 2026 (local outbox related columns)
+**Last updated:** Sunday, 18 October 2026 (phase 8 student portal)
+
+Phase 8 student portal work is committed on `phase-8-student-portal` and has not been pushed. TASK-083 is `5e98964`, TASK-084 is `a6cc564`, TASK-085 is `0aebdb6`, TASK-086 is `4c110de`, and TASK-087 is `c93719d`. TASKS.md is not ticked. The announcements page is an empty state and does not query `announcements`. A browser check on 18 October 2026 used `127.0.0.1` / `university_portal_testing` only.
+
+
 
 On 16 October 2026, `2026_10_15_030000_add_related_to_email_outbox_table` was the only pending migration on local `127.0.0.1` / `university_portal` and was applied. `email_outbox.related_type` (`varchar(64)`, nullable) and `related_id` (`bigint unsigned`, nullable) are indexed together with `template` as `email_outbox_related_type_related_id_template_index`. The 11 existing rows (ids 1–11) kept their previous values, and both new columns are null. This migration has not been applied on the live database.
 
