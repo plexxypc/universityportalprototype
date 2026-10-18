@@ -233,8 +233,12 @@ it('shows a friendly message when the session has ended', function () {
 it('tells the browser not to store a private page', function () {
     $student = logout_student();
 
-    $this->actingAs($student->user)
-        ->get('/student')
-        ->assertOk()
-        ->assertHeader('Cache-Control', 'no-store, private');
+    $response = $this->actingAs($student->user)->get('/student');
+    $cache = (string) $response->headers->get('Cache-Control');
+
+    $response->assertOk();
+
+    expect(str_contains($cache, 'no-store'))->toBeTrue()
+        ->and(str_contains($cache, 'private'))->toBeTrue()
+        ->and(str_contains($cache, 'public'))->toBeFalse();
 });

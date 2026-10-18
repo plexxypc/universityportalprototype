@@ -1,12 +1,9 @@
 @extends('layouts.student')
 
-@section('title', 'Student portal')
+@section('title', 'Home')
 
 @section('current', 'home')
 
 @section('content')
-    <x-page-header
-        title="Student portal"
-        description="Your courses, fees, and results will appear here."
-    />
+    <livewire:student.dashboard />
 @endsection

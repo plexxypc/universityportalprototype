@@ -294,7 +294,7 @@ it('redirects each signed-in user to their own area', function () {
     $staff_response->assertDontSee('Student portal');
 
     $this->actingAs($both)->get('/staff')->assertOk();
-    $this->actingAs($both)->get('/student')->assertOk()->assertSee('Student portal');
+    $this->actingAs($both)->get('/student')->assertOk()->assertSee('CSC/2026/0099')->assertDontSee('Ada Okonkwo');
 });
 
 it('signs out a user with no role from both areas', function () {

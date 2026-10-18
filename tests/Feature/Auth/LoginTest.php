@@ -101,7 +101,7 @@ it('signs a student in with a matric number', function () {
         ->assertRedirect('/student');
 
     $this->assertAuthenticated();
-    $this->get('/student')->assertOk()->assertSee('Student portal');
+    $this->get('/student')->assertOk()->assertSee('CSC/2026/0001')->assertDontSee('Ada Okonkwo');
 });
 
 it('accepts a matric number with different case and spacing', function () {

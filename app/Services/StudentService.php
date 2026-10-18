@@ -18,6 +18,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Support\Audit;
+use App\Support\CurrentStudent;
 use App\Support\MatricPattern;
 use App\Support\NigerianStates;
 use App\Support\PersonalAudit;
@@ -25,9 +26,11 @@ use App\Support\Phone;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -50,6 +53,12 @@ class StudentService
     public const string ACTION_PROMOTED = 'students.promoted';
 
     public const string ACTION_GUARDIANS = 'guardians.saved';
+
+    public const string ACTION_CONTACT = 'students.contact_updated';
+
+    public const int CONTACT_SAVES_PER_MINUTE = 10;
+
+    public const string MESSAGE_CONTACT_RATE = 'Too many saves. Wait a minute and try again.';
 
     public const string MESSAGE_HAS_DOCUMENTS = 'Remove this student\'s documents before deleting the student.';
 
@@ -399,6 +408,101 @@ class StudentService
                 );
             }
         });
+    }
+
+    /**
+     * Let the signed-in student change phone, address, and guardian contact.
+     *
+     * The student comes from the authenticated user. Any other key in the
+     * input is ignored. A guardian id that is not theirs is the same 404 as
+     * a missing id. The audit row stores changed field names only.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    public function updateOwnContact(User $actor, array $input, Request $request): void
+    {
+        $student = CurrentStudent::require();
+
+        if ((int) $student->user_id !== (int) $actor->id
+            || ! app(StudentPolicy::class)->updateOwnContact($actor, $student)) {
+            throw new AuthorizationException;
+        }
+
+        $limit_key = 'student-contact-save:'.$actor->id;
+
+        if (RateLimiter::tooManyAttempts($limit_key, self::CONTACT_SAVES_PER_MINUTE)) {
+            throw ValidationException::withMessages(['phone' => self::MESSAGE_CONTACT_RATE]);
+        }
+
+        $phone = $this->phone($input['phone'] ?? null);
+        $address = $this->address($input['address'] ?? null);
+        $guardian_input = $input['guardians'] ?? [];
+
+        if (! is_array($guardian_input)) {
+            throw (new ModelNotFoundException)->setModel(Guardian::class);
+        }
+
+        DB::transaction(function () use ($actor, $student, $phone, $address, $guardian_input, $request): void {
+            $locked = Student::query()->whereKey($student->getKey())->lockForUpdate()->first();
+            $user = User::query()->whereKey($actor->id)->lockForUpdate()->first();
+
+            if (! $locked instanceof Student || ! $user instanceof User || (int) $locked->user_id !== (int) $user->id) {
+                throw new AuthorizationException;
+            }
+
+            $guardians = Guardian::query()
+                ->where('student_id', $locked->getKey())
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $before = $this->contactSnapshot($user, $locked, $guardians);
+            $by_id = $guardians->keyBy(fn (Guardian $guardian): int => (int) $guardian->getKey());
+
+            foreach ($guardian_input as $row) {
+                if (! is_array($row) || ! array_key_exists('id', $row)) {
+                    throw (new ModelNotFoundException)->setModel(Guardian::class);
+                }
+
+                $guardian_id = $row['id'];
+
+                if (is_string($guardian_id) && preg_match('/\A[1-9]\d*\z/', $guardian_id) === 1) {
+                    $guardian_id = (int) $guardian_id;
+                }
+
+                if (! is_int($guardian_id) || ! $by_id->get($guardian_id) instanceof Guardian) {
+                    throw (new ModelNotFoundException)->setModel(Guardian::class, [$row['id']]);
+                }
+
+                $guardian = $by_id->get($guardian_id);
+                $guardian->phone = $this->phone($row['phone'] ?? null);
+                $guardian->email = $this->optionalEmail($row['email'] ?? null);
+                $guardian->save();
+            }
+
+            $user->phone = $phone;
+            $user->save();
+            $locked->address = $address;
+            $locked->save();
+
+            $after = $this->contactSnapshot($user, $locked, $guardians);
+            $diff = PersonalAudit::diff($before, $after, ['phone', 'address', 'guardian_phone', 'guardian_email'], []);
+
+            if ($diff['before'] === [] && $diff['after'] === []) {
+                return;
+            }
+
+            $this->audit->record(
+                $actor->id,
+                self::ACTION_CONTACT,
+                'students',
+                (int) $locked->getKey(),
+                $diff['before'],
+                $diff['after'],
+                $this->audit->ipFromRequest($request),
+            );
+        });
+
+        RateLimiter::hit($limit_key, 60);
     }
 
     /**
@@ -1313,6 +1417,50 @@ class StudentService
         }
 
         return $email;
+    }
+
+    /**
+     * A guardian email, or null when the field is blank.
+     */
+    private function optionalEmail(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (! is_string($value)) {
+            throw ValidationException::withMessages(['email' => self::MESSAGE_EMAIL]);
+        }
+
+        $email = trim($value);
+
+        if ($email === '') {
+            return null;
+        }
+
+        if (strlen($email) > 255 || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            throw ValidationException::withMessages(['email' => self::MESSAGE_EMAIL]);
+        }
+
+        return $email;
+    }
+
+    /**
+     * Contact values used only to decide which field names changed.
+     *
+     * @param  Collection<int, Guardian>  $guardians
+     * @return array{phone: ?string, address: ?string, guardian_phone: string, guardian_email: string}
+     */
+    private function contactSnapshot(User $user, Student $student, Collection $guardians): array
+    {
+        $ordered = $guardians->sortBy(fn (Guardian $guardian): int => (int) $guardian->getKey())->values();
+
+        return [
+            'phone' => $user->phone,
+            'address' => $student->address,
+            'guardian_phone' => $ordered->map(fn (Guardian $guardian): string => (string) $guardian->phone)->implode('|'),
+            'guardian_email' => $ordered->map(fn (Guardian $guardian): string => (string) $guardian->email)->implode('|'),
+        ];
     }
 
     private function phone(mixed $value): ?string

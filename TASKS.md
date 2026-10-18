@@ -158,11 +158,11 @@
 
 ## Phase 8: Student portal core [PORTAL-1,2,8,9,10]
 
-- [ ] TASK-083 Student dashboard (registration status, fees due, quick actions)
-- [ ] TASK-084 Student profile page with limited self-edit
-- [ ] TASK-085 Student documents page (view/upload own)
-- [ ] TASK-086 Notifications page and announcements list
-- [ ] TASK-087 Account settings page (change password)
+- [x] TASK-083 Student dashboard (registration status, fees due, quick actions)
+- [x] TASK-084 Student profile page with limited self-edit
+- [x] TASK-085 Student documents page (view/upload own)
+- [x] TASK-086 Notifications page and announcements list
+- [x] TASK-087 Account settings page (change password)
 
 ## Phase 9: Course registration [REG-1..10]
 
@@ -264,8 +264,10 @@
 - [ ] TASK-139 `AnnouncementService` with audience targeting (all, faculty, department, programme, level)
   - Phase 3 carry-over: publishing an announcement creates the notification and, when `send_email` is true, the outbox row.
   - Phase 5 carry-over: announcements to many students need a bulk createForMany notification method.
+  - Phase 8 carry-over: the TASK-086 announcements page is an empty state and does not query announcements. When audience matching exists, that page must show only announcements that match the signed-in student.
 - [ ] TASK-140 Compose and list UI with optional email
 - [ ] TASK-141 Student announcement display and notifications
+  - Phase 8 carry-over: the TASK-086 announcements page is an empty state and does not query announcements. When audience matching exists, that page must show only announcements that match the signed-in student.
 - [ ] TASK-142 Announcement tests (targeting, scoped authors)
 
 ## Phase 16: Dashboards and reports [RPT, dashboards]

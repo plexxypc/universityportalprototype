@@ -11,6 +11,7 @@ use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * In-app notifications stored in the portal notifications table.
@@ -80,6 +81,21 @@ final class NotificationService
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->simplePaginate(self::PER_PAGE);
+    }
+
+    /**
+     * The newest notifications for this account.
+     *
+     * @return Collection<int, Notification>
+     */
+    public function latestFor(User $user, int $limit = 3): Collection
+    {
+        return Notification::query()
+            ->visibleTo($user)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
     }
 
     /**

@@ -128,7 +128,7 @@ it('walks journey 1 from import through a forced password change and a resend af
     expect($changed->status())->toBe(302)
         ->and(str_ends_with($changed_location, '/student'))->toBeTrue();
 
-    $this->get('/student')->assertOk()->assertSee('Student portal');
+    $this->get('/student')->assertOk()->assertSee($student->matric_no)->assertDontSee('Ada Okonkwo');
 
     app(CredentialService::class)->resend($actor, $account->fresh() ?? $account, $student->matric_no, Request::create('/staff/students', 'POST'), true);
     $account->refresh();

@@ -37,6 +37,8 @@ return [
 
     'uploads' => [
         'document_max_kilobytes' => 5120,
+        'document_max_count' => 20,
+        'document_max_total_kilobytes' => 51200,
         'logo_max_kilobytes' => 1024,
         'import_max_kilobytes' => 5120,
         'import_max_rows' => 5000,

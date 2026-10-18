@@ -96,3 +96,6 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 6 | Secrets are removed from audit `before` and `after` | TASK-046 | `AuditService` and audit helper used by every service. Test: `it removes nested secrets and leaves the original arrays unchanged` |
 | 6 | Only a Super Admin reads audit logs | TASK-149 | Audit log viewer: filter by actor, entity, action, date; export |
 | 6 | Database-level append-only protection for `audit_logs` | Phase 19 intro (no task id) | Revisit database-level protection once the production host is chosen |
+| 8 | A student changes only their own phone, address, and an existing guardian's phone and email | TASK-084 | Student profile page with limited self-edit. Test: `a student can change phone address and guardian contact` |
+| 8 | A student may store at most 20 documents and 50 MB in total | TASK-085 | Student documents page (view/upload own). Test: `the document count and total size caps are refused` |
+| 8 | The student announcements page does not read announcements until audience matching exists | TASK-086 | Notifications page and announcements list. Test: `the announcements page is an empty state and does not read announcements` |

@@ -368,16 +368,27 @@ it('shows the authenticated user unread count in both layouts', function () {
     Notification::factory()->count(2)->create(['user_id' => $student->id]);
     Notification::factory()->count(4)->create(['user_id' => $staff->id]);
 
-    $student_page = $this->actingAs($student)->get('/student');
-    $staff_page = $this->actingAs($staff)->get('/staff');
+    $record = Student::query()->where('user_id', $student->id)->firstOrFail();
+    $record->forceFill([
+        'first_name' => 'Chioma',
+        'last_name' => 'Adeyemi',
+        'matric_no' => 'MTH/2024/0142',
+    ])->save();
 
+    $staff_page = $this->actingAs($staff)->get('/staff');
+    $student_page = $this->actingAs($student)->get('/student');
     $student_page->assertOk();
     $staff_page->assertOk();
 
-    expect(str_contains((string) $student_page->getContent(), 'Notifications, 2 unread'))->toBeTrue()
-        ->and(str_contains((string) $student_page->getContent(), 'data-bell="live"'))->toBeTrue()
-        ->and(str_contains((string) $student_page->getContent(), 'data-bell="preview"'))->toBeFalse()
-        ->and(str_contains((string) $student_page->getContent(), 'Ada Okonkwo'))->toBeTrue()
+    $student_html = (string) $student_page->getContent();
+
+    expect(str_contains($student_html, 'Notifications, 2 unread'))->toBeTrue()
+        ->and(str_contains($student_html, 'data-bell="live"'))->toBeTrue()
+        ->and(str_contains($student_html, 'data-bell="preview"'))->toBeFalse()
+        ->and(str_contains($student_html, 'Chioma'))->toBeTrue()
+        ->and(str_contains($student_html, $record->matric_no))->toBeTrue()
+        ->and(str_contains($student_html, 'Ada Okonkwo'))->toBeFalse()
+        ->and(str_contains($student_html, 'CSC/2026/001'))->toBeFalse()
         ->and(str_contains((string) $staff_page->getContent(), 'Notifications, 4 unread'))->toBeTrue()
         ->and(str_contains((string) $staff_page->getContent(), 'data-bell="preview"'))->toBeFalse();
 });
