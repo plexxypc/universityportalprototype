@@ -5,7 +5,7 @@
 
 **Last updated:** Sunday, 18 October 2026 (phase 8 student portal)
 
-Phase 8 student portal work is committed on `phase-8-student-portal` and has not been pushed. TASK-083 is `5e98964`, TASK-084 is `a6cc564`, TASK-085 is `0aebdb6`, TASK-086 is `4c110de`, and TASK-087 is `c93719d`. TASKS.md is not ticked. The announcements page is an empty state and does not query `announcements`. A browser check on 18 October 2026 used `127.0.0.1` / `university_portal_testing` only.
+Phase 8 student portal work is committed on `phase-8-student-portal` and has not been pushed. TASK-083 is `5e98964`, TASK-084 is `a6cc564`, TASK-085 is `0aebdb6`, TASK-086 is `4c110de`, and TASK-087 is `c93719d`. TASK-083 through TASK-087 are ticked. The announcements page is an empty state and does not query `announcements`. A browser check on 18 October 2026 used `127.0.0.1` / `university_portal_testing` only.
 
 
 
