@@ -40,6 +40,7 @@ final class StudentNavigation
             ['label' => 'Profile', 'route' => 'student.profile'],
             ['label' => 'Documents', 'route' => 'student.documents'],
             ['label' => 'Announcements', 'route' => 'student.announcements'],
+            ['label' => 'Account settings', 'route' => 'student.settings'],
             ['label' => 'Notifications', 'route' => 'student.notifications'],
         ];
     }

@@ -10,6 +10,7 @@ use App\Http\Controllers\Student\HomeController;
 use App\Http\Controllers\Student\MoreController;
 use App\Http\Controllers\Student\NotificationController;
 use App\Http\Controllers\Student\ProfileController;
+use App\Http\Controllers\Student\SettingsController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
@@ -30,6 +31,7 @@ Route::middleware([
         ->whereNumber('document')
         ->name('student.documents.download');
     Route::get('/student/announcements', AnnouncementController::class)->name('student.announcements');
+    Route::get('/student/settings', SettingsController::class)->name('student.settings');
 
     Route::get('/student/notifications', [NotificationController::class, 'index'])
         ->name('student.notifications');
