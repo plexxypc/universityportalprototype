@@ -27,6 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Course registration rules, draft save, and submit.
@@ -66,6 +67,16 @@ final class RegistrationService
     public const string ACTION_SUBMITTED = 'registration.submitted';
 
     public const string ACTION_REFUSED = 'registration.transition_refused';
+
+    public const string ACTION_APPROVED = 'registration.approved';
+
+    public const string ACTION_REJECTED = 'registration.rejected';
+
+    public const string MESSAGE_REASON = 'Enter a reason for the rejection.';
+
+    public const string MESSAGE_BULK_CAP = 'Approve at most 100 registrations at a time.';
+
+    public const int BULK_CAP = 100;
 
     public const string NOTICE_SUBMITTED_TITLE = 'Registration submitted';
 
@@ -343,6 +354,83 @@ final class RegistrationService
     }
 
     /**
+     * Approve one submitted registration. A second approve writes nothing.
+     *
+     * A missing id and an id outside this account's scope throw the same 404.
+     */
+    public function approve(User $actor, int $registration_id, Request $request): CourseRegistration
+    {
+        $this->assertCanApprove($actor);
+
+        return $this->decide($actor, $registration_id, $request, true, null);
+    }
+
+    /**
+     * Reject one submitted registration. The reason stays on the row.
+     *
+     * A missing id and an id outside this account's scope throw the same 404.
+     */
+    public function reject(User $actor, int $registration_id, string $reason, Request $request): CourseRegistration
+    {
+        $this->assertCanApprove($actor);
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw ValidationException::withMessages(['rejection_reason' => self::MESSAGE_REASON]);
+        }
+
+        return $this->decide($actor, $registration_id, $request, false, $reason);
+    }
+
+    /**
+     * Approve the submitted rows in this list. Other ids are skipped.
+     *
+     * The result is two counts. It does not name the skipped ids.
+     *
+     * @param  list<int>  $registration_ids
+     * @return array{approved: int, skipped: int}
+     */
+    public function bulkApprove(User $actor, array $registration_ids, Request $request): array
+    {
+        $this->assertCanApprove($actor);
+
+        if (count($registration_ids) > self::BULK_CAP) {
+            throw ValidationException::withMessages(['registration_ids' => self::MESSAGE_BULK_CAP]);
+        }
+
+        $ids = [];
+
+        foreach ($registration_ids as $registration_id) {
+            $ids[] = (int) $registration_id;
+        }
+
+        sort($ids);
+        $approved = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use ($actor, $ids, $request, &$approved, &$skipped): void {
+            foreach ($ids as $id) {
+                $registration = CourseRegistration::query()
+                    ->visibleTo($actor)
+                    ->whereKey($id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $registration instanceof CourseRegistration || $registration->status !== RegistrationStatus::Submitted) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $this->markApproved($actor, $registration, $request);
+                $approved++;
+            }
+        });
+
+        return ['approved' => $approved, 'skipped' => $skipped];
+    }
+
+    /**
      * Display sentence. The named instant is when the window closes.
      */
     public static function closesAt(string $label, mixed $instant): string
@@ -358,6 +446,165 @@ final class RegistrationService
         if (! Gate::forUser($actor)->allows('course_registration.submit') || ! $actor->student instanceof Student) {
             throw new AuthorizationException;
         }
+    }
+
+    /**
+     * Registrar, Super Admin, and the scoped officers may approve.
+     */
+    private function assertCanApprove(User $actor): void
+    {
+        if (! Gate::forUser($actor)->allows('course_registration.approve')) {
+            throw new AuthorizationException;
+        }
+    }
+
+    /**
+     * Approve or reject one visible submitted row.
+     */
+    private function decide(
+        User $actor,
+        int $registration_id,
+        Request $request,
+        bool $approving,
+        ?string $reason,
+    ): CourseRegistration {
+        $refused = false;
+
+        $registration = DB::transaction(function () use ($actor, $registration_id, $request, $approving, $reason, &$refused): CourseRegistration {
+            $registration = $this->lockedVisible($actor, $registration_id);
+
+            if ($approving && $registration->status === RegistrationStatus::Approved) {
+                return $registration;
+            }
+
+            if ($registration->status !== RegistrationStatus::Submitted) {
+                $this->audit->record(
+                    (int) $actor->id,
+                    self::ACTION_REFUSED,
+                    'course_registrations',
+                    (int) $registration->getKey(),
+                    $this->snapshot($registration),
+                    [
+                        'student_id' => (int) $registration->student_id,
+                        'semester_id' => (int) $registration->semester_id,
+                        'status' => $approving ? RegistrationStatus::Approved->value : RegistrationStatus::Rejected->value,
+                        'total_units' => (int) $registration->total_units,
+                    ],
+                    $this->audit->ipFromRequest($request),
+                );
+                $refused = true;
+
+                return $registration;
+            }
+
+            if ($approving) {
+                $this->markApproved($actor, $registration, $request);
+
+                return $registration;
+            }
+
+            $this->markRejected($actor, $registration, $request, (string) $reason);
+
+            return $registration;
+        });
+
+        if ($refused) {
+            throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
+        }
+
+        return $registration;
+    }
+
+    /**
+     * The registration this account may decide, or a 404 when it is missing or hidden.
+     */
+    private function lockedVisible(User $actor, int $registration_id): CourseRegistration
+    {
+        $registration = CourseRegistration::query()
+            ->visibleTo($actor)
+            ->whereKey($registration_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $registration instanceof CourseRegistration) {
+            throw new NotFoundHttpException;
+        }
+
+        return $registration;
+    }
+
+    /**
+     * Set Approved, audit, and send the confirmation once.
+     */
+    private function markApproved(User $actor, CourseRegistration $registration, Request $request): void
+    {
+        $before = $this->snapshot($registration);
+        $registration->status = RegistrationStatus::Approved;
+        $registration->decided_at = now();
+        $registration->decided_by = $actor->id;
+        $registration->rejection_reason = null;
+        $registration->save();
+
+        $this->audit->record(
+            (int) $actor->id,
+            self::ACTION_APPROVED,
+            'course_registrations',
+            (int) $registration->getKey(),
+            $before,
+            $this->snapshot($registration),
+            $this->audit->ipFromRequest($request),
+        );
+        $this->notifyStudent($registration, true);
+    }
+
+    /**
+     * Set Rejected. The reason is stored on the row and not in the notice.
+     */
+    private function markRejected(User $actor, CourseRegistration $registration, Request $request, string $reason): void
+    {
+        $before = $this->snapshot($registration);
+        $registration->status = RegistrationStatus::Rejected;
+        $registration->decided_at = now();
+        $registration->decided_by = $actor->id;
+        $registration->rejection_reason = $reason;
+        $registration->save();
+
+        $this->audit->record(
+            (int) $actor->id,
+            self::ACTION_REJECTED,
+            'course_registrations',
+            (int) $registration->getKey(),
+            $before,
+            $this->snapshot($registration),
+            $this->audit->ipFromRequest($request),
+        );
+        $this->notifyStudent($registration, false);
+    }
+
+    /**
+     * Tell the student. Rejection text does not include the reason.
+     */
+    private function notifyStudent(CourseRegistration $registration, bool $approved): void
+    {
+        $registration->loadMissing(['student.user', 'semester.academicSession']);
+        $recipient = $registration->student?->user;
+        $semester = $registration->semester;
+
+        if (! $recipient instanceof User || ! $semester instanceof Semester) {
+            throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
+        }
+
+        if ($approved) {
+            $this->notifyApproved($recipient, $registration, $semester);
+
+            return;
+        }
+
+        $this->notifications->create($recipient, NotificationType::RegistrationRejected->value, [
+            'title' => self::NOTICE_REJECTED_TITLE,
+            'message' => self::NOTICE_REJECTED_MESSAGE,
+            'link' => self::NOTICE_LINK,
+        ]);
     }
 
     /**

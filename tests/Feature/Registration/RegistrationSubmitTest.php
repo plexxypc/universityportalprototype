@@ -472,6 +472,102 @@ it('keeps one registration when two processes submit the same courses', function
     }
 });
 
+it('lets one of two approvers confirm the same registration', function () {
+    if (! registration_race_available()) {
+        test()->markTestSkipped('pcntl and posix are required');
+    }
+
+    $connection = DB::connection();
+    $wrapped = $connection->transactionLevel() > 0;
+
+    if ($wrapped) {
+        $connection->rollBack();
+    }
+
+    $children = [];
+    $files = [];
+
+    try {
+        expect(config('database.connections.mysql.database'))->toBe('university_portal_testing')
+            ->and(config('database.connections.mysql.host'))->toBe('127.0.0.1');
+        $world = registration_submit_world();
+        $world['semester']->registration_deadline = '2099-01-01 00:00:00';
+        $world['semester']->add_drop_deadline = '2099-01-15 00:00:00';
+        $world['semester']->save();
+        registration_submit_limits(2, 24, true);
+        $saved = app(RegistrationService::class)->submit($world['user'], [], registration_submit_request());
+        $registrar = User::factory()->create();
+        RoleAssignment::factory()->create([
+            'user_id' => $registrar->id,
+            'role' => Role::Registrar,
+            'faculty_id' => null,
+            'department_id' => null,
+        ]);
+        $go = tempnam(sys_get_temp_dir(), 'appr-go');
+        expect($go)->toBeString();
+        $files[] = $go;
+
+        if (is_file($go)) {
+            unlink($go);
+        }
+
+        $results = [];
+
+        for ($copy = 0; $copy < 2; $copy++) {
+            $ready = tempnam(sys_get_temp_dir(), 'appr-ready');
+            $result = tempnam(sys_get_temp_dir(), 'appr-result');
+            $payload = tempnam(sys_get_temp_dir(), 'appr-payload');
+            expect($ready)->toBeString()->and($result)->toBeString()->and($payload)->toBeString();
+
+            if (is_file($ready)) {
+                unlink($ready);
+            }
+
+            if (is_file($result)) {
+                unlink($result);
+            }
+
+            file_put_contents((string) $payload, json_encode([
+                'action' => 'approve',
+                'user_id' => $registrar->id,
+                'registration_id' => $saved->id,
+                'copy' => $copy,
+            ], JSON_THROW_ON_ERROR));
+            $files[] = (string) $ready;
+            $files[] = (string) $result;
+            $files[] = (string) $payload;
+            $results[] = (string) $result;
+            $children[] = registration_race_open((string) $payload, (string) $ready, (string) $go, (string) $result);
+        }
+
+        $ready_deadline = time() + 20;
+        $both_ready = false;
+
+        while (time() < $ready_deadline) {
+            $both_ready = is_file($files[1]) && is_file($files[4]);
+
+            if ($both_ready) {
+                break;
+            }
+
+            usleep(50000);
+        }
+
+        expect($both_ready)->toBeTrue();
+        file_put_contents((string) $go, '1');
+        registration_race_wait($results);
+
+        expect(registration_race_read($results[0])['ok'])->toBeTrue()
+            ->and(registration_race_read($results[1])['ok'])->toBeTrue()
+            ->and(CourseRegistration::query()->first()?->status)->toBe(RegistrationStatus::Approved)
+            ->and(Notification::query()->where('type', NotificationType::RegistrationConfirmed)->count())->toBe(1)
+            ->and(EmailOutbox::query()->where('template', 'registration_confirmed')->count())->toBe(1)
+            ->and(AuditLog::query()->where('action', RegistrationService::ACTION_APPROVED)->count())->toBe(1);
+    } finally {
+        registration_race_finish($children, $files, $wrapped);
+    }
+});
+
 function registration_race_available(): bool
 {
     return function_exists('posix_kill')

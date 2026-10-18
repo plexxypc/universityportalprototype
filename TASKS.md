@@ -172,6 +172,7 @@
   - Phase 3 carry-over: copy `credit_units` onto the registration item when it is saved.
   - Service part: `saveDraft` and `submit`. A repeat of the same courses writes nothing. The confirmation email is sent only when the row becomes Approved. The student page is Part B.
 - [ ] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
+  - Service part: approve, reject, and bulk approve. A missing id and an out-of-scope id both return 404. Bulk approve returns counts only. The queue screen is Part B.
 - [ ] TASK-092 Add/drop within window; admin reopen for an individual student
 - [ ] TASK-093 Registration slip PDF
 - [ ] TASK-094 Optional "minimum payment before registration" setting

@@ -80,7 +80,7 @@ foreach ($payload['course_ids'] ?? [] as $course_id) {
     }
 }
 
-if (! $user instanceof User || $course_ids === []) {
+if (! $user instanceof User) {
     registration_race_child_finish($result_file, false, 'failed');
     exit(0);
 }
@@ -89,8 +89,21 @@ $request = Request::create('/student/course-registration', 'POST');
 $request->server->set('REMOTE_ADDR', '127.0.0.1');
 $last_code = 'failed';
 
+$action = is_string($payload['action'] ?? null) ? $payload['action'] : 'submit';
+
 for ($attempt = 0; $attempt < 2; $attempt++) {
     try {
+        if ($action === 'approve') {
+            app(RegistrationService::class)->approve($user, (int) ($payload['registration_id'] ?? 0), $request);
+            registration_race_child_finish($result_file, true, 'submitted');
+            exit(0);
+        }
+
+        if ($course_ids === []) {
+            registration_race_child_finish($result_file, false, 'failed');
+            exit(0);
+        }
+
         app(RegistrationService::class)->submit($user, $course_ids, $request);
         registration_race_child_finish($result_file, true, 'submitted');
         exit(0);
