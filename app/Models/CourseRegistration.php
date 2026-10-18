@@ -29,6 +29,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'decided_at',
     'decided_by',
     'rejection_reason',
+    'reopened_until',
+    'reopen_reason',
+    'reopened_by',
 ])]
 class CourseRegistration extends Model implements VisibleToUser
 {
@@ -48,6 +51,7 @@ class CourseRegistration extends Model implements VisibleToUser
             'status' => RegistrationStatus::class,
             'submitted_at' => 'datetime',
             'decided_at' => 'datetime',
+            'reopened_until' => 'datetime',
         ];
     }
 

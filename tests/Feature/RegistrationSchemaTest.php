@@ -101,7 +101,7 @@ it('restricts every registration foreign key', function () {
         fn (object $row): array => [$row->constraint_name => $row->delete_rule],
     );
 
-    expect($delete_rules)->toHaveCount(5)
+    expect($delete_rules)->toHaveCount(6)
         ->and($delete_rules->every(fn (string $rule): bool => $rule === 'RESTRICT'))->toBeTrue();
 });
 

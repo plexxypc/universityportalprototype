@@ -10,7 +10,9 @@ use App\Models\Semester;
 use App\Services\AcademicService;
 use Filament\Notifications\Notification;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 
@@ -20,10 +22,10 @@ it('switches the active semester inside one transaction', function () {
     $registrar = session_user(Role::Registrar);
     $service = app(AcademicService::class);
     $session = $service->createSession($registrar, '2026/2027', true, session_request());
-    $first = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, session_request());
-    $second = $service->createSemester($registrar, (int) $session->getKey(), 'Second', false, null, null, session_request());
+    $first = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 1, session_request());
+    $second = $service->createSemester($registrar, (int) $session->getKey(), 'Second', false, null, null, 2, session_request());
 
-    $service->updateSemester($registrar, (int) $second->getKey(), 'Second', true, null, null, session_request());
+    $service->updateSemester($registrar, (int) $second->getKey(), 'Second', true, null, null, 2, session_request());
 
     expect(Semester::query()->where('is_active', true)->count())->toBe(1)
         ->and($second->refresh()->is_active)->toBeTrue()
@@ -35,12 +37,12 @@ it('keeps an active semester whenever semesters exist', function () {
     $service = app(AcademicService::class);
     $session = $service->createSession($registrar, '2026/2027', true, session_request());
 
-    expect(fn () => $service->createSemester($registrar, (int) $session->getKey(), 'First', false, null, null, session_request()))
+    expect(fn () => $service->createSemester($registrar, (int) $session->getKey(), 'First', false, null, null, 1, session_request()))
         ->toThrow(ValidationException::class, AcademicService::MESSAGE_SEMESTER_FIRST);
 
-    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, session_request());
+    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 1, session_request());
 
-    expect(fn () => $service->updateSemester($registrar, (int) $semester->getKey(), 'First', false, null, null, session_request()))
+    expect(fn () => $service->updateSemester($registrar, (int) $semester->getKey(), 'First', false, null, null, 1, session_request()))
         ->toThrow(ValidationException::class, AcademicService::MESSAGE_SEMESTER_ACTIVE);
 
     expect($semester->refresh()->is_active)->toBeTrue();
@@ -51,10 +53,10 @@ it('activates a semester and its session in one transaction', function () {
     $service = app(AcademicService::class);
     $current = $service->createSession($registrar, '2026/2027', true, session_request());
     $next = $service->createSession($registrar, '2027/2028', false, session_request());
-    $old = $service->createSemester($registrar, (int) $current->getKey(), 'First', true, null, null, session_request());
-    $coming = $service->createSemester($registrar, (int) $next->getKey(), 'First', false, null, null, session_request());
+    $old = $service->createSemester($registrar, (int) $current->getKey(), 'First', true, null, null, 1, session_request());
+    $coming = $service->createSemester($registrar, (int) $next->getKey(), 'First', false, null, null, 1, session_request());
 
-    $service->updateSemester($registrar, (int) $coming->getKey(), 'First', true, null, null, session_request());
+    $service->updateSemester($registrar, (int) $coming->getKey(), 'First', true, null, null, 1, session_request());
 
     $updated = AuditLog::query()
         ->where('action', AcademicService::SEMESTER_UPDATED)
@@ -78,8 +80,8 @@ it('rolls back the semester and the session when activation fails', function () 
     $service = app(AcademicService::class);
     $current = $service->createSession($registrar, '2026/2027', true, session_request());
     $next = $service->createSession($registrar, '2027/2028', false, session_request());
-    $old = $service->createSemester($registrar, (int) $current->getKey(), 'First', true, null, null, session_request());
-    $coming = $service->createSemester($registrar, (int) $next->getKey(), 'First', false, null, null, session_request());
+    $old = $service->createSemester($registrar, (int) $current->getKey(), 'First', true, null, null, 1, session_request());
+    $coming = $service->createSemester($registrar, (int) $next->getKey(), 'First', false, null, null, 1, session_request());
 
     try {
         AcademicSession::saving(function (AcademicSession $session): void {
@@ -88,7 +90,7 @@ it('rolls back the semester and the session when activation fails', function () 
             }
         });
 
-        expect(fn () => $service->updateSemester($registrar, (int) $coming->getKey(), 'First', true, null, null, session_request()))
+        expect(fn () => $service->updateSemester($registrar, (int) $coming->getKey(), 'First', true, null, null, 1, session_request()))
             ->toThrow(RuntimeException::class);
 
         expect($coming->refresh()->is_active)->toBeFalse()
@@ -107,8 +109,8 @@ it('asks before a semester in another session also switches the current session'
     $service = app(AcademicService::class);
     $current = $service->createSession($registrar, '2026/2027', true, session_request());
     $next = $service->createSession($registrar, '2027/2028', false, session_request());
-    $service->createSemester($registrar, (int) $current->getKey(), 'First', true, null, null, session_request());
-    $coming = $service->createSemester($registrar, (int) $next->getKey(), 'First', false, null, null, session_request());
+    $service->createSemester($registrar, (int) $current->getKey(), 'First', true, null, null, 1, session_request());
+    $coming = $service->createSemester($registrar, (int) $next->getKey(), 'First', false, null, null, 1, session_request());
     $notice = 'This will make First the active semester and make 2027/2028 the current session instead of 2026/2027.';
 
     $component = Livewire::actingAs($registrar)
@@ -120,6 +122,7 @@ it('asks before a semester in another session also switches the current session'
             'is_active' => true,
             'registration_deadline' => null,
             'add_drop_deadline' => null,
+            'semester_no' => 1,
         ])
         ->callMountedTableAction();
 
@@ -160,6 +163,7 @@ it('stores semester deadlines as Africa Lagos wall time', function () {
         true,
         '2026-10-12 14:30:00',
         '2026-10-20 09:00:00',
+        1,
         session_request(),
     );
 
@@ -174,6 +178,7 @@ it('stores semester deadlines as Africa Lagos wall time', function () {
         false,
         '2026-10-12T13:30:00+00:00',
         '2026-10-20T08:00:00+00:00',
+        2,
         session_request(),
     );
 
@@ -185,7 +190,7 @@ it('refuses an add drop deadline before the registration deadline', function () 
     $registrar = session_user(Role::Registrar);
     $service = app(AcademicService::class);
     $session = $service->createSession($registrar, '2026/2027', true, session_request());
-    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, session_request());
+    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 1, session_request());
 
     expect(fn () => $service->updateSemester(
         $registrar,
@@ -194,6 +199,7 @@ it('refuses an add drop deadline before the registration deadline', function () 
         true,
         '2026-10-20 09:00:00',
         '2026-10-12 14:30:00',
+        1,
         session_request(),
     ))->toThrow(ValidationException::class, AcademicService::MESSAGE_ADD_DROP);
 
@@ -205,17 +211,17 @@ it('refuses a tampered semester id', function () {
     $registrar = session_user(Role::Registrar);
     $service = app(AcademicService::class);
     $session = $service->createSession($registrar, '2026/2027', true, session_request());
-    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, session_request());
+    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 1, session_request());
 
     Livewire::actingAs($registrar)
         ->test(SemestersPage::class)
-        ->call('saveSemester', 999999, (int) $session->getKey(), 'Renamed', false, null, null);
+        ->call('saveSemester', 999999, (int) $session->getKey(), 'Renamed', false, null, null, 1);
 
     Notification::assertNotified(AcademicService::MESSAGE_SEMESTER_MISSING);
 
     Livewire::actingAs($registrar)
         ->test(SemestersPage::class)
-        ->call('saveSemester', 999999, (int) $session->getKey(), 'First', true, null, null);
+        ->call('saveSemester', 999999, (int) $session->getKey(), 'First', true, null, null, 1);
 
     Livewire::actingAs($registrar)
         ->test(SemestersPage::class)
@@ -235,11 +241,11 @@ it('lets a registrar save a semester and refuses a faculty admin or bursar', fun
     $bursar = session_user(Role::Bursar);
     $service = app(AcademicService::class);
     $session = $service->createSession($registrar, '2026/2027', true, session_request());
-    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, session_request());
+    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 1, session_request());
 
     Livewire::actingAs($registrar)
         ->test(SemestersPage::class)
-        ->call('saveSemester', (int) $semester->getKey(), (int) $session->getKey(), 'Harmattan', true, null, null);
+        ->call('saveSemester', (int) $semester->getKey(), (int) $session->getKey(), 'Harmattan', true, null, null, 1);
 
     $updated = AuditLog::query()
         ->where('action', AcademicService::SEMESTER_UPDATED)
@@ -254,7 +260,7 @@ it('lets a registrar save a semester and refuses a faculty admin or bursar', fun
         try {
             Livewire::actingAs($actor)
                 ->test(SemestersPage::class)
-                ->call('saveSemester', (int) $semester->getKey(), (int) $session->getKey(), 'Forged', true, null, null);
+                ->call('saveSemester', (int) $semester->getKey(), (int) $session->getKey(), 'Forged', true, null, null, 1);
         } catch (AuthorizationException) {
             // A view-only account is refused before the row is written.
         }
@@ -274,6 +280,7 @@ it('writes a before and after audit row for each semester save', function () {
         true,
         '2026-10-12 14:30:00',
         '2026-10-20 09:00:00',
+        1,
         session_request(),
     );
 
@@ -297,7 +304,7 @@ it('refuses a faculty admin write on semesters', function () {
     $registrar = session_user(Role::Registrar);
     $service = app(AcademicService::class);
     $session = $service->createSession($registrar, '2026/2027', true, session_request());
-    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, session_request());
+    $semester = $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 1, session_request());
 
     $this->actingAs($admin)->get('/staff/semesters')->assertOk();
 
@@ -310,4 +317,54 @@ it('refuses a faculty admin write on semesters', function () {
     }
 
     expect(Semester::query()->whereKey($semester->id)->exists())->toBeTrue();
+});
+
+it('warns when the active semester has no semester number', function () {
+    $registrar = session_user(Role::Registrar);
+    $session = AcademicSession::factory()->create([
+        'name' => '2026/2027',
+        'is_current' => true,
+    ]);
+    Semester::factory()->active()->create([
+        'session_id' => $session->id,
+        'name' => 'First',
+        'semester_no' => null,
+    ]);
+
+    Livewire::actingAs($registrar)
+        ->test(SemestersPage::class)
+        ->assertSee(AcademicService::MESSAGE_SEMESTER_NUMBER_MISSING);
+
+    $active = Semester::query()->active()->first();
+    $active?->forceFill(['semester_no' => 1])->save();
+
+    Livewire::actingAs($registrar)
+        ->test(SemestersPage::class)
+        ->assertDontSee(AcademicService::MESSAGE_SEMESTER_NUMBER_MISSING);
+});
+
+it('refuses a semester number other than 1 or 2', function () {
+    $registrar = session_user(Role::Registrar);
+    $service = app(AcademicService::class);
+    $session = $service->createSession($registrar, '2026/2027', true, session_request());
+
+    expect(fn () => $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 3, session_request()))
+        ->toThrow(ValidationException::class, AcademicService::MESSAGE_SEMESTER_NUMBER);
+
+    expect(fn () => DB::table('semesters')->insert([
+        'session_id' => $session->id,
+        'name' => 'Third',
+        'is_active' => false,
+        'semester_no' => 3,
+    ]))->toThrow(QueryException::class);
+});
+
+it('refuses a repeated semester number in one session', function () {
+    $registrar = session_user(Role::Registrar);
+    $service = app(AcademicService::class);
+    $session = $service->createSession($registrar, '2026/2027', true, session_request());
+    $service->createSemester($registrar, (int) $session->getKey(), 'First', true, null, null, 1, session_request());
+
+    expect(fn () => $service->createSemester($registrar, (int) $session->getKey(), 'Also first', false, null, null, 1, session_request()))
+        ->toThrow(ValidationException::class, AcademicService::MESSAGE_SEMESTER_NUMBER_TAKEN);
 });

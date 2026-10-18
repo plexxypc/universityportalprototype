@@ -7,6 +7,7 @@ namespace App\Filament\Staff\Pages;
 use App\Models\InstitutionSetting;
 use App\Models\User;
 use App\Policies\InstitutionSettingPolicy;
+use App\Services\RegistrationService;
 use App\Services\SettingsService;
 use App\Support\MatricPattern;
 use BackedEnum;
@@ -188,7 +189,8 @@ class InstitutionSettingsPage extends Page
             Toggle::make('withhold_results_for_debt')
                 ->label('Withhold results for outstanding fees'),
             Toggle::make('require_minimum_payment')
-                ->label('Require a minimum payment before registration'),
+                ->label('Require a minimum payment before registration')
+                ->helperText(RegistrationService::MESSAGE_PAYMENT_UNAVAILABLE),
             FileUpload::make('logo')
                 ->label('Logo')
                 ->acceptedFileTypes(['image/png', 'image/jpeg'])

@@ -24,7 +24,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 2 | Session names match `2026/2027` | TASK-055 | Academic sessions resource (single current session). Test: `it accepts only a session name whose second year is the next year` |
 | 2 | Prerequisite cycles. A two-course cycle is stored | TASK-058 | The database cannot reject the cycle, so PrerequisiteGraph does. Test: `it rejects a cycle of two or more courses` |
 | 2 | A closed list of degree types | TASK-057 | Faculties, departments and programmes resources with scope rules. Test: `it accepts only a degree from the closed list` |
-| 2 | What payment satisfies `require_minimum_payment` | TASK-094 | Optional "minimum payment before registration" setting |
+| 2 | What payment satisfies `require_minimum_payment`. Until that definition exists, an on switch blocks registration and does not read invoices or payments | TASK-101 | `verifyAndSettle`. Test: `it does not read invoices when minimum payment is switched on` |
 | 3 | `users.name` is set from the student's three name parts | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it builds the user name from the three name parts` |
 | 3 | On conversion, copy the applicant onto the new user and student | TASK-080 | Applicants: admit and convert to student (single and bulk), admission email. Test: `it copies an applicant onto one student and sends admission once from an earlier status` |
 | 3 | Reject an applicant email that already exists on `users` | TASK-075 | Row validation engine: required fields, formats, programme/level existence, duplicate email/matric (in file and in database), per-row error table |
@@ -32,9 +32,9 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 3, 6 | Generate `matric_no` from `counters` with `lockForUpdate` | TASK-064 | `StudentService`: create/update student with atomic matric generation (`counters` + `lockForUpdate`). Test: `it allocates the matric number from the counter for the pattern` |
 | 3 | A document's owner row exists. Deleting an applicant or student is refused, or the documents are removed first | TASK-070 | Guardians form and secure document upload (type, size, filename checks; private disk; authorised download). Test: `it refuses to delete a student who still has documents and audits a removal` |
 | 3 | Document type and the 5 MB limit, on the local disk | TASK-070 | Guardians form and secure document upload (type, size, filename checks; private disk; authorised download). Test: `it refuses a document that is not a pdf or image, is over 5 MB, or is too wide` |
-| 3 | Registration minimum and maximum units | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules |
-| 3 | Registration prerequisites | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules |
-| 3 | Registration deadline lock | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules |
+| 3 | Registration minimum and maximum units | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules. Tests: `it blocks a selection outside the unit limits only when limits are enforced`, `it blocks a selection when compulsory courses exceed the maximum` |
+| 3 | Registration prerequisites | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules. Test: `it accepts a published pass and ignores a same-semester result` |
+| 3 | Registration deadline lock | TASK-088 | `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules. Tests: `it locks registration at the deadline second`, `it keeps registration closed when the deadline is missing`, `it opens add and drop from the deadline second and closes it at the add-drop second` |
 | 3 | Auto-approve when approval is off | TASK-091 | Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled |
 | 3 | Copy `credit_units` onto the item at registration time | TASK-090 | Submit, status handling, confirmation email and notification |
 | 3 | `total_units` equals the sum of the items | TASK-090 | Submit, status handling, confirmation email and notification |
