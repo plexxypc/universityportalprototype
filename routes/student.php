@@ -6,6 +6,7 @@ use App\Http\Controllers\PingController;
 use App\Http\Controllers\Student\HomeController;
 use App\Http\Controllers\Student\MoreController;
 use App\Http\Controllers\Student\NotificationController;
+use App\Http\Controllers\Student\ProfileController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\EnsurePortalArea;
@@ -20,6 +21,7 @@ Route::middleware([
 ])->group(function (): void {
     Route::get('/student', HomeController::class)->name('student.home');
     Route::get('/student/more', MoreController::class)->name('student.more');
+    Route::get('/student/profile', ProfileController::class)->name('student.profile');
 
     Route::get('/student/notifications', [NotificationController::class, 'index'])
         ->name('student.notifications');

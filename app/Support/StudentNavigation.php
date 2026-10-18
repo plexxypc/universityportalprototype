@@ -37,6 +37,7 @@ final class StudentNavigation
     public static function pages(): array
     {
         return [
+            ['label' => 'Profile', 'route' => 'student.profile'],
             ['label' => 'Notifications', 'route' => 'student.notifications'],
         ];
     }
