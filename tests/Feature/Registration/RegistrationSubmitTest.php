@@ -468,67 +468,27 @@ it('keeps one registration when two processes submit the same courses', function
         $world['semester']->add_drop_deadline = '2099-01-15 00:00:00';
         $world['semester']->save();
         registration_submit_limits(2, 24, true);
-        $go = tempnam(sys_get_temp_dir(), 'reg-go');
-        expect($go)->toBeString();
-        $files[] = $go;
 
-        if (is_file($go)) {
-            unlink($go);
-        }
-
-        $results = [];
-
-        for ($copy = 0; $copy < 2; $copy++) {
-            $ready = tempnam(sys_get_temp_dir(), 'reg-ready');
-            $result = tempnam(sys_get_temp_dir(), 'reg-result');
-            $payload = tempnam(sys_get_temp_dir(), 'reg-payload');
-            expect($ready)->toBeString()->and($result)->toBeString()->and($payload)->toBeString();
-
-            if (is_file($ready)) {
-                unlink($ready);
-            }
-
-            if (is_file($result)) {
-                unlink($result);
-            }
-
-            file_put_contents((string) $payload, json_encode([
-                'user_id' => $world['user']->id,
+        for ($round = 1; $round <= 5; $round++) {
+            $student = $round === 1 ? $world['student'] : registration_submit_student($world);
+            $user = $student->user;
+            expect($user)->toBeInstanceOf(User::class);
+            [$first, $second] = registration_race_pair([
+                'user_id' => $user->id,
                 'course_ids' => [(int) $world['core']->id],
-                'copy' => $copy,
-            ], JSON_THROW_ON_ERROR));
-            $files[] = (string) $ready;
-            $files[] = (string) $result;
-            $files[] = (string) $payload;
-            $results[] = (string) $result;
-            $children[] = registration_race_open((string) $payload, (string) $ready, (string) $go, (string) $result);
+            ], $children, $files);
+            $saved = CourseRegistration::query()->where('student_id', $student->id)->first();
+
+            expect([registration_race_label($first), registration_race_label($second)])->toBe(['ok', 'ok'])
+                ->and(CourseRegistration::query()->where('student_id', $student->id)->count())->toBe(1)
+                ->and($saved?->status)->toBe(RegistrationStatus::Submitted)
+                ->and(Notification::query()->where('user_id', $user->id)->count())->toBe(1)
+                ->and(AuditLog::query()->where('action', RegistrationService::ACTION_SUBMITTED)->where('entity_id', $saved?->id)->count())->toBe(1)
+                ->and(AuditLog::query()->where('action', RegistrationService::ACTION_SUBMITTED)->count())->toBe($round)
+                ->and(Notification::query()->count())->toBe($round)
+                ->and(CourseRegistration::query()->count())->toBe($round)
+                ->and(EmailOutbox::query()->count())->toBe(0);
         }
-
-        $ready_deadline = time() + 20;
-        $both_ready = false;
-
-        while (time() < $ready_deadline) {
-            $both_ready = is_file($files[1]) && is_file($files[4]);
-
-            if ($both_ready) {
-                break;
-            }
-
-            usleep(50000);
-        }
-
-        expect($both_ready)->toBeTrue();
-        file_put_contents((string) $go, '1');
-        registration_race_wait($results);
-        $first = registration_race_read($results[0]);
-        $second = registration_race_read($results[1]);
-
-        expect([$first['ok'], $second['ok']])->toBe([true, true])
-            ->and(CourseRegistration::query()->count())->toBe(1)
-            ->and(CourseRegistration::query()->first()?->status)->toBe(RegistrationStatus::Submitted)
-            ->and(Notification::query()->count())->toBe(1)
-            ->and(AuditLog::query()->where('action', RegistrationService::ACTION_SUBMITTED)->count())->toBe(1)
-            ->and(EmailOutbox::query()->count())->toBe(0);
     } finally {
         registration_race_finish($children, $files, $wrapped);
     }
@@ -557,7 +517,6 @@ it('lets one of two approvers confirm the same registration', function () {
         $world['semester']->add_drop_deadline = '2099-01-15 00:00:00';
         $world['semester']->save();
         registration_submit_limits(2, 24, true);
-        $saved = app(RegistrationService::class)->submit($world['user'], [], registration_submit_request());
         $registrar = User::factory()->create();
         RoleAssignment::factory()->create([
             'user_id' => $registrar->id,
@@ -565,67 +524,29 @@ it('lets one of two approvers confirm the same registration', function () {
             'faculty_id' => null,
             'department_id' => null,
         ]);
-        $go = tempnam(sys_get_temp_dir(), 'appr-go');
-        expect($go)->toBeString();
-        $files[] = $go;
 
-        if (is_file($go)) {
-            unlink($go);
-        }
-
-        $results = [];
-
-        for ($copy = 0; $copy < 2; $copy++) {
-            $ready = tempnam(sys_get_temp_dir(), 'appr-ready');
-            $result = tempnam(sys_get_temp_dir(), 'appr-result');
-            $payload = tempnam(sys_get_temp_dir(), 'appr-payload');
-            expect($ready)->toBeString()->and($result)->toBeString()->and($payload)->toBeString();
-
-            if (is_file($ready)) {
-                unlink($ready);
-            }
-
-            if (is_file($result)) {
-                unlink($result);
-            }
-
-            file_put_contents((string) $payload, json_encode([
+        for ($round = 1; $round <= 5; $round++) {
+            $student = $round === 1 ? $world['student'] : registration_submit_student($world);
+            $user = $student->user;
+            expect($user)->toBeInstanceOf(User::class);
+            $saved = app(RegistrationService::class)->submit($user, [], registration_submit_request());
+            [$first, $second] = registration_race_pair([
                 'action' => 'approve',
                 'user_id' => $registrar->id,
                 'registration_id' => $saved->id,
                 'version' => app(RegistrationService::class)->version($saved),
-                'copy' => $copy,
-            ], JSON_THROW_ON_ERROR));
-            $files[] = (string) $ready;
-            $files[] = (string) $result;
-            $files[] = (string) $payload;
-            $results[] = (string) $result;
-            $children[] = registration_race_open((string) $payload, (string) $ready, (string) $go, (string) $result);
+                'course_ids' => [(int) $world['core']->id],
+            ], $children, $files);
+
+            expect([registration_race_label($first), registration_race_label($second)])->toBe(['ok', 'ok'])
+                ->and($saved->fresh()?->status)->toBe(RegistrationStatus::Approved)
+                ->and(Notification::query()->where('user_id', $user->id)->where('type', NotificationType::RegistrationConfirmed)->count())->toBe(1)
+                ->and(EmailOutbox::query()->where('related_id', $saved->id)->where('template', 'registration_confirmed')->count())->toBe(1)
+                ->and(AuditLog::query()->where('action', RegistrationService::ACTION_APPROVED)->where('entity_id', $saved->id)->count())->toBe(1)
+                ->and(AuditLog::query()->where('action', RegistrationService::ACTION_APPROVED)->count())->toBe($round)
+                ->and(Notification::query()->where('type', NotificationType::RegistrationConfirmed)->count())->toBe($round)
+                ->and(EmailOutbox::query()->where('template', 'registration_confirmed')->count())->toBe($round);
         }
-
-        $ready_deadline = time() + 20;
-        $both_ready = false;
-
-        while (time() < $ready_deadline) {
-            $both_ready = is_file($files[1]) && is_file($files[4]);
-
-            if ($both_ready) {
-                break;
-            }
-
-            usleep(50000);
-        }
-
-        expect($both_ready)->toBeTrue();
-        file_put_contents((string) $go, '1');
-        registration_race_wait($results);
-
-        expect(registration_race_read($results[0])['ok'])->toBeTrue()
-            ->and(registration_race_read($results[1])['ok'])->toBeTrue()
-            ->and(CourseRegistration::query()->first()?->status)->toBe(RegistrationStatus::Approved)
-            ->and(Notification::query()->where('type', NotificationType::RegistrationConfirmed)->count())->toBe(1)
-            ->and(EmailOutbox::query()->where('template', 'registration_confirmed')->count())->toBe(1)
-            ->and(AuditLog::query()->where('action', RegistrationService::ACTION_APPROVED)->count())->toBe(1);
     } finally {
         registration_race_finish($children, $files, $wrapped);
     }
@@ -734,20 +655,124 @@ function registration_race_wait(array $results): void
 }
 
 /**
- * @return array{ok: bool, code: string}
+ * Start two children with the same payload and return what each wrote.
+ *
+ * A failure label is the exception class plus the SQLSTATE or driver code.
+ * It does not include the exception message or any row data.
+ *
+ * @param  array<string, mixed>  $payload
+ * @param  list<array{process: resource, pid: int}>  $children
+ * @param  list<string>  $files
+ * @return array{0: array{ok: bool, code: string, exception: string, sqlstate: string, error_code: string}, 1: array{ok: bool, code: string, exception: string, sqlstate: string, error_code: string}}
+ */
+function registration_race_pair(array $payload, array &$children, array &$files): array
+{
+    $go = tempnam(sys_get_temp_dir(), 'reg-go');
+    expect($go)->toBeString();
+    $files[] = $go;
+
+    if (is_file($go)) {
+        unlink($go);
+    }
+
+    $results = [];
+
+    for ($copy = 0; $copy < 2; $copy++) {
+        $ready = tempnam(sys_get_temp_dir(), 'reg-ready');
+        $result = tempnam(sys_get_temp_dir(), 'reg-result');
+        $payload_file = tempnam(sys_get_temp_dir(), 'reg-payload');
+        expect($ready)->toBeString()->and($result)->toBeString()->and($payload_file)->toBeString();
+
+        if (is_file($ready)) {
+            unlink($ready);
+        }
+
+        if (is_file($result)) {
+            unlink($result);
+        }
+
+        $payload['copy'] = $copy;
+        file_put_contents((string) $payload_file, json_encode($payload, JSON_THROW_ON_ERROR));
+        $files[] = (string) $ready;
+        $files[] = (string) $result;
+        $files[] = (string) $payload_file;
+        $results[] = (string) $result;
+        $children[] = registration_race_open((string) $payload_file, (string) $ready, (string) $go, (string) $result);
+    }
+
+    $ready_deadline = time() + 20;
+
+    while (time() < $ready_deadline && (! is_file($files[count($files) - 6]) || ! is_file($files[count($files) - 3]))) {
+        usleep(50000);
+    }
+
+    expect(is_file($files[count($files) - 6]))->toBeTrue()
+        ->and(is_file($files[count($files) - 3]))->toBeTrue();
+    file_put_contents((string) $go, '1');
+    registration_race_wait($results);
+
+    return [registration_race_read($results[0]), registration_race_read($results[1])];
+}
+
+/**
+ * @param  array{ok: bool, code: string, exception: string, sqlstate: string, error_code: string}  $row
+ */
+function registration_race_label(array $row): string
+{
+    if ($row['ok']) {
+        return 'ok';
+    }
+
+    $parts = [];
+
+    if ($row['exception'] !== '') {
+        $parts[] = $row['exception'];
+    }
+
+    if ($row['sqlstate'] !== '') {
+        $parts[] = $row['sqlstate'];
+    }
+
+    if ($row['error_code'] !== '') {
+        $parts[] = $row['error_code'];
+    }
+
+    if ($parts === []) {
+        $parts[] = $row['code'];
+    }
+
+    return implode(' ', $parts);
+}
+
+/**
+ * @return array{ok: bool, code: string, exception: string, sqlstate: string, error_code: string}
  */
 function registration_race_read(string $path): array
 {
+    $empty = ['ok' => false, 'code' => 'timeout', 'exception' => '', 'sqlstate' => '', 'error_code' => ''];
     $contents = is_file($path) ? file_get_contents($path) : false;
     $decoded = is_string($contents) ? json_decode($contents, true) : null;
 
     if (! is_array($decoded)) {
-        return ['ok' => false, 'code' => 'timeout'];
+        return $empty;
     }
+
+    $exception = is_string($decoded['exception'] ?? null) && preg_match('/^[A-Za-z0-9_\\\\]+$/', $decoded['exception']) === 1
+        ? $decoded['exception']
+        : '';
+    $sqlstate = is_string($decoded['sqlstate'] ?? null) && preg_match('/^[0-9A-Z]{5}$/', $decoded['sqlstate']) === 1
+        ? $decoded['sqlstate']
+        : '';
+    $error_code = is_string($decoded['error_code'] ?? null) && preg_match('/^[0-9]{1,6}$/', $decoded['error_code']) === 1
+        ? $decoded['error_code']
+        : '';
 
     return [
         'ok' => (bool) ($decoded['ok'] ?? false),
-        'code' => is_string($decoded['code'] ?? null) ? $decoded['code'] : 'failed',
+        'code' => is_string($decoded['code'] ?? null) && in_array($decoded['code'], ['submitted', 'failed', 'timeout'], true) ? $decoded['code'] : 'failed',
+        'exception' => $exception,
+        'sqlstate' => $sqlstate,
+        'error_code' => $error_code,
     ];
 }
 

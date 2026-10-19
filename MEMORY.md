@@ -3,7 +3,7 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Monday, 19 October 2026 (phase 9, registration corrections)
+**Last updated:** Monday, 19 October 2026 (phase 9, registration race lock)
 
 Phase 8 is merged to `main` (`699be1d`, pull request #20). Phase 9 course registration is in progress on `phase-9-registration`. TASK-088 is committed. The service parts of TASK-090, TASK-091, and TASK-092 are committed. A refused transition writes no audit row. A confirmation email that cannot be queued does not undo the approval. The live Aiven database has been migrated through the Phase 8 schema. The Phase 9 registration columns are not on Aiven. Screens are still Part B. TASKS.md is not ticked.
 
@@ -372,3 +372,4 @@ Phase 9 is course registration, in progress on `phase-9-registration`, branched 
 | 18 Oct 2026 | TASK-091 service. Approve, reject, and bulk approve. A missing id and an out-of-scope id both return 404. Bulk approve returns counts only. The queue screen is Part B. `composer check` on `127.0.0.1` / `university_portal_testing` passed (1034 tests, 1027 passed, 7 skipped, 5905 assertions, Pest 639 seconds). |
 | 18 Oct 2026 | TASK-092 service. Add/drop sends an approved registration back to Submitted when approval is on, and leaves it Approved without a second confirmation email when approval is off. Reopen is Registrar and Super Admin only, for an Active student, and creates a zero-unit Draft in that same transaction. `composer check` on `127.0.0.1` / `university_portal_testing` passed (1041 tests, 1034 passed, 7 skipped, 5941 assertions, Pest 770 seconds). |
 | 19 Oct 2026 | Registration corrections, no screens. A refused transition writes no audit row. A confirmation email that cannot be queued leaves the approval and one in-app notice. Reopen keeps an existing status. `composer check` on `127.0.0.1` / `university_portal_testing` passed (1053 tests, 1046 passed, 7 skipped, 6049 assertions, Pest 608 seconds). The previous check was 1041 tests in 770 seconds. TASKS.md is not ticked. `phase-9-registration` is pushed. No pull request. |
+| 19 Oct 2026 | Registration races lock the student row before the registration row. Draft save, submit, add/drop, reopen, approve, and bulk approve use that order. Each race repeats five times. On this Windows machine the two race tests skip. `composer check` on `127.0.0.1` / `university_portal_testing` passed (1053 tests, 1046 passed, 7 skipped, 6049 assertions, Pest 450 seconds). TASKS.md is not ticked. |

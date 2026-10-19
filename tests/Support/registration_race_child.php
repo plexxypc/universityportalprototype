@@ -25,7 +25,7 @@ $database = getenv('DB_DATABASE');
 $host = getenv('DB_HOST');
 
 if ($database !== 'university_portal_testing' || $host !== '127.0.0.1') {
-    registration_race_child_finish($result_file, false, 'failed');
+    registration_race_child_finish($result_file, false, 'failed', registration_race_child_failure(null));
     exit(0);
 }
 
@@ -39,7 +39,7 @@ $configured = config('database.connections.mysql.database');
 $configured_host = config('database.connections.mysql.host');
 
 if ($configured !== 'university_portal_testing' || $configured_host !== '127.0.0.1') {
-    registration_race_child_finish($result_file, false, 'failed');
+    registration_race_child_finish($result_file, false, 'failed', registration_race_child_failure(null));
     exit(0);
 }
 
@@ -59,7 +59,7 @@ while ($go_file !== '' && ! is_file($go_file) && time() < $deadline) {
 }
 
 if ($go_file === '' || ! is_file($go_file)) {
-    registration_race_child_finish($result_file, false, 'timeout');
+    registration_race_child_finish($result_file, false, 'timeout', registration_race_child_failure(null));
     exit(0);
 }
 
@@ -67,7 +67,7 @@ $contents = is_file($payload_file) ? file_get_contents($payload_file) : false;
 $payload = is_string($contents) ? json_decode($contents, true) : null;
 
 if (! is_array($payload)) {
-    registration_race_child_finish($result_file, false, 'failed');
+    registration_race_child_finish($result_file, false, 'failed', registration_race_child_failure(null));
     exit(0);
 }
 
@@ -81,13 +81,13 @@ foreach ($payload['course_ids'] ?? [] as $course_id) {
 }
 
 if (! $user instanceof User) {
-    registration_race_child_finish($result_file, false, 'failed');
+    registration_race_child_finish($result_file, false, 'failed', registration_race_child_failure(null));
     exit(0);
 }
 
 $request = Request::create('/student/course-registration', 'POST');
 $request->server->set('REMOTE_ADDR', '127.0.0.1');
-$last_code = 'failed';
+$failure = registration_race_child_failure(null);
 
 $action = is_string($payload['action'] ?? null) ? $payload['action'] : 'submit';
 
@@ -96,40 +96,75 @@ for ($attempt = 0; $attempt < 2; $attempt++) {
         if ($action === 'approve') {
             $version = is_string($payload['version'] ?? null) ? $payload['version'] : '';
             app(RegistrationService::class)->approve($user, (int) ($payload['registration_id'] ?? 0), $version, $request);
-            registration_race_child_finish($result_file, true, 'submitted');
+            registration_race_child_finish($result_file, true, 'submitted', $failure);
             exit(0);
         }
 
         if ($course_ids === []) {
-            registration_race_child_finish($result_file, false, 'failed');
+            registration_race_child_finish($result_file, false, 'failed', $failure);
             exit(0);
         }
 
         app(RegistrationService::class)->submit($user, $course_ids, $request);
-        registration_race_child_finish($result_file, true, 'submitted');
+        registration_race_child_finish($result_file, true, 'submitted', $failure);
         exit(0);
-    } catch (QueryException $exception) {
-        $driver_code = (int) ($exception->errorInfo[1] ?? 0);
+    } catch (Throwable $exception) {
+        $failure = registration_race_child_failure($exception);
+        $driver_code = (int) $failure['error_code'];
 
         if (($driver_code === 1213 || $driver_code === 1205) && $attempt === 0) {
             continue;
         }
 
-        $last_code = 'failed';
-        break;
-    } catch (Throwable) {
-        $last_code = 'failed';
         break;
     }
 }
 
-registration_race_child_finish($result_file, false, $last_code);
+registration_race_child_finish($result_file, false, 'failed', $failure);
 exit(0);
 
 /**
- * Write the only result this process may leave on disk.
+ * Class name and SQLSTATE or driver code. Message text and row data stay out.
+ *
+ * @return array{exception: string, sqlstate: string, error_code: string}
  */
-function registration_race_child_finish(string $path, bool $ok, string $code): void
+function registration_race_child_failure(?Throwable $exception): array
+{
+    if (! $exception instanceof Throwable) {
+        return ['exception' => '', 'sqlstate' => '', 'error_code' => ''];
+    }
+
+    $class = $exception::class;
+    $exception_name = preg_match('/^[A-Za-z0-9_\\\\]+$/', $class) === 1 ? $class : 'Exception';
+    $sqlstate = '';
+    $error_code = '';
+
+    if ($exception instanceof QueryException) {
+        $state = $exception->errorInfo[0] ?? null;
+        $code = $exception->errorInfo[1] ?? null;
+
+        if (is_string($state) && preg_match('/^[0-9A-Z]{5}$/', $state) === 1) {
+            $sqlstate = $state;
+        }
+
+        if (is_int($code) || (is_string($code) && preg_match('/^[0-9]{1,6}$/', $code) === 1)) {
+            $error_code = (string) (int) $code;
+        }
+    }
+
+    return [
+        'exception' => $exception_name,
+        'sqlstate' => $sqlstate,
+        'error_code' => $error_code,
+    ];
+}
+
+/**
+ * Write the only result this process may leave on disk.
+ *
+ * @param  array{exception: string, sqlstate: string, error_code: string}  $failure
+ */
+function registration_race_child_finish(string $path, bool $ok, string $code, array $failure): void
 {
     if ($path === '') {
         return;
@@ -142,5 +177,8 @@ function registration_race_child_finish(string $path, bool $ok, string $code): v
     file_put_contents($path, json_encode([
         'ok' => $ok,
         'code' => $code,
+        'exception' => $failure['exception'],
+        'sqlstate' => $failure['sqlstate'],
+        'error_code' => $failure['error_code'],
     ], JSON_THROW_ON_ERROR));
 }

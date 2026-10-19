@@ -439,12 +439,29 @@ final class RegistrationService
             ];
         }
 
-        usort($rows, fn (array $left, array $right): int => $left['id'] <=> $right['id']);
+        $student_ids = [];
+
+        foreach (CourseRegistration::query()->whereIn('id', array_column($rows, 'id'))->get(['id', 'student_id']) as $existing) {
+            $student_ids[(int) $existing->getKey()] = (int) $existing->student_id;
+        }
+
+        usort($rows, function (array $left, array $right) use ($student_ids): int {
+            $left_student = $student_ids[$left['id']] ?? 0;
+            $right_student = $student_ids[$right['id']] ?? 0;
+
+            return [$left_student, $left['id']] <=> [$right_student, $right['id']];
+        });
         $approved = 0;
         $skipped = 0;
 
-        DB::transaction(function () use ($actor, $rows, $request, &$approved, &$skipped): void {
+        DB::transaction(function () use ($actor, $rows, $student_ids, $request, &$approved, &$skipped): void {
             foreach ($rows as $row) {
+                $student_id = $student_ids[$row['id']] ?? 0;
+
+                if ($student_id > 0) {
+                    $this->lockStudent($student_id);
+                }
+
                 $registration = CourseRegistration::query()
                     ->visibleTo($actor)
                     ->whereKey($row['id'])
@@ -486,6 +503,12 @@ final class RegistrationService
         }
 
         $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request): CourseRegistration {
+            $student = $this->lockStudent((int) $student->getKey());
+
+            if (! $student instanceof Student) {
+                throw new AuthorizationException;
+            }
+
             $semester = Semester::query()->active()->first();
 
             if (! $semester instanceof Semester) {
@@ -625,7 +648,7 @@ final class RegistrationService
         }
 
         return DB::transaction(function () use ($actor, $student_id, $reason, $reopened_until, $request, $until): CourseRegistration {
-            $student = Student::query()->whereKey($student_id)->lockForUpdate()->first();
+            $student = $this->lockStudent($student_id);
 
             if (! $student instanceof Student) {
                 throw new NotFoundHttpException;
@@ -853,6 +876,12 @@ final class RegistrationService
      */
     private function lockedVisible(User $actor, int $registration_id): CourseRegistration
     {
+        $student_id = CourseRegistration::query()->whereKey($registration_id)->value('student_id');
+
+        if (is_numeric($student_id)) {
+            $this->lockStudent((int) $student_id);
+        }
+
         $registration = CourseRegistration::query()
             ->visibleTo($actor)
             ->whereKey($registration_id)
@@ -954,6 +983,12 @@ final class RegistrationService
         }
 
         $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request, $submitting): CourseRegistration {
+            $student = $this->lockStudent((int) $student->getKey());
+
+            if (! $student instanceof Student) {
+                throw new AuthorizationException;
+            }
+
             $semester = Semester::query()->active()->first();
 
             if (! $semester instanceof Semester) {
@@ -1111,7 +1146,19 @@ final class RegistrationService
     }
 
     /**
+     * Lock the student row. Callers lock this before the registration row.
+     */
+    private function lockStudent(int $student_id): ?Student
+    {
+        $student = Student::query()->whereKey($student_id)->lockForUpdate()->first();
+
+        return $student instanceof Student ? $student : null;
+    }
+
+    /**
      * The row for this student and semester, locked, or null when it does not exist yet.
+     *
+     * The student row is already locked by the caller.
      */
     private function lockedRegistration(Student $student, Semester $semester): ?CourseRegistration
     {
@@ -1123,7 +1170,7 @@ final class RegistrationService
     }
 
     /**
-     * Insert the row. A concurrent insert is re-read under the same lock.
+     * Insert the row. The student lock is already held, so a second writer waits and finds this row.
      */
     private function newRegistration(Student $student, Semester $semester): CourseRegistration
     {
