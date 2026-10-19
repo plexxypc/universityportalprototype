@@ -5,7 +5,9 @@ declare(strict_types=1);
 use App\Enums\RegistrationStatus;
 use App\Livewire\Student\CourseRegistration as RegistrationPage;
 use App\Models\CourseRegistration;
+use App\Models\InstitutionSetting;
 use App\Services\RegistrationService;
+use App\Services\SettingsService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
@@ -110,4 +112,20 @@ it('saves an add or drop during that window', function () {
 
     expect(CourseRegistration::query()->first()?->total_units)->toBe(2)
         ->and(CourseRegistration::query()->first()?->status)->toBe(RegistrationStatus::Submitted);
+});
+
+it('shows the payment sentence when the switch is on', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $row = InstitutionSetting::query()->first();
+    $row->require_minimum_payment = true;
+    $row->save();
+    app(SettingsService::class)->forgetCache();
+
+    Livewire::actingAs($world['student']->user)->test(RegistrationPage::class)
+        ->assertSee(RegistrationService::MESSAGE_PAYMENT)
+        ->call('submitRegistration')
+        ->assertSee(RegistrationService::MESSAGE_PAYMENT);
+
+    expect(CourseRegistration::query()->count())->toBe(0);
 });
