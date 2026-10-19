@@ -18,6 +18,7 @@ use App\Filament\Staff\Pages\ImportStudentsPage;
 use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\NotificationsPage;
 use App\Filament\Staff\Pages\ProgrammesPage;
+use App\Filament\Staff\Pages\RegistrationQueuePage;
 use App\Filament\Staff\Pages\SemestersPage;
 use App\Filament\Staff\Pages\StudentRecordPage;
 use App\Filament\Staff\Pages\StudentsPage;
@@ -319,6 +320,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         InstitutionSettingsPage::class,
         AcademicSessionsPage::class,
         SemestersPage::class,
+        RegistrationQueuePage::class,
         FacultiesPage::class,
         DepartmentsPage::class,
         ProgrammesPage::class,
