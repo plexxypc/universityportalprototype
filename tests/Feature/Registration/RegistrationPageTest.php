@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\RegistrationStatus;
 use App\Livewire\Student\CourseRegistration as RegistrationPage;
 use App\Models\CourseRegistration;
 use App\Services\RegistrationService;
@@ -92,4 +93,21 @@ it('hides an unexpected failure behind a plain sentence', function () {
     }
 
     expect($caught)->toBeTrue();
+});
+
+it('saves an add or drop during that window', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $user = $world['student']->user;
+    app(RegistrationService::class)->submit($user, [$world['elective']->id], request());
+    Carbon::setTestNow(Carbon::parse('2026-11-02 10:00:00', 'Africa/Lagos'));
+
+    Livewire::actingAs($user)->test(RegistrationPage::class)
+        ->set('elective_ids', [])
+        ->call('saveChanges')
+        ->assertHasNoErrors()
+        ->assertSee('Courses updated.');
+
+    expect(CourseRegistration::query()->first()?->total_units)->toBe(2)
+        ->and(CourseRegistration::query()->first()?->status)->toBe(RegistrationStatus::Submitted);
 });
