@@ -152,7 +152,11 @@ class RegistrationQueuePage extends Page implements HasTable
                     ->requiresConfirmation()
                     ->authorize(fn (CourseRegistration $record): bool => app(CourseRegistrationPolicy::class)->approve($this->actor(), $record))
                     ->schema([
-                        Textarea::make('reason')->label('Reason')->required(),
+                        Textarea::make('reason')
+                            ->label('Reason')
+                            ->required()
+                            ->maxLength(RegistrationService::REASON_MAX)
+                            ->helperText('The student will see this reason.'),
                     ])
                     ->action(function (CourseRegistration $record, array $data): void {
                         $this->rejectOne((int) $record->getKey(), $this->text($data, 'reason'));
@@ -247,16 +251,24 @@ class RegistrationQueuePage extends Page implements HasTable
      */
     public function reopenStudent(string $matric_no, string $reason, string $reopened_until): void
     {
-        if (! $this->canReopen()) {
+        $actor = auth()->user();
+
+        if (! $actor instanceof User) {
             Notification::make()->title('You cannot reopen a registration.')->danger()->send();
 
             return;
         }
 
-        $student = Student::query()->where('matric_no', trim($matric_no))->first();
+        $student = Student::query()->visibleTo($actor)->where('matric_no', trim($matric_no))->first();
 
         if (! $student instanceof Student) {
             Notification::make()->title('That student could not be found.')->danger()->send();
+
+            return;
+        }
+
+        if (! $this->canReopen()) {
+            Notification::make()->title('You cannot reopen a registration.')->danger()->send();
 
             return;
         }

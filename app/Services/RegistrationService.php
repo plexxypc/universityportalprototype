@@ -86,6 +86,10 @@ final class RegistrationService
 
     public const string MESSAGE_REASON = 'Enter a reason for the rejection.';
 
+    public const int REASON_MAX = 500;
+
+    public const string MESSAGE_REASON_LENGTH = 'The reason must be 500 characters or fewer.';
+
     public const string MESSAGE_BULK_CAP = 'Approve at most 100 registrations at a time.';
 
     public const string MESSAGE_RELOAD = 'This registration changed. Reload the queue and try again.';
@@ -407,6 +411,10 @@ final class RegistrationService
 
         if ($reason === '') {
             throw ValidationException::withMessages(['rejection_reason' => self::MESSAGE_REASON]);
+        }
+
+        if (mb_strlen($reason) > self::REASON_MAX) {
+            throw ValidationException::withMessages(['rejection_reason' => self::MESSAGE_REASON_LENGTH]);
         }
 
         return $this->decide($actor, $registration_id, $version, $request, false, $reason);

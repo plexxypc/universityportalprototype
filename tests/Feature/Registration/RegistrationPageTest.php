@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 use App\Enums\RegistrationStatus;
+use App\Enums\Role;
 use App\Livewire\Student\CourseRegistration as RegistrationPage;
 use App\Models\CourseRegistration;
 use App\Models\InstitutionSetting;
+use App\Models\RoleAssignment;
 use App\Services\RegistrationService;
 use App\Services\SettingsService;
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
@@ -112,6 +115,29 @@ it('saves an add or drop during that window', function () {
 
     expect(CourseRegistration::query()->first()?->total_units)->toBe(2)
         ->and(CourseRegistration::query()->first()?->status)->toBe(RegistrationStatus::Submitted);
+});
+
+it('refuses a super admin who also has a student row', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $user = $world['student']->user;
+    RoleAssignment::factory()->create([
+        'user_id' => $user->id,
+        'role' => Role::SuperAdmin,
+        'faculty_id' => null,
+        'department_id' => null,
+    ]);
+
+    $this->actingAs($user)->get('/student/course-registration')->assertOk();
+
+    Livewire::actingAs($user)->test(RegistrationPage::class)
+        ->call('submitRegistration')
+        ->assertSee('That registration could not be saved.')
+        ->assertDontSee('AuthorizationException');
+
+    expect(fn () => app(RegistrationService::class)->submit($user, [], request()))
+        ->toThrow(AuthorizationException::class);
+    expect(CourseRegistration::query()->count())->toBe(0);
 });
 
 it('shows the payment sentence when the switch is on', function () {
