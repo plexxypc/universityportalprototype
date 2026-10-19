@@ -166,19 +166,19 @@
 
 ## Phase 9: Course registration [REG-1..10]
 
-- [ ] TASK-088 `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules
-- [ ] TASK-089 Student course registration UI (core pre-selected, electives, live unit total, sticky summary)
-- [ ] TASK-090 Submit, status handling, confirmation email and notification
+- [x] TASK-088 `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules
+- [x] TASK-089 Student course registration UI (core pre-selected, electives, live unit total, sticky summary)
+- [x] TASK-090 Submit, status handling, confirmation email and notification
   - Phase 3 carry-over: copy `credit_units` onto the registration item when it is saved.
   - Service part: `saveDraft` and `submit`. A repeat of the same courses writes nothing. The confirmation email is sent only when the row becomes Approved. The student page is Part B.
-- [ ] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
+- [x] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
   - Service part: approve, reject, and bulk approve. A missing id and an out-of-scope id both return 404. Bulk approve returns counts only. The queue screen is Part B.
-- [ ] TASK-092 Add/drop within window; admin reopen for an individual student
+- [x] TASK-092 Add/drop within window; admin reopen for an individual student
   - Service part: `addDrop` and `reopen`. Reopen is Registrar and Super Admin only, and only for an Active student. The screens are Part B.
-- [ ] TASK-093 Registration slip PDF
+- [x] TASK-093 Registration slip PDF
 - [ ] TASK-094 Optional "minimum payment before registration" setting
-  - The switch already exists. The rule is not built in Phase 9. See TASK-101.
-- [ ] TASK-095 Registration tests (units, prerequisites, deadline lock, approval flow, isolation, Journey 2)
+  - The switch already exists. The rule is not built in Phase 9. It moves to Phase 10 with TASK-101.
+- [x] TASK-095 Registration tests (units, prerequisites, deadline lock, approval flow, isolation, Journey 2)
 
 ## Phase 10: Fees, invoices and payments [FIN, PAY]
 
