@@ -174,6 +174,7 @@
 - [ ] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
   - Service part: approve, reject, and bulk approve. A missing id and an out-of-scope id both return 404. Bulk approve returns counts only. The queue screen is Part B.
 - [ ] TASK-092 Add/drop within window; admin reopen for an individual student
+  - Service part: `addDrop` and `reopen`. Reopen is Registrar and Super Admin only, and only for an Active student. The screens are Part B.
 - [ ] TASK-093 Registration slip PDF
 - [ ] TASK-094 Optional "minimum payment before registration" setting
   - The switch already exists. The rule is not built in Phase 9. See TASK-101.

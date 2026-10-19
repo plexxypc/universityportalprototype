@@ -9,7 +9,9 @@ use App\Enums\EmailTemplate;
 use App\Enums\NotificationType;
 use App\Enums\RegistrationStatus;
 use App\Enums\ResultStatus;
+use App\Enums\Role;
 use App\Enums\StudentStatus;
+use App\Enums\UserStatus;
 use App\Models\Course;
 use App\Models\CourseRegistration;
 use App\Models\CourseRegistrationItem;
@@ -71,6 +73,12 @@ final class RegistrationService
     public const string ACTION_APPROVED = 'registration.approved';
 
     public const string ACTION_REJECTED = 'registration.rejected';
+
+    public const string ACTION_ADD_DROP = 'registration.add_drop';
+
+    public const string ACTION_REOPENED = 'registration.reopened';
+
+    public const string MESSAGE_REOPEN_TIME = 'Choose a reopen time after the current time.';
 
     public const string MESSAGE_REASON = 'Enter a reason for the rejection.';
 
@@ -431,6 +439,222 @@ final class RegistrationService
     }
 
     /**
+     * Change courses during add/drop. Limits, eligibility, and prerequisites are checked again.
+     *
+     * An approved row returns to Submitted when approval is required. When approval
+     * is off, an approved row stays Approved and no second confirmation is sent.
+     *
+     * @param  list<int>  $course_ids
+     */
+    public function addDrop(User $actor, array $course_ids, Request $request): CourseRegistration
+    {
+        $this->assertCanSubmit($actor);
+        $student = $actor->student;
+
+        if (! $student instanceof Student) {
+            throw new AuthorizationException;
+        }
+
+        $refused = false;
+
+        $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request, &$refused): CourseRegistration {
+            $semester = Semester::query()->active()->first();
+
+            if (! $semester instanceof Semester) {
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_NO_SEMESTER]);
+            }
+
+            $registration = $this->lockedRegistration($student, $semester);
+            $assessment = $this->assess($student);
+
+            if ($assessment['state'] === 'not_active') {
+                throw ValidationException::withMessages(['student' => self::MESSAGE_NOT_ACTIVE]);
+            }
+
+            if (! $assessment['can_add_drop']) {
+                throw ValidationException::withMessages([
+                    'registration' => $assessment['message'] ?? self::MESSAGE_NO_DEADLINE,
+                ]);
+            }
+
+            $items = $this->selectedItems($assessment, $course_ids);
+            $resolved_ids = [];
+            $total_units = 0;
+
+            foreach ($items as $item) {
+                $resolved_ids[] = $item['course_id'];
+                $total_units += $item['credit_units'];
+            }
+
+            $problem = $this->unitMessage(
+                $total_units,
+                $assessment['core_units'],
+                $assessment['min_units'],
+                $assessment['max_units'],
+            );
+
+            if ($problem !== null) {
+                throw ValidationException::withMessages(['total_units' => $problem]);
+            }
+
+            $approval_required = (bool) $this->settings->effective()['approval_required'];
+            $target = $this->addDropTarget($registration, $approval_required);
+
+            if ($registration instanceof CourseRegistration && $this->sameCourseIds($registration, $target, $resolved_ids)) {
+                return $registration;
+            }
+
+            if ($registration instanceof CourseRegistration && ! $this->addDropAllowed($registration->status, $target)) {
+                $this->audit->record(
+                    (int) $actor->id,
+                    self::ACTION_REFUSED,
+                    'course_registrations',
+                    (int) $registration->getKey(),
+                    $this->snapshot($registration),
+                    [
+                        'student_id' => (int) $student->getKey(),
+                        'semester_id' => (int) $semester->getKey(),
+                        'status' => $target->value,
+                        'total_units' => (int) $registration->total_units,
+                    ],
+                    $this->audit->ipFromRequest($request),
+                );
+                $refused = true;
+
+                return $registration;
+            }
+
+            $was_approved = $registration instanceof CourseRegistration
+                && $registration->status === RegistrationStatus::Approved;
+            $before = $registration instanceof CourseRegistration && ! $registration->wasRecentlyCreated
+                ? $this->snapshot($registration)
+                : null;
+
+            if (! $registration instanceof CourseRegistration) {
+                $registration = $this->newRegistration($student, $semester);
+                $before = null;
+            }
+
+            $this->replaceItems($registration, $items);
+            $registration->status = $target;
+            $registration->total_units = $total_units;
+
+            if ($target === RegistrationStatus::Submitted) {
+                $registration->submitted_at = $registration->submitted_at ?? now();
+                $registration->decided_at = null;
+                $registration->decided_by = null;
+                $registration->rejection_reason = null;
+            }
+
+            if ($target === RegistrationStatus::Approved && ! $was_approved) {
+                $registration->submitted_at = $registration->submitted_at ?? now();
+                $registration->decided_at = now();
+                $registration->decided_by = null;
+                $registration->rejection_reason = null;
+            }
+
+            $registration->save();
+            $after = $this->snapshot($registration);
+
+            $this->audit->record(
+                (int) $actor->id,
+                self::ACTION_ADD_DROP,
+                'course_registrations',
+                (int) $registration->getKey(),
+                $before,
+                $after,
+                $this->audit->ipFromRequest($request),
+            );
+
+            if ($target === RegistrationStatus::Submitted) {
+                $this->notifications->create($actor, NotificationType::RegistrationSubmitted->value, [
+                    'title' => self::NOTICE_SUBMITTED_TITLE,
+                    'message' => self::NOTICE_SUBMITTED_MESSAGE,
+                    'link' => self::NOTICE_LINK,
+                ]);
+            }
+
+            if ($target === RegistrationStatus::Approved && ! $was_approved) {
+                $this->notifyApproved($actor, $registration, $semester);
+            }
+
+            return $registration;
+        });
+
+        if ($refused) {
+            throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
+        }
+
+        return $registration;
+    }
+
+    /**
+     * Open a registration window for one active student, and create an empty draft when none exists.
+     */
+    public function reopen(User $actor, int $student_id, string $reason, Carbon $reopened_until, Request $request): CourseRegistration
+    {
+        $this->assertCanReopen($actor);
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw ValidationException::withMessages(['reopen_reason' => self::MESSAGE_REASON]);
+        }
+
+        $until = $this->storedClock($reopened_until);
+
+        if ($until === null || $this->clock(null) >= $until) {
+            throw ValidationException::withMessages(['reopened_until' => self::MESSAGE_REOPEN_TIME]);
+        }
+
+        return DB::transaction(function () use ($actor, $student_id, $reason, $reopened_until, $request, $until): CourseRegistration {
+            $student = Student::query()->whereKey($student_id)->lockForUpdate()->first();
+
+            if (! $student instanceof Student) {
+                throw new NotFoundHttpException;
+            }
+
+            if ($student->status !== StudentStatus::Active) {
+                throw ValidationException::withMessages(['student' => self::MESSAGE_NOT_ACTIVE]);
+            }
+
+            $semester = Semester::query()->active()->first();
+
+            if (! $semester instanceof Semester) {
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_NO_SEMESTER]);
+            }
+
+            $registration = $this->lockedRegistration($student, $semester);
+            $before = $registration instanceof CourseRegistration ? $this->snapshot($registration) : null;
+
+            if (! $registration instanceof CourseRegistration) {
+                $registration = $this->newRegistration($student, $semester);
+                $before = null;
+            }
+
+            $registration->reopened_until = $reopened_until;
+            $registration->reopen_reason = $reason;
+            $registration->reopened_by = $actor->id;
+            $registration->save();
+
+            /** @var array<string, int|string> $after */
+            $after = $this->snapshot($registration);
+            $after['reopened_until'] = $until;
+
+            $this->audit->record(
+                (int) $actor->id,
+                self::ACTION_REOPENED,
+                'course_registrations',
+                (int) $registration->getKey(),
+                $before,
+                $after,
+                $this->audit->ipFromRequest($request),
+            );
+
+            return $registration;
+        });
+    }
+
+    /**
      * Display sentence. The named instant is when the window closes.
      */
     public static function closesAt(string $label, mixed $instant): string
@@ -456,6 +680,48 @@ final class RegistrationService
         if (! Gate::forUser($actor)->allows('course_registration.approve')) {
             throw new AuthorizationException;
         }
+    }
+
+    /**
+     * Only a Registrar or a Super Admin may reopen one student.
+     */
+    private function assertCanReopen(User $actor): void
+    {
+        if ($actor->status !== UserStatus::Active) {
+            throw new AuthorizationException;
+        }
+
+        if (! $actor->hasRole(Role::Registrar) && ! $actor->hasRole(Role::SuperAdmin)) {
+            throw new AuthorizationException;
+        }
+    }
+
+    /**
+     * Approval sends an approved row back to the queue. Otherwise it stays approved.
+     */
+    private function addDropTarget(?CourseRegistration $registration, bool $approval_required): RegistrationStatus
+    {
+        if ($registration instanceof CourseRegistration
+            && $registration->status === RegistrationStatus::Approved
+            && ! $approval_required) {
+            return RegistrationStatus::Approved;
+        }
+
+        if ($approval_required) {
+            return RegistrationStatus::Submitted;
+        }
+
+        return RegistrationStatus::Approved;
+    }
+
+    /**
+     * Add/drop may move a draft, a rejection, a submission, or an approval.
+     */
+    private function addDropAllowed(RegistrationStatus $from, RegistrationStatus $to): bool
+    {
+        return match ($from) {
+            RegistrationStatus::Draft, RegistrationStatus::Rejected, RegistrationStatus::Submitted, RegistrationStatus::Approved => $to === RegistrationStatus::Submitted || $to === RegistrationStatus::Approved,
+        };
     }
 
     /**

@@ -3,7 +3,7 @@
 > Current project state. Update at the end of every working session.
 > Permanent decisions live in DECISIONS.md; this file changes often.
 
-**Last updated:** Sunday, 18 October 2026 (phase 9, TASK-091 service)
+**Last updated:** Sunday, 18 October 2026 (phase 9, TASK-092 service)
 
 Phase 8 is merged to `main` (`699be1d`, pull request #20). Phase 9 course registration is in progress on `phase-9-registration`. TASK-088 is committed. TASK-090 service saves a draft and submits it. The live Aiven database has been migrated through the Phase 8 schema. The Phase 9 registration columns are not on Aiven.
 
@@ -316,7 +316,7 @@ Graduated students currently cannot sign in. Confirm with the Registrar whether 
 
 ## Next Step
 
-Phase 9 is course registration, in progress on `phase-9-registration`, branched from `main` at the Phase 8 merge (`699be1d`). TASK-088, the TASK-090 service, and the TASK-091 service are committed. Add/drop and reopen are next, then Stop A. ADR-030 stays provisional until the Registrar confirms the two rounding notes. The live Aiven database has been migrated through the latest Phase 8 schema, including the secrets column, the standing-thresholds table, and the outbox related columns. Do not treat the live site as having a working mailbox, and do not treat it as having the Phase 9 registration columns. Run migrations only against local Docker MySQL (`127.0.0.1`, `university_portal` / `university_portal_testing`). The Phase 9 migrations stay on `university_portal_testing` until Part B. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
+Phase 9 is course registration, in progress on `phase-9-registration`, branched from `main` at the Phase 8 merge (`699be1d`). TASK-088 and the service parts of TASK-090, TASK-091, and TASK-092 are committed. Stop A is next. Screens, the slip, and the journeys are Part B. ADR-030 stays provisional until the Registrar confirms the two rounding notes. The live Aiven database has been migrated through the latest Phase 8 schema, including the secrets column, the standing-thresholds table, and the outbox related columns. Do not treat the live site as having a working mailbox, and do not treat it as having the Phase 9 registration columns. Run migrations only against local Docker MySQL (`127.0.0.1`, `university_portal` / `university_portal_testing`). The Phase 9 migrations stay on `university_portal_testing` until Part B. The Render free service sleeps after about 15 minutes idle; open `https://universityportalprototype.onrender.com/up` and wait for HTTP 200 before a demo. Confirm Aiven is running at the same time.
 
 ## Session Log
 
@@ -370,3 +370,4 @@ Phase 9 is course registration, in progress on `phase-9-registration`, branched 
 | 18 Oct 2026 | The live Aiven database has been migrated through the Phase 8 schema, including the secrets column, the standing-thresholds table, and the outbox related columns. Phase 9 started on `phase-9-registration` from `main` (`699be1d`). |
 | 18 Oct 2026 | TASK-090 service. Draft save and submit copy credit units, recompute the total, and send the confirmation email only when the registration becomes Approved. ADR-031 adds `registration_submitted` and `registration_rejected`. The student page is still Part B. `composer check` on `127.0.0.1` / `university_portal_testing` passed (1023 tests, 1017 passed, 6 skipped, 5842 assertions, Pest 752 seconds). |
 | 18 Oct 2026 | TASK-091 service. Approve, reject, and bulk approve. A missing id and an out-of-scope id both return 404. Bulk approve returns counts only. The queue screen is Part B. `composer check` on `127.0.0.1` / `university_portal_testing` passed (1034 tests, 1027 passed, 7 skipped, 5905 assertions, Pest 639 seconds). |
+| 18 Oct 2026 | TASK-092 service. Add/drop sends an approved registration back to Submitted when approval is on, and leaves it Approved without a second confirmation email when approval is off. Reopen is Registrar and Super Admin only, for an Active student, and creates a zero-unit Draft in that same transaction. `composer check` on `127.0.0.1` / `university_portal_testing` passed (1041 tests, 1034 passed, 7 skipped, 5941 assertions, Pest 770 seconds). |
