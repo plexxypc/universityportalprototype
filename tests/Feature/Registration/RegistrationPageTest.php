@@ -1,0 +1,157 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\RegistrationStatus;
+use App\Enums\Role;
+use App\Livewire\Student\CourseRegistration as RegistrationPage;
+use App\Models\CourseRegistration;
+use App\Models\InstitutionSetting;
+use App\Models\RoleAssignment;
+use App\Services\RegistrationService;
+use App\Services\SettingsService;
+use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
+
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    Carbon::setTestNow(Carbon::parse('2026-10-19 10:00:00', 'Africa/Lagos'));
+});
+
+afterEach(function () {
+    Carbon::setTestNow();
+});
+
+it('keeps only the elective ids as public state', function () {
+    $names = [];
+
+    foreach ((new ReflectionClass(RegistrationPage::class))->getProperties() as $property) {
+        if ($property->getDeclaringClass()->getName() === RegistrationPage::class) {
+            $names[] = $property->getName();
+        }
+    }
+
+    expect($names)->toBe(['elective_ids'])
+        ->and((new ReflectionProperty(RegistrationPage::class, 'elective_ids'))->isPublic())->toBeTrue();
+});
+
+it('submits the ticked electives and stays idempotent', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $student = $world['student'];
+    $user = $student->user;
+
+    $page = $this->actingAs($user)->get('/student/course-registration');
+
+    $page->assertOk();
+    expect($page->getContent())->toContain('wire:loading.attr="disabled"')
+        ->and($page->getContent())->toContain('wire:target="submitRegistration"')
+        ->and($page->getContent())->toContain('CSC101')
+        ->and($page->getContent())->toContain('disabled');
+
+    Livewire::actingAs($user)->test(RegistrationPage::class)
+        ->set('elective_ids', [$world['elective']->id])
+        ->call('submitRegistration')
+        ->assertHasNoErrors()
+        ->assertSee('Registration submitted.')
+        ->call('submitRegistration')
+        ->assertHasNoErrors();
+
+    expect(CourseRegistration::query()->count())->toBe(1)
+        ->and(CourseRegistration::query()->first()?->total_units)->toBe(4);
+});
+
+it('shows the service sentence when a course is not eligible', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+
+    Livewire::actingAs($world['student']->user)->test(RegistrationPage::class)
+        ->set('elective_ids', [999999])
+        ->call('submitRegistration')
+        ->assertSee(RegistrationService::MESSAGE_NOT_ELIGIBLE)
+        ->assertDontSee('SQLSTATE');
+
+    expect(CourseRegistration::query()->count())->toBe(0);
+});
+
+it('hides an unexpected failure behind a plain sentence', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $component = Livewire::actingAs($world['student']->user)->test(RegistrationPage::class)->instance();
+    $run = new ReflectionMethod(RegistrationPage::class, 'run');
+
+    try {
+        $run->invoke($component, app(RegistrationService::class), function (): void {
+            throw new RuntimeException('secret-sqlstate');
+        }, 'Saved.');
+        $caught = false;
+    } catch (ValidationException $exception) {
+        $caught = true;
+        $message = $exception->errors()['registration'][0] ?? '';
+
+        expect($message)->toBe('That registration could not be saved.')
+            ->and(str_contains($message, 'secret-sqlstate'))->toBeFalse();
+    }
+
+    expect($caught)->toBeTrue();
+});
+
+it('saves an add or drop during that window', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $user = $world['student']->user;
+    app(RegistrationService::class)->submit($user, [$world['elective']->id], request());
+    Carbon::setTestNow(Carbon::parse('2026-11-02 10:00:00', 'Africa/Lagos'));
+
+    Livewire::actingAs($user)->test(RegistrationPage::class)
+        ->set('elective_ids', [])
+        ->call('saveChanges')
+        ->assertHasNoErrors()
+        ->assertSee('Courses updated.');
+
+    expect(CourseRegistration::query()->first()?->total_units)->toBe(2)
+        ->and(CourseRegistration::query()->first()?->status)->toBe(RegistrationStatus::Submitted);
+});
+
+it('refuses a super admin who also has a student row', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $user = $world['student']->user;
+    RoleAssignment::factory()->create([
+        'user_id' => $user->id,
+        'role' => Role::SuperAdmin,
+        'faculty_id' => null,
+        'department_id' => null,
+    ]);
+
+    $this->actingAs($user)->get('/student/course-registration')->assertOk();
+
+    Livewire::actingAs($user)->test(RegistrationPage::class)
+        ->call('submitRegistration')
+        ->assertSee('That registration could not be saved.')
+        ->assertDontSee('AuthorizationException');
+
+    expect(fn () => app(RegistrationService::class)->submit($user, [], request()))
+        ->toThrow(AuthorizationException::class);
+    expect(CourseRegistration::query()->count())->toBe(0);
+});
+
+it('shows the payment sentence when the switch is on', function () {
+    $world = registration_rules_world();
+    registration_rules_limits(2, 24);
+    $row = InstitutionSetting::query()->first();
+    $row->require_minimum_payment = true;
+    $row->save();
+    app(SettingsService::class)->forgetCache();
+
+    Livewire::actingAs($world['student']->user)->test(RegistrationPage::class)
+        ->assertSee(RegistrationService::MESSAGE_PAYMENT)
+        ->call('submitRegistration')
+        ->assertSee(RegistrationService::MESSAGE_PAYMENT);
+
+    expect(CourseRegistration::query()->count())->toBe(0);
+});

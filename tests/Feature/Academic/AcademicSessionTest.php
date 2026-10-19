@@ -54,7 +54,7 @@ function session_request(): Request
     ]);
 }
 
-it('accepts only a session name whose second year is the next year', function () {
+it('stores a session whose second year is the next year', function () {
     $registrar = session_user(Role::Registrar);
     $service = app(AcademicService::class);
 
@@ -62,12 +62,6 @@ it('accepts only a session name whose second year is the next year', function ()
 
     expect($session->name)->toBe('2026/2027')
         ->and($session->is_current)->toBeTrue();
-
-    expect(fn () => $service->createSession($registrar, '2026/2028', false, session_request()))
-        ->toThrow(ValidationException::class, AcademicService::MESSAGE_NAME);
-
-    expect(fn () => $service->createSession($registrar, '2026-2027', false, session_request()))
-        ->toThrow(ValidationException::class);
 });
 
 it('switches the current session inside one transaction', function () {

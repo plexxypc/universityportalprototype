@@ -166,15 +166,19 @@
 
 ## Phase 9: Course registration [REG-1..10]
 
-- [ ] TASK-088 `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules
-- [ ] TASK-089 Student course registration UI (core pre-selected, electives, live unit total, sticky summary)
-- [ ] TASK-090 Submit, status handling, confirmation email and notification
+- [x] TASK-088 `RegistrationService`: eligible courses, unit limits, prerequisites, deadline rules
+- [x] TASK-089 Student course registration UI (core pre-selected, electives, live unit total, sticky summary)
+- [x] TASK-090 Submit, status handling, confirmation email and notification
   - Phase 3 carry-over: copy `credit_units` onto the registration item when it is saved.
-- [ ] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
-- [ ] TASK-092 Add/drop within window; admin reopen for an individual student
-- [ ] TASK-093 Registration slip PDF
+  - Service part: `saveDraft` and `submit`. A repeat of the same courses writes nothing. The confirmation email is sent only when the row becomes Approved. The student page is Part B.
+- [x] TASK-091 Approval queues for department and faculty (approve/reject with reason); auto-approve when approval is disabled
+  - Service part: approve, reject, and bulk approve. A missing id and an out-of-scope id both return 404. Bulk approve returns counts only. The queue screen is Part B.
+- [x] TASK-092 Add/drop within window; admin reopen for an individual student
+  - Service part: `addDrop` and `reopen`. Reopen is Registrar and Super Admin only, and only for an Active student. The screens are Part B.
+- [x] TASK-093 Registration slip PDF
 - [ ] TASK-094 Optional "minimum payment before registration" setting
-- [ ] TASK-095 Registration tests (units, prerequisites, deadline lock, approval flow, isolation, Journey 2)
+  - The switch already exists. The rule is not built in Phase 9. It moves to Phase 10 with TASK-101.
+- [x] TASK-095 Registration tests (units, prerequisites, deadline lock, approval flow, isolation, Journey 2)
 
 ## Phase 10: Fees, invoices and payments [FIN, PAY]
 
@@ -192,6 +196,7 @@
 - [ ] TASK-101 `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling
   - Phase 3 carry-over: a pending payment does not change `paid_kobo`.
   - Phase 3 carry-over: a reversal reduces `paid_kobo` and does not delete the payment.
+  - Phase 9 carry-over: what payment satisfies `require_minimum_payment` is still undefined (which invoice, which status, which amount). `RegistrationService::minimumPaymentSatisfied` returns false while the switch is on and does not read invoices or payments. Replace that method here.
 - [ ] TASK-102 Payment return/status page (verifying → success / pending / failed / cancelled / expired) with "Check status" button
 - [ ] TASK-103 Notification endpoint (outside CSRF, rate-limited, reference only, triggers re-query) and `payments:poll-pending` scheduled job with back-off
   - Phase 3 carry-over: payment events are inserted and never updated.
@@ -210,6 +215,7 @@
 ## Phase 11: Results and grading [RES-1..11]
 
 - [ ] TASK-111 `ResultService`: draft results with component scores validated against configured maximums
+  - Phase 9 carry-over: a prerequisite is met only by a Published result at or above that result's pass mark, in a different semester. Repeat and carry-over courses are not offered at registration.
   - Phase 3 carry-over: a result score's component belongs to the result's scheme.
   - Phase 3 carry-over: `scheme_version` matches the linked scheme row.
 - [ ] TASK-112 Lecturer results entry UI per assigned course

@@ -11,6 +11,7 @@ use App\Models\InstitutionSetting;
 use App\Models\RoleAssignment;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\RegistrationService;
 use App\Services\SettingsService;
 use App\Support\InstitutionLogo;
 use App\Support\Mail\EmailTemplateRenderer;
@@ -237,6 +238,12 @@ it('does not rewrite matric numbers when the pattern changes', function () {
     );
 
     expect($student->refresh()->matric_no)->toBe('CSC/2026/0001');
+});
+
+it('warns that minimum payment before registration is not available yet', function () {
+    Livewire::actingAs(settings_user(Role::SuperAdmin))
+        ->test(InstitutionSettingsPage::class)
+        ->assertSee(RegistrationService::MESSAGE_PAYMENT_UNAVAILABLE);
 });
 
 it('shows the saved name and code on the login page and in email', function () {

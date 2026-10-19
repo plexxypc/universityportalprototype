@@ -116,7 +116,11 @@ final class Dates
             return self::TIMEZONE;
         }
 
-        $configured = config('app.timezone');
+        try {
+            $configured = config('app.timezone');
+        } catch (Exception) {
+            return self::TIMEZONE;
+        }
 
         if (! is_string($configured) || $configured === '') {
             return self::TIMEZONE;

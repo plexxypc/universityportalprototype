@@ -3,9 +3,6 @@
 declare(strict_types=1);
 
 use App\Support\Dates;
-use Tests\TestCase;
-
-uses(TestCase::class);
 
 it('parses deadlines as Africa Lagos wall time', function () {
     $naive = Dates::storageDateTime('2026-10-12 14:30:00');

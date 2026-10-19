@@ -210,13 +210,13 @@ it('blocks deleting a course that has a result', function () {
         ->toThrow(QueryException::class);
 });
 
-it('rolls back every phase 3 migration after migrate fresh and migrates again', function () {
+it('rolls back every phase 3 migration and migrates again', function () {
     $database_name = DB::getDatabaseName();
 
     expect($database_name)->toBe('university_portal_testing');
 
     if ($database_name !== 'university_portal_testing') {
-        throw new RuntimeException('Refusing migrate:fresh on '.$database_name.'.');
+        throw new RuntimeException('Refusing a migration rollback on '.$database_name.'.');
     }
 
     $connection = Schema::getConnection();
@@ -226,15 +226,13 @@ it('rolls back every phase 3 migration after migrate fresh and migrates again', 
     }
 
     try {
-        test()->artisan('migrate:fresh')->assertSuccessful();
-
         expect(Schema::hasTable('audit_logs'))->toBeTrue();
 
         $steps = (int) DB::table('migrations')
             ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
             ->count();
 
-        expect($steps)->toBe(46);
+        expect($steps)->toBe(48);
 
         test()->artisan('migrate:rollback', ['--step' => $steps])->assertSuccessful();
 
@@ -249,7 +247,20 @@ it('rolls back every phase 3 migration after migrate fresh and migrates again', 
         expect(Schema::hasTable('audit_logs'))->toBeTrue()
             ->and(Schema::hasColumn('users', 'status'))->toBeTrue();
     } finally {
-        if (! Schema::hasTable('audit_logs')) {
+        $ready = false;
+
+        try {
+            $ready = Schema::hasTable('migrations')
+                && Schema::hasTable('audit_logs')
+                && Schema::hasColumn('users', 'status')
+                && (int) DB::table('migrations')
+                    ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
+                    ->count() === 48;
+        } catch (Throwable) {
+            $ready = false;
+        }
+
+        if (! $ready) {
             test()->artisan('migrate')->assertSuccessful();
         }
 

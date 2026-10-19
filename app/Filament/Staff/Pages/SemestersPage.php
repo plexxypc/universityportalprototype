@@ -18,6 +18,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -92,6 +93,7 @@ class SemestersPage extends Page implements HasTable
                         $is_active,
                         $data['registration_deadline'] ?? null,
                         $data['add_drop_deadline'] ?? null,
+                        (int) ($data['semester_no'] ?? 0),
                     );
                 }),
         ];
@@ -122,6 +124,7 @@ class SemestersPage extends Page implements HasTable
                     (bool) ($arguments['is_active'] ?? false),
                     $arguments['registration_deadline'] ?? null,
                     $arguments['add_drop_deadline'] ?? null,
+                    (int) ($arguments['semester_no'] ?? 0),
                 );
             });
     }
@@ -134,6 +137,7 @@ class SemestersPage extends Page implements HasTable
             ->columns([
                 TextColumn::make('academicSession.name')->label('Session'),
                 TextColumn::make('name')->label('Semester'),
+                TextColumn::make('semester_no')->label('Number')->placeholder('Not set'),
                 IconColumn::make('is_active')->label('Active')->boolean(),
             ])
             ->recordActions([
@@ -142,6 +146,7 @@ class SemestersPage extends Page implements HasTable
                     ->fillForm(fn (Semester $record): array => [
                         'session_id' => $record->session_id,
                         'name' => $record->name,
+                        'semester_no' => $record->semesterNumber(),
                         'is_active' => $record->is_active,
                         'registration_deadline' => $record->registration_deadline,
                         'add_drop_deadline' => $record->add_drop_deadline,
@@ -163,6 +168,7 @@ class SemestersPage extends Page implements HasTable
                             $is_active,
                             $data['registration_deadline'] ?? null,
                             $data['add_drop_deadline'] ?? null,
+                            (int) ($data['semester_no'] ?? 0),
                         );
                     }),
                 DeleteAction::make()
@@ -183,6 +189,7 @@ class SemestersPage extends Page implements HasTable
         bool $is_active,
         mixed $registration_deadline,
         mixed $add_drop_deadline,
+        int $semester_no,
     ): void {
         $this->guardManage();
 
@@ -197,6 +204,7 @@ class SemestersPage extends Page implements HasTable
                     $is_active,
                     $registration_deadline,
                     $add_drop_deadline,
+                    $semester_no,
                     request(),
                 );
             } else {
@@ -207,6 +215,7 @@ class SemestersPage extends Page implements HasTable
                     $is_active,
                     $registration_deadline,
                     $add_drop_deadline,
+                    $semester_no,
                     request(),
                 );
             }
@@ -245,9 +254,30 @@ class SemestersPage extends Page implements HasTable
 
     public function content(Schema $schema): Schema
     {
-        return $schema->components([
-            EmbeddedTable::make(),
-        ]);
+        $components = [];
+        $warning = $this->semesterNumberWarning();
+
+        if ($warning !== null) {
+            $components[] = Text::make($warning);
+        }
+
+        $components[] = EmbeddedTable::make();
+
+        return $schema->components($components);
+    }
+
+    /**
+     * Shown when the active semester cannot be matched to programme courses.
+     */
+    public function semesterNumberWarning(): ?string
+    {
+        $active = Semester::query()->active()->first();
+
+        if ($active instanceof Semester && $active->semesterNumber() === null) {
+            return AcademicService::MESSAGE_SEMESTER_NUMBER_MISSING;
+        }
+
+        return null;
     }
 
     /**
@@ -261,6 +291,10 @@ class SemestersPage extends Page implements HasTable
                 ->options(fn (): array => AcademicSession::query()->orderBy('name')->pluck('name', 'id')->all())
                 ->required(),
             TextInput::make('name')->label('Name')->required()->maxLength(32),
+            Select::make('semester_no')
+                ->label('Semester number')
+                ->options([1 => '1', 2 => '2'])
+                ->required(),
             TextInput::make('registration_deadline')->label('Registration deadline'),
             TextInput::make('add_drop_deadline')->label('Add/drop deadline'),
             Toggle::make('is_active')->label('Active semester')->default(true),
@@ -288,6 +322,7 @@ class SemestersPage extends Page implements HasTable
             'notice' => $notice,
             'registration_deadline' => $data['registration_deadline'] ?? null,
             'add_drop_deadline' => $data['add_drop_deadline'] ?? null,
+            'semester_no' => (int) ($data['semester_no'] ?? 0),
         ]);
 
         return true;

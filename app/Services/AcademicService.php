@@ -66,6 +66,12 @@ class AcademicService
 
     public const string MESSAGE_ADD_DROP = 'The add/drop deadline must be on or after the registration deadline.';
 
+    public const string MESSAGE_SEMESTER_NUMBER = 'Choose semester 1 or semester 2.';
+
+    public const string MESSAGE_SEMESTER_NUMBER_TAKEN = 'That semester number is already used in this session.';
+
+    public const string MESSAGE_SEMESTER_NUMBER_MISSING = 'The active semester has no semester number. Set it before students can register.';
+
     /**
      * Plain-words warning when saving an active semester also changes the current session.
      *
@@ -225,17 +231,19 @@ class AcademicService
         bool $is_active,
         mixed $registration_deadline,
         mixed $add_drop_deadline,
+        int $semester_no,
         Request $request,
     ): Semester {
         if (! app(SemesterPolicy::class)->create($actor)) {
             throw new AuthorizationException;
         }
         $name = $this->semesterName($name);
+        $semester_no = $this->semesterNumber($semester_no);
         $registration = $this->deadline($registration_deadline, 'registration_deadline');
         $add_drop = $this->deadline($add_drop_deadline, 'add_drop_deadline');
         $this->deadlinesInOrder($registration, $add_drop);
 
-        return DB::transaction(function () use ($actor, $session_id, $name, $is_active, $registration, $add_drop, $request): Semester {
+        return DB::transaction(function () use ($actor, $session_id, $name, $is_active, $semester_no, $registration, $add_drop, $request): Semester {
             $session = AcademicSession::query()->visibleTo($actor)->whereKey($session_id)->lockForUpdate()->first();
 
             if (! $session instanceof AcademicSession) {
@@ -245,6 +253,8 @@ class AcademicService
             if (Semester::query()->where('session_id', $session->id)->where('name', $name)->exists()) {
                 throw ValidationException::withMessages(['name' => self::MESSAGE_SEMESTER_DUPLICATE]);
             }
+
+            $this->guardSemesterNumber($session->id, $semester_no, null);
 
             $active = Semester::query()->where('is_active', true)->lockForUpdate()->first();
 
@@ -260,6 +270,7 @@ class AcademicService
             $semester = new Semester;
             $semester->session_id = $session->id;
             $semester->name = $name;
+            $semester->semester_no = $semester_no;
             $semester->is_active = $is_active;
             $semester->registration_deadline = $this->lagosInstant($registration, 'registration_deadline');
             $semester->add_drop_deadline = $this->lagosInstant($add_drop, 'add_drop_deadline');
@@ -292,14 +303,16 @@ class AcademicService
         bool $is_active,
         mixed $registration_deadline,
         mixed $add_drop_deadline,
+        int $semester_no,
         Request $request,
     ): Semester {
         $name = $this->semesterName($name);
+        $semester_no = $this->semesterNumber($semester_no);
         $registration = $this->deadline($registration_deadline, 'registration_deadline');
         $add_drop = $this->deadline($add_drop_deadline, 'add_drop_deadline');
         $this->deadlinesInOrder($registration, $add_drop);
 
-        return DB::transaction(function () use ($actor, $semester_id, $name, $is_active, $registration, $add_drop, $request): Semester {
+        return DB::transaction(function () use ($actor, $semester_id, $name, $is_active, $semester_no, $registration, $add_drop, $request): Semester {
             $semester = $this->lockedSemester($actor, $semester_id);
             $before = $this->semesterSnapshot($semester);
             $session = AcademicSession::query()->whereKey($semester->session_id)->lockForUpdate()->first();
@@ -318,6 +331,8 @@ class AcademicService
                 throw ValidationException::withMessages(['name' => self::MESSAGE_SEMESTER_DUPLICATE]);
             }
 
+            $this->guardSemesterNumber($session->id, $semester_no, (int) $semester->getKey());
+
             if ($is_active && ! $semester->is_active) {
                 $this->clearActiveSemester();
                 $this->makeSessionCurrent($session);
@@ -329,6 +344,7 @@ class AcademicService
             }
 
             $semester->name = $name;
+            $semester->semester_no = $semester_no;
             $semester->registration_deadline = $this->lagosInstant($registration, 'registration_deadline');
             $semester->add_drop_deadline = $this->lagosInstant($add_drop, 'add_drop_deadline');
             $semester->save();
@@ -507,6 +523,36 @@ class AcademicService
     }
 
     /**
+     * Programme courses use semester 1 or 2. The name stays free text.
+     */
+    private function semesterNumber(int $semester_no): int
+    {
+        if (! in_array($semester_no, [1, 2], true)) {
+            throw ValidationException::withMessages(['semester_no' => self::MESSAGE_SEMESTER_NUMBER]);
+        }
+
+        return $semester_no;
+    }
+
+    /**
+     * One session holds each semester number once.
+     */
+    private function guardSemesterNumber(int $session_id, int $semester_no, ?int $ignore_id): void
+    {
+        $query = Semester::query()
+            ->where('session_id', $session_id)
+            ->where('semester_no', $semester_no);
+
+        if ($ignore_id !== null) {
+            $query->whereKeyNot($ignore_id);
+        }
+
+        if ($query->lockForUpdate()->exists()) {
+            throw ValidationException::withMessages(['semester_no' => self::MESSAGE_SEMESTER_NUMBER_TAKEN]);
+        }
+    }
+
+    /**
      * A semester name is free text, from 1 to 32 characters.
      */
     private function semesterName(string $name): string
@@ -571,13 +617,14 @@ class AcademicService
     /**
      * Fields stored on the semester audit row.
      *
-     * @return array{session_id: int, name: string, is_active: bool, session_is_current: bool, registration_deadline: ?string, add_drop_deadline: ?string}
+     * @return array{session_id: int, name: string, semester_no: int, is_active: bool, session_is_current: bool, registration_deadline: ?string, add_drop_deadline: ?string}
      */
     private function semesterSnapshot(Semester $semester): array
     {
         return [
             'session_id' => (int) $semester->session_id,
             'name' => $semester->name,
+            'semester_no' => (int) $semester->semesterNumber(),
             'is_active' => (bool) $semester->is_active,
             'session_is_current' => (bool) AcademicSession::query()->whereKey($semester->session_id)->value('is_current'),
             'registration_deadline' => Dates::storageDateTime($semester->registration_deadline),
