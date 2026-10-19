@@ -28,8 +28,10 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Throwable;
 
 /**
  * Course registration rules, draft save, and submit.
@@ -68,8 +70,6 @@ final class RegistrationService
 
     public const string ACTION_SUBMITTED = 'registration.submitted';
 
-    public const string ACTION_REFUSED = 'registration.transition_refused';
-
     public const string ACTION_APPROVED = 'registration.approved';
 
     public const string ACTION_REJECTED = 'registration.rejected';
@@ -80,9 +80,17 @@ final class RegistrationService
 
     public const string MESSAGE_REOPEN_TIME = 'Choose a reopen time after the current time.';
 
+    public const string MESSAGE_REOPEN_SPAN = 'Choose a reopen time within 14 days.';
+
+    public const int REOPEN_MAX_DAYS = 14;
+
     public const string MESSAGE_REASON = 'Enter a reason for the rejection.';
 
     public const string MESSAGE_BULK_CAP = 'Approve at most 100 registrations at a time.';
+
+    public const string MESSAGE_RELOAD = 'This registration changed. Reload the queue and try again.';
+
+    public const string WARNING_EMAIL = 'The registration confirmation email could not be queued.';
 
     public const int BULK_CAP = 100;
 
@@ -362,15 +370,29 @@ final class RegistrationService
     }
 
     /**
-     * Approve one submitted registration. A second approve writes nothing.
+     * Hash of the saved total, the saved item units, and the row's updated time.
+     *
+     * The queue passes this string back. Credit units and the total are not
+     * accepted from the client.
+     */
+    public function version(CourseRegistration $registration): string
+    {
+        $stamp = $registration->updated_at?->timezone(Dates::TIMEZONE)->format('Y-m-d H:i:s') ?? '';
+
+        return $stamp.'|'.$this->selectionHash($registration);
+    }
+
+    /**
+     * Approve one submitted registration. A second approve of the same selection writes nothing.
      *
      * A missing id and an id outside this account's scope throw the same 404.
+     * The actor cannot approve a registration that belongs to their own student row.
      */
-    public function approve(User $actor, int $registration_id, Request $request): CourseRegistration
+    public function approve(User $actor, int $registration_id, string $version, Request $request): CourseRegistration
     {
         $this->assertCanApprove($actor);
 
-        return $this->decide($actor, $registration_id, $request, true, null);
+        return $this->decide($actor, $registration_id, $version, $request, true, null);
     }
 
     /**
@@ -378,7 +400,7 @@ final class RegistrationService
      *
      * A missing id and an id outside this account's scope throw the same 404.
      */
-    public function reject(User $actor, int $registration_id, string $reason, Request $request): CourseRegistration
+    public function reject(User $actor, int $registration_id, string $reason, string $version, Request $request): CourseRegistration
     {
         $this->assertCanApprove($actor);
         $reason = trim($reason);
@@ -387,44 +409,52 @@ final class RegistrationService
             throw ValidationException::withMessages(['rejection_reason' => self::MESSAGE_REASON]);
         }
 
-        return $this->decide($actor, $registration_id, $request, false, $reason);
+        return $this->decide($actor, $registration_id, $version, $request, false, $reason);
     }
 
     /**
      * Approve the submitted rows in this list. Other ids are skipped.
      *
+     * Each entry is the id and the version the queue loaded. A changed row,
+     * a row that is not submitted, and the actor's own registration are skipped.
      * The result is two counts. It does not name the skipped ids.
      *
-     * @param  list<int>  $registration_ids
+     * @param  list<array{id: int, version: string}>  $previews
      * @return array{approved: int, skipped: int}
      */
-    public function bulkApprove(User $actor, array $registration_ids, Request $request): array
+    public function bulkApprove(User $actor, array $previews, Request $request): array
     {
         $this->assertCanApprove($actor);
 
-        if (count($registration_ids) > self::BULK_CAP) {
+        if (count($previews) > self::BULK_CAP) {
             throw ValidationException::withMessages(['registration_ids' => self::MESSAGE_BULK_CAP]);
         }
 
-        $ids = [];
+        $rows = [];
 
-        foreach ($registration_ids as $registration_id) {
-            $ids[] = (int) $registration_id;
+        foreach ($previews as $preview) {
+            $rows[] = [
+                'id' => (int) $preview['id'],
+                'version' => $preview['version'],
+            ];
         }
 
-        sort($ids);
+        usort($rows, fn (array $left, array $right): int => $left['id'] <=> $right['id']);
         $approved = 0;
         $skipped = 0;
 
-        DB::transaction(function () use ($actor, $ids, $request, &$approved, &$skipped): void {
-            foreach ($ids as $id) {
+        DB::transaction(function () use ($actor, $rows, $request, &$approved, &$skipped): void {
+            foreach ($rows as $row) {
                 $registration = CourseRegistration::query()
                     ->visibleTo($actor)
-                    ->whereKey($id)
+                    ->whereKey($row['id'])
                     ->lockForUpdate()
                     ->first();
 
-                if (! $registration instanceof CourseRegistration || $registration->status !== RegistrationStatus::Submitted) {
+                if (! $registration instanceof CourseRegistration
+                    || $registration->status !== RegistrationStatus::Submitted
+                    || $this->isOwnRegistration($actor, $registration)
+                    || ! $this->versionMatches($registration, $row['version'])) {
                     $skipped++;
 
                     continue;
@@ -455,9 +485,7 @@ final class RegistrationService
             throw new AuthorizationException;
         }
 
-        $refused = false;
-
-        $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request, &$refused): CourseRegistration {
+        $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request): CourseRegistration {
             $semester = Semester::query()->active()->first();
 
             if (! $semester instanceof Semester) {
@@ -505,23 +533,7 @@ final class RegistrationService
             }
 
             if ($registration instanceof CourseRegistration && ! $this->addDropAllowed($registration->status, $target)) {
-                $this->audit->record(
-                    (int) $actor->id,
-                    self::ACTION_REFUSED,
-                    'course_registrations',
-                    (int) $registration->getKey(),
-                    $this->snapshot($registration),
-                    [
-                        'student_id' => (int) $student->getKey(),
-                        'semester_id' => (int) $semester->getKey(),
-                        'status' => $target->value,
-                        'total_units' => (int) $registration->total_units,
-                    ],
-                    $this->audit->ipFromRequest($request),
-                );
-                $refused = true;
-
-                return $registration;
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
             }
 
             $was_approved = $registration instanceof CourseRegistration
@@ -581,15 +593,13 @@ final class RegistrationService
             return $registration;
         });
 
-        if ($refused) {
-            throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
-        }
-
         return $registration;
     }
 
     /**
      * Open a registration window for one active student, and create an empty draft when none exists.
+     *
+     * An existing row keeps its status, total, and items. Only the reopen columns change.
      */
     public function reopen(User $actor, int $student_id, string $reason, Carbon $reopened_until, Request $request): CourseRegistration
     {
@@ -602,8 +612,16 @@ final class RegistrationService
 
         $until = $this->storedClock($reopened_until);
 
-        if ($until === null || $this->clock(null) >= $until) {
+        $now = $this->clock(null);
+
+        if ($until === null || $now >= $until) {
             throw ValidationException::withMessages(['reopened_until' => self::MESSAGE_REOPEN_TIME]);
+        }
+
+        $latest = Carbon::parse($now, Dates::TIMEZONE)->addDays(self::REOPEN_MAX_DAYS)->format('Y-m-d H:i:s');
+
+        if ($until > $latest) {
+            throw ValidationException::withMessages(['reopened_until' => self::MESSAGE_REOPEN_SPAN]);
         }
 
         return DB::transaction(function () use ($actor, $student_id, $reason, $reopened_until, $request, $until): CourseRegistration {
@@ -726,41 +744,35 @@ final class RegistrationService
 
     /**
      * Approve or reject one visible submitted row.
+     *
+     * A refused transition writes nothing. A row that changed after the queue
+     * loaded it is refused with a reload message.
      */
     private function decide(
         User $actor,
         int $registration_id,
+        string $version,
         Request $request,
         bool $approving,
         ?string $reason,
     ): CourseRegistration {
-        $refused = false;
-
-        $registration = DB::transaction(function () use ($actor, $registration_id, $request, $approving, $reason, &$refused): CourseRegistration {
+        return DB::transaction(function () use ($actor, $registration_id, $version, $request, $approving, $reason): CourseRegistration {
             $registration = $this->lockedVisible($actor, $registration_id);
 
-            if ($approving && $registration->status === RegistrationStatus::Approved) {
+            if ($this->isOwnRegistration($actor, $registration)) {
+                throw new AuthorizationException;
+            }
+
+            if ($registration->status === RegistrationStatus::Approved && $this->sameSelection($registration, $version)) {
                 return $registration;
             }
 
-            if ($registration->status !== RegistrationStatus::Submitted) {
-                $this->audit->record(
-                    (int) $actor->id,
-                    self::ACTION_REFUSED,
-                    'course_registrations',
-                    (int) $registration->getKey(),
-                    $this->snapshot($registration),
-                    [
-                        'student_id' => (int) $registration->student_id,
-                        'semester_id' => (int) $registration->semester_id,
-                        'status' => $approving ? RegistrationStatus::Approved->value : RegistrationStatus::Rejected->value,
-                        'total_units' => (int) $registration->total_units,
-                    ],
-                    $this->audit->ipFromRequest($request),
-                );
-                $refused = true;
+            if (! $this->versionMatches($registration, $version)) {
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_RELOAD]);
+            }
 
-                return $registration;
+            if ($registration->status !== RegistrationStatus::Submitted) {
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
             }
 
             if ($approving) {
@@ -773,12 +785,67 @@ final class RegistrationService
 
             return $registration;
         });
+    }
 
-        if ($refused) {
-            throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
+    /**
+     * Whether this registration belongs to the actor's own student row.
+     */
+    private function isOwnRegistration(User $actor, CourseRegistration $registration): bool
+    {
+        $registration->loadMissing('student');
+        $owner = $registration->student?->user_id;
+
+        return $owner !== null && (int) $owner === (int) $actor->id;
+    }
+
+    /**
+     * Whether the queue's version still matches this locked row.
+     */
+    private function versionMatches(CourseRegistration $registration, string $version): bool
+    {
+        return hash_equals($this->version($registration), $version);
+    }
+
+    /**
+     * Whether the saved courses and units still match the loaded version.
+     *
+     * Approval itself changes the row's updated time. A second approve of the
+     * same selection writes nothing.
+     */
+    private function sameSelection(CourseRegistration $registration, string $version): bool
+    {
+        $part = $this->selectionPart($version);
+
+        return $part !== null && hash_equals($this->selectionHash($registration), $part);
+    }
+
+    /**
+     * The selection half of a version string, or null when the string is not one.
+     */
+    private function selectionPart(string $version): ?string
+    {
+        $pieces = explode('|', $version, 2);
+
+        if (count($pieces) !== 2 || $pieces[1] === '') {
+            return null;
         }
 
-        return $registration;
+        return $pieces[1];
+    }
+
+    /**
+     * Hash of the stored total and each stored course id with its copied units.
+     */
+    private function selectionHash(CourseRegistration $registration): string
+    {
+        $lines = [(string) (int) $registration->total_units];
+        $items = $registration->items()->orderBy('course_id')->get(['course_id', 'credit_units']);
+
+        foreach ($items as $item) {
+            $lines[] = (int) $item->course_id.':'.(int) $item->credit_units;
+        }
+
+        return hash('sha256', implode('|', $lines));
     }
 
     /**
@@ -886,9 +953,7 @@ final class RegistrationService
             throw new AuthorizationException;
         }
 
-        $refused = false;
-
-        $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request, $submitting, &$refused): CourseRegistration {
+        $registration = DB::transaction(function () use ($actor, $student, $course_ids, $request, $submitting): CourseRegistration {
             $semester = Semester::query()->active()->first();
 
             if (! $semester instanceof Semester) {
@@ -949,23 +1014,7 @@ final class RegistrationService
             }
 
             if (! $this->transitionAllowed($registration->status, $target)) {
-                $this->audit->record(
-                    (int) $actor->id,
-                    self::ACTION_REFUSED,
-                    'course_registrations',
-                    (int) $registration->getKey(),
-                    $this->snapshot($registration),
-                    [
-                        'student_id' => (int) $student->getKey(),
-                        'semester_id' => (int) $semester->getKey(),
-                        'status' => $target->value,
-                        'total_units' => (int) $registration->total_units,
-                    ],
-                    $this->audit->ipFromRequest($request),
-                );
-                $refused = true;
-
-                return $registration;
+                throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
             }
 
             $before = $registration->wasRecentlyCreated ? null : $this->snapshot($registration);
@@ -1016,15 +1065,14 @@ final class RegistrationService
             return $registration;
         });
 
-        if ($refused) {
-            throw ValidationException::withMessages(['registration' => self::MESSAGE_TRANSITION]);
-        }
-
         return $registration;
     }
 
     /**
      * In-app confirmation and one email. The email template is the approved wording.
+     *
+     * A mail failure does not undo the approval. The warning names neither the
+     * address nor a secret.
      */
     private function notifyApproved(User $actor, CourseRegistration $registration, Semester $semester): void
     {
@@ -1038,22 +1086,28 @@ final class RegistrationService
         $email = $actor->email;
 
         if ($email === '') {
+            Log::warning(self::WARNING_EMAIL);
+
             return;
         }
 
-        $this->mail->send(
-            EmailTemplate::RegistrationConfirmed->value,
-            $email,
-            [
-                'name' => (string) $actor->name,
-                'session_name' => (string) $semester->academicSession?->name,
-                'semester_name' => (string) $semester->name,
-                'total_units' => (int) $registration->total_units,
-            ],
-            (int) $actor->getKey(),
-            'course_registrations',
-            (int) $registration->getKey(),
-        );
+        try {
+            $this->mail->send(
+                EmailTemplate::RegistrationConfirmed->value,
+                $email,
+                [
+                    'name' => (string) $actor->name,
+                    'session_name' => (string) $semester->academicSession?->name,
+                    'semester_name' => (string) $semester->name,
+                    'total_units' => (int) $registration->total_units,
+                ],
+                (int) $actor->getKey(),
+                'course_registrations',
+                (int) $registration->getKey(),
+            );
+        } catch (Throwable) {
+            Log::warning(self::WARNING_EMAIL);
+        }
     }
 
     /**

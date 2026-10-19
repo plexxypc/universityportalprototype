@@ -343,6 +343,41 @@ it('warns when the active semester has no semester number', function () {
         ->assertDontSee(AcademicService::MESSAGE_SEMESTER_NUMBER_MISSING);
 });
 
+it('lets a registrar set semester 1 or 2 and refuses any other number', function () {
+    $registrar = session_user(Role::Registrar);
+    $session = AcademicSession::factory()->current()->create(['name' => '2026/2027']);
+    $before = Semester::query()->count();
+
+    Livewire::actingAs($registrar)
+        ->test(SemestersPage::class)
+        ->call('saveSemester', 0, (int) $session->getKey(), 'First', true, null, null, 0);
+
+    Notification::assertNotified(AcademicService::MESSAGE_SEMESTER_NUMBER);
+    expect(Semester::query()->count())->toBe($before);
+
+    Livewire::actingAs($registrar)
+        ->test(SemestersPage::class)
+        ->call('saveSemester', 0, (int) $session->getKey(), 'First', true, null, null, 1);
+
+    $created = Semester::query()->where('session_id', $session->id)->where('name', 'First')->first();
+    expect($created)->not->toBeNull()
+        ->and($created?->semesterNumber())->toBe(1);
+
+    Livewire::actingAs($registrar)
+        ->test(SemestersPage::class)
+        ->call('saveSemester', (int) $created?->getKey(), (int) $session->getKey(), 'First', true, null, null, 3);
+
+    Notification::assertNotified(AcademicService::MESSAGE_SEMESTER_NUMBER);
+    expect($created?->fresh()?->semesterNumber())->toBe(1);
+
+    Livewire::actingAs($registrar)
+        ->test(SemestersPage::class)
+        ->call('saveSemester', (int) $created?->getKey(), (int) $session->getKey(), 'Harmattan', true, null, null, 2);
+
+    expect($created?->fresh()?->name)->toBe('Harmattan')
+        ->and($created?->fresh()?->semesterNumber())->toBe(2);
+});
+
 it('refuses a semester number other than 1 or 2', function () {
     $registrar = session_user(Role::Registrar);
     $service = app(AcademicService::class);

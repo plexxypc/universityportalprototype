@@ -50,7 +50,12 @@ it('returns an approved registration to the queue when approval is on', function
         'semester_no' => 1,
     ]);
     $registrar = registration_decision_registrar();
-    app(RegistrationService::class)->approve($registrar, (int) $case['registration']->id, registration_decision_request());
+    app(RegistrationService::class)->approve(
+        $registrar,
+        (int) $case['registration']->id,
+        registration_decision_version($case['registration']),
+        registration_decision_request(),
+    );
     Carbon::setTestNow(Carbon::parse('2026-11-01 00:00:00', 'Africa/Lagos'));
     $changed = app(RegistrationService::class)->addDrop(
         $case['user'],
@@ -123,6 +128,7 @@ it('closes add and drop at the add-drop second', function () {
     app(RegistrationService::class)->approve(
         registration_decision_registrar(),
         (int) $case['registration']->id,
+        registration_decision_version($case['registration']),
         registration_decision_request(),
     );
     Carbon::setTestNow(Carbon::parse('2026-11-15 00:00:00', 'Africa/Lagos'));
@@ -154,6 +160,7 @@ it('refuses an add and drop that exceeds the maximum and keeps the row', functio
     app(RegistrationService::class)->approve(
         registration_decision_registrar(),
         (int) $case['registration']->id,
+        registration_decision_version($case['registration']),
         registration_decision_request(),
     );
     Carbon::setTestNow(Carbon::parse('2026-11-01 00:00:00', 'Africa/Lagos'));
@@ -245,5 +252,98 @@ it('refuses a faculty admin who tries to reopen a student', function () {
         Carbon::parse('2026-10-18 18:00:00', 'Africa/Lagos'),
         registration_decision_request(),
     ))->toThrow(AuthorizationException::class);
+    expect(CourseRegistration::query()->count())->toBe(0);
+});
+
+it('keeps each existing status when a student is reopened', function (RegistrationStatus $status) {
+    $shell = registration_decision_shell();
+    $case = registration_decision_submitted($shell, Programme::factory()->create());
+    $shell['semester']->registration_deadline = '2026-10-18 08:00:00';
+    $shell['semester']->add_drop_deadline = '2026-10-18 09:00:00';
+    $shell['semester']->save();
+    $case['registration']->status = $status;
+    $case['registration']->total_units = 2;
+    $case['registration']->save();
+    $item_ids = $case['registration']->items()->orderBy('course_id')->pluck('course_id')->all();
+    $until = Carbon::parse('2026-10-18 18:00:00', 'Africa/Lagos');
+    $opened = app(RegistrationService::class)->reopen(
+        registration_decision_registrar(),
+        (int) $case['student']->id,
+        'Late return',
+        $until,
+        registration_decision_request(),
+    );
+    $during = app(RegistrationService::class)->assess(
+        $case['student'],
+        Carbon::parse('2026-10-18 17:59:59', 'Africa/Lagos'),
+    );
+    $closed = app(RegistrationService::class)->assess(
+        $case['student'],
+        Carbon::parse('2026-10-18 18:00:00', 'Africa/Lagos'),
+    );
+
+    expect($opened->status)->toBe($status)
+        ->and($opened->total_units)->toBe(2)
+        ->and($opened->items()->orderBy('course_id')->pluck('course_id')->all())->toBe($item_ids)
+        ->and($opened->reopen_reason)->toBe('Late return')
+        ->and($during['can_start'])->toBeTrue()
+        ->and($closed['can_start'])->toBeFalse();
+})->with([
+    RegistrationStatus::Draft,
+    RegistrationStatus::Submitted,
+    RegistrationStatus::Approved,
+    RegistrationStatus::Rejected,
+]);
+
+it('refuses a reopen time that is not in the future or is past 14 days', function () {
+    $shell = registration_decision_shell();
+    $student = Student::factory()->create([
+        'programme_id' => Programme::factory()->create()->id,
+        'level' => 100,
+        'entry_session_id' => $shell['session']->id,
+        'status' => StudentStatus::Active,
+    ]);
+    $service = app(RegistrationService::class);
+    $registrar = registration_decision_registrar();
+    $request = registration_decision_request();
+
+    expect(fn () => $service->reopen($registrar, (int) $student->id, '   ', Carbon::parse('2026-10-18 18:00:00', 'Africa/Lagos'), $request))
+        ->toThrow(ValidationException::class, RegistrationService::MESSAGE_REASON);
+    expect(fn () => $service->reopen($registrar, (int) $student->id, 'Late return', Carbon::parse('2026-10-18 12:00:00', 'Africa/Lagos'), $request))
+        ->toThrow(ValidationException::class, RegistrationService::MESSAGE_REOPEN_TIME);
+    expect(fn () => $service->reopen($registrar, (int) $student->id, 'Late return', Carbon::parse('2026-11-01 12:00:01', 'Africa/Lagos'), $request))
+        ->toThrow(ValidationException::class, RegistrationService::MESSAGE_REOPEN_SPAN);
+
+    $opened = $service->reopen(
+        $registrar,
+        (int) $student->id,
+        'Late return',
+        Carbon::parse('2026-11-01 12:00:00', 'Africa/Lagos'),
+        $request,
+    );
+
+    expect($opened->status)->toBe(RegistrationStatus::Draft)
+        ->and($opened->reopened_until?->format('Y-m-d H:i:s'))->toBe('2026-11-01 12:00:00')
+        ->and(CourseRegistration::query()->count())->toBe(1);
+});
+
+it('refuses a reopen when there is no active semester', function () {
+    $shell = registration_decision_shell();
+    $shell['semester']->is_active = false;
+    $shell['semester']->save();
+    $student = Student::factory()->create([
+        'programme_id' => Programme::factory()->create()->id,
+        'level' => 100,
+        'entry_session_id' => $shell['session']->id,
+        'status' => StudentStatus::Active,
+    ]);
+
+    expect(fn () => app(RegistrationService::class)->reopen(
+        registration_decision_registrar(),
+        (int) $student->id,
+        'Late return',
+        Carbon::parse('2026-10-18 18:00:00', 'Africa/Lagos'),
+        registration_decision_request(),
+    ))->toThrow(ValidationException::class, RegistrationService::MESSAGE_NO_SEMESTER);
     expect(CourseRegistration::query()->count())->toBe(0);
 });

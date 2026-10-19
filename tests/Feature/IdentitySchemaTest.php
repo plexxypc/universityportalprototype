@@ -33,13 +33,12 @@ function without_identity_migrations(callable $callback): void
         $connection->commit();
     }
 
-    $steps = (int) DB::table('migrations')
-        ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
-        ->count();
-
-    test()->artisan('migrate:rollback', ['--step' => $steps])->assertSuccessful();
-
     try {
+        $steps = (int) DB::table('migrations')
+            ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
+            ->count();
+
+        test()->artisan('migrate:rollback', ['--step' => $steps])->assertSuccessful();
         $callback();
     } finally {
         test()->artisan('migrate')->assertSuccessful();

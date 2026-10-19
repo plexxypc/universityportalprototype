@@ -94,7 +94,8 @@ $action = is_string($payload['action'] ?? null) ? $payload['action'] : 'submit';
 for ($attempt = 0; $attempt < 2; $attempt++) {
     try {
         if ($action === 'approve') {
-            app(RegistrationService::class)->approve($user, (int) ($payload['registration_id'] ?? 0), $request);
+            $version = is_string($payload['version'] ?? null) ? $payload['version'] : '';
+            app(RegistrationService::class)->approve($user, (int) ($payload['registration_id'] ?? 0), $version, $request);
             registration_race_child_finish($result_file, true, 'submitted');
             exit(0);
         }

@@ -27,7 +27,9 @@ use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 uses(RefreshDatabase::class);
@@ -175,6 +177,46 @@ it('submits at the minimum and at the maximum', function () {
         ->and(EmailOutbox::query()->count())->toBe(0);
 });
 
+it('refuses 14 and 25 units and accepts 15 and 24', function () {
+    $world = registration_submit_world();
+    registration_submit_limits(15, 24);
+    $service = app(RegistrationService::class);
+    $world['core']->credit_units = 14;
+    $world['core']->save();
+
+    expect(fn () => $service->submit($world['user'], [], registration_submit_request()))
+        ->toThrow(ValidationException::class, RegistrationService::MESSAGE_BELOW_MIN);
+    expect(CourseRegistration::query()->count())->toBe(0);
+
+    $world['core']->credit_units = 15;
+    $world['core']->save();
+    $accepted_minimum = $service->submit($world['user'], [], registration_submit_request());
+    $at_maximum = registration_submit_student($world);
+    $at_maximum_user = $at_maximum->user;
+    expect($at_maximum_user)->toBeInstanceOf(User::class);
+    $world['elective']->credit_units = 9;
+    $world['elective']->save();
+    $accepted_maximum = $service->submit(
+        $at_maximum_user,
+        [(int) $world['elective']->id],
+        registration_submit_request(),
+    );
+    $over = registration_submit_student($world);
+    $over_user = $over->user;
+    expect($over_user)->toBeInstanceOf(User::class);
+    $world['elective']->credit_units = 10;
+    $world['elective']->save();
+
+    expect(fn () => $service->submit($over_user, [(int) $world['elective']->id], registration_submit_request()))
+        ->toThrow(ValidationException::class, RegistrationService::MESSAGE_ABOVE_MAX);
+
+    expect($accepted_minimum->status)->toBe(RegistrationStatus::Submitted)
+        ->and($accepted_minimum->total_units)->toBe(15)
+        ->and($accepted_maximum->status)->toBe(RegistrationStatus::Submitted)
+        ->and($accepted_maximum->total_units)->toBe(24)
+        ->and(CourseRegistration::query()->where('student_id', $over->id)->count())->toBe(0);
+});
+
 it('copies credit units and stores a total equal to the items', function () {
     $world = registration_submit_world();
     registration_submit_limits(2, 24);
@@ -199,6 +241,15 @@ it('copies credit units and stores a total equal to the items', function () {
         ->and($sum)->toBe(4)
         ->and($saved->total_units)->toBe($sum)
         ->and((int) $world['core']->fresh()?->credit_units)->toBe(9);
+
+    foreach (['saveDraft', 'submit', 'addDrop'] as $name) {
+        $parameters = array_map(
+            fn (ReflectionParameter $parameter): string => $parameter->getName(),
+            (new ReflectionMethod(RegistrationService::class, $name))->getParameters(),
+        );
+
+        expect($parameters)->toBe(['actor', 'course_ids', 'request']);
+    }
 });
 
 it('approves and sends one confirmation when approval is off', function () {
@@ -274,7 +325,8 @@ it('refuses a draft save after submit and keeps the row', function () {
     expect($fresh?->status)->toBe(RegistrationStatus::Submitted)
         ->and($fresh?->total_units)->toBe(4)
         ->and(CourseRegistrationItem::query()->orderBy('course_id')->pluck('course_id')->all())->toBe($item_ids)
-        ->and(AuditLog::query()->where('action', RegistrationService::ACTION_REFUSED)->count())->toBe(1);
+        ->and(AuditLog::query()->where('action', RegistrationService::ACTION_SUBMITTED)->count())->toBe(1)
+        ->and(AuditLog::query()->count())->toBe(1);
 });
 
 it('refuses submit at the deadline second and accepts the second before', function () {
@@ -360,18 +412,28 @@ it('submits a rejected registration again', function () {
         ->and(EmailOutbox::query()->count())->toBe(0);
 });
 
-it('rolls back approval when the confirmation email is refused', function () {
+it('keeps the approval when the confirmation email cannot be queued', function () {
+    $logged = [];
+    Log::listen(function (MessageLogged $event) use (&$logged): void {
+        $logged[] = ['message' => (string) $event->message, 'context' => $event->context];
+    });
     $world = registration_submit_world();
     registration_submit_limits(2, 24, false);
     $world['user']->email = 'not-an-email';
     $world['user']->save();
+    $saved = app(RegistrationService::class)->submit($world['user'], [], registration_submit_request());
+    $notice = Notification::query()->first();
 
-    expect(fn () => app(RegistrationService::class)->submit($world['user'], [], registration_submit_request()))
-        ->toThrow(InvalidArgumentException::class);
-    expect(CourseRegistration::query()->count())->toBe(0)
-        ->and(Notification::query()->count())->toBe(0)
+    expect($saved->status)->toBe(RegistrationStatus::Approved)
+        ->and(CourseRegistration::query()->count())->toBe(1)
+        ->and(Notification::query()->count())->toBe(1)
+        ->and($notice?->type)->toBe(NotificationType::RegistrationConfirmed)
         ->and(EmailOutbox::query()->count())->toBe(0)
-        ->and(AuditLog::query()->count())->toBe(0);
+        ->and(AuditLog::query()->where('action', RegistrationService::ACTION_SUBMITTED)->count())->toBe(1)
+        ->and($logged)->toBe([
+            ['message' => RegistrationService::WARNING_EMAIL, 'context' => []],
+        ])
+        ->and(json_encode($logged))->not->toContain('not-an-email');
 });
 
 it('refuses a course that is not eligible and writes nothing', function () {
@@ -531,6 +593,7 @@ it('lets one of two approvers confirm the same registration', function () {
                 'action' => 'approve',
                 'user_id' => $registrar->id,
                 'registration_id' => $saved->id,
+                'version' => app(RegistrationService::class)->version($saved),
                 'copy' => $copy,
             ], JSON_THROW_ON_ERROR));
             $files[] = (string) $ready;
