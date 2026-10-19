@@ -286,6 +286,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         'student.documents',
         'student.documents.download',
         'student.course-registration',
+        'student.course-registration.slip',
         'student.announcements',
         'student.settings',
         'student.notifications',
@@ -351,6 +352,18 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
     $download_middleware = $download instanceof RegisteredRoute
         ? array_map(strval(...), $download->gatherMiddleware())
         : [];
+
+    $registration_slip = Route::getRoutes()->getByName('staff.downloads.registration');
+    $registration_slip_middleware = $registration_slip instanceof RegisteredRoute
+        ? array_map(strval(...), $registration_slip->gatherMiddleware())
+        : [];
+
+    expect($registration_slip)->toBeInstanceOf(RegisteredRoute::class)
+        ->and($registration_slip->uri())->toBe('staff/downloads/registrations/{registration}')
+        ->and(route_coverage_has_auth($registration_slip_middleware))->toBeTrue()
+        ->and(route_coverage_has_class($registration_slip_middleware, EnsureActive::class))->toBeTrue()
+        ->and(route_coverage_has_class($registration_slip_middleware, EnsurePasswordChanged::class))->toBeTrue()
+        ->and(in_array(EnsurePortalArea::class.':staff', $registration_slip_middleware, true))->toBeTrue();
 
     expect($download)->toBeInstanceOf(RegisteredRoute::class)
         ->and($download->uri())->toBe('staff/downloads/documents/{document}')

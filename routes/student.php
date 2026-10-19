@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\PingController;
+use App\Http\Controllers\RegistrationSlipController;
 use App\Http\Controllers\Student\AnnouncementController;
 use App\Http\Controllers\Student\CourseRegistrationController;
 use App\Http\Controllers\Student\DocumentController;
@@ -29,6 +30,8 @@ Route::middleware([
     Route::get('/student/profile', ProfileController::class)->name('student.profile');
     Route::get('/student/documents', DocumentController::class)->name('student.documents');
     Route::get('/student/course-registration', CourseRegistrationController::class)->name('student.course-registration');
+    Route::get('/student/course-registration/slip', [RegistrationSlipController::class, 'student'])
+        ->name('student.course-registration.slip');
     Route::get('/student/documents/{document}', DocumentDownloadController::class)
         ->whereNumber('document')
         ->name('student.documents.download');
