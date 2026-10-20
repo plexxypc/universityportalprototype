@@ -57,12 +57,15 @@ use App\Support\Mail\BrevoTransport;
 use App\Support\Mail\UniqueOutboxDispatch;
 use App\Support\Rbac\Permissions;
 use Filament\Auth\Http\Controllers\LogoutController as FilamentLogoutController;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Request;
 use Illuminate\Queue\Events\Looping;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
@@ -88,6 +91,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->make(DatabaseTls::class)->apply();
         $this->app->make(EnvironmentGuard::class)->enforce();
         $this->app->make(PaymentGatewayResolver::class)->warnIfUnusable();
+        $this->registerPaymentNotificationLimit();
 
         Relation::enforceMorphMap([
             'Applicant' => Applicant::class,
@@ -107,6 +111,18 @@ class AppServiceProvider extends ServiceProvider
             EnsurePasswordChanged::class,
             EnsurePortalArea::class,
         ]);
+    }
+
+    /**
+     * Limit provider notifications by the socket address.
+     */
+    private function registerPaymentNotificationLimit(): void
+    {
+        RateLimiter::for('payments-notify', function (Request $request): Limit {
+            $per_minute = max(1, (int) config('payments.notification_rate_per_minute'));
+
+            return Limit::perMinute($per_minute)->by((string) $request->ip());
+        });
     }
 
     /**

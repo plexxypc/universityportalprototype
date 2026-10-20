@@ -33,6 +33,8 @@ return [
 
     'notification_max_bytes' => 4096,
 
+    'notification_rate_per_minute' => (int) env('PAYMENT_NOTIFY_RATE_PER_MINUTE', 30),
+
     'interswitch' => [
         'merchant_code' => env('INTERSWITCH_MERCHANT_CODE'),
         'pay_item_id' => env('INTERSWITCH_PAY_ITEM_ID'),

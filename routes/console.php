@@ -18,3 +18,6 @@ Schedule::command('outbox:send')->everyMinute()->withoutOverlapping();
 
 // Staged spreadsheets hold personal data. Drop files older than 24 hours.
 Schedule::command('imports:prune-staged')->hourly()->withoutOverlapping();
+
+// Re-check pending payments. One run stops when its time budget is spent.
+Schedule::command('payments:poll-pending')->everyMinute()->withoutOverlapping();

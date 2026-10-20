@@ -52,6 +52,7 @@ function route_coverage_named_public_routes(): array
         'health' => 'Health probe. It does not start a session.',
         'webhooks.ping' => 'Provider notification ping. It sits outside the auth groups.',
         'payments.return' => 'Provider return. It reads the reference only and sits outside the auth and CSRF groups.',
+        'payments.notify' => 'Provider notification. It names a reference, sits outside the auth and CSRF groups, and is rate-limited.',
         'default-livewire.update' => 'Persistent middleware from the page protects this Livewire update.',
         'livewire.upload-file' => 'Persistent middleware from the page protects this Livewire upload.',
         'livewire.preview-file' => 'Persistent middleware from the page protects this Livewire preview.',

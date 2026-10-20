@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\PaymentNotificationController;
 use App\Http\Controllers\PaymentReturnController;
 use App\Http\Controllers\PingController;
 use Illuminate\Support\Facades\Route;
@@ -13,3 +14,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/payments/notify/ping', [PingController::class, 'webhook'])->name('webhooks.ping');
 
 Route::match(['GET', 'POST'], '/payments/return', PaymentReturnController::class)->name('payments.return');
+
+Route::post('/payments/notify/{provider}', PaymentNotificationController::class)
+    ->where('provider', '[A-Za-z0-9]+')
+    ->middleware('throttle:payments-notify')
+    ->name('payments.notify');
