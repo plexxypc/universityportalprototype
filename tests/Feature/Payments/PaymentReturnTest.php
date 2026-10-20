@@ -96,6 +96,36 @@ it('shows an overpayment as under review and checks status for the owner', funct
     $this->actingAs($world['user'])->get('/student/payments/P20260000000999')->assertNotFound();
 });
 
+it('gives another student the same 404 for a real payment and a missing reference', function () {
+    $world = return_payment();
+    $other = User::factory()->create();
+    Student::factory()->create(['user_id' => $other->id]);
+    $real = $this->actingAs($other)->get('/student/payments/'.$world['payment']->reference);
+    $missing = $this->actingAs($other)->get('/student/payments/P20260000000999');
+
+    $real->assertNotFound();
+    $missing->assertNotFound();
+
+    expect($real->status())->toBe($missing->status());
+});
+
+it('limits payment returns per address', function () {
+    expect((int) config('payments.return_rate_per_minute'))->toBe(30);
+
+    config(['payments.return_rate_per_minute' => 2]);
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.77']);
+    $body = ['reference' => 'P20260000000999'];
+
+    expect($this->post('/payments/return', $body)->getStatusCode())->toBe(303)
+        ->and($this->get('/payments/return?reference=P20260000000999')->getStatusCode())->toBe(303);
+
+    $limited = $this->post('/payments/return', $body);
+
+    $limited->assertStatus(429);
+    expect($limited->headers->has('Retry-After'))->toBeTrue()
+        ->and($limited->getContent())->toContain('Too Many Requests');
+});
+
 it('checks status for the owner and says payments are unavailable when the gateway is closed', function () {
     $world = return_payment();
     app(DemoGateway::class)->remember($world['payment']->reference, (int) $world['payment']->amount_kobo, 'success');

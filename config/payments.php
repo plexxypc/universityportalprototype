@@ -29,11 +29,17 @@ return [
     */
     'minimum_instalment_kobo' => (int) env('PAYMENT_MINIMUM_INSTALMENT_KOBO', 100_000),
 
+    'max_pending_per_invoice' => (int) env('PAYMENT_MAX_PENDING_PER_INVOICE', 3),
+
+    'max_initiations_per_hour' => (int) env('PAYMENT_MAX_INITIATIONS_PER_HOUR', 10),
+
     'pending_minutes' => 30,
 
     'notification_max_bytes' => 4096,
 
     'notification_rate_per_minute' => (int) env('PAYMENT_NOTIFY_RATE_PER_MINUTE', 30),
+
+    'return_rate_per_minute' => (int) env('PAYMENT_RETURN_RATE_PER_MINUTE', 30),
 
     'interswitch' => [
         'merchant_code' => env('INTERSWITCH_MERCHANT_CODE'),

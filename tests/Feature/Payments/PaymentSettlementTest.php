@@ -21,9 +21,11 @@ use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Cache\Events\CacheMissed;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 
 uses(RefreshDatabase::class);
 
@@ -224,6 +226,63 @@ it('refuses an update to a payment event', function () {
     $event = PaymentEvent::query()->first();
 
     expect(fn () => $event?->update(['event_key' => 'changed']))->toThrow(RuntimeException::class);
+});
+
+it('keeps a settlement when the confirmation email or notice fails', function () {
+    $mail_world = settlement_payment();
+    $mail_world['user']->email = 'not-an-email';
+    $mail_world['user']->save();
+    settlement_outcome($mail_world['payment'], 'success');
+    app(PaymentService::class)->verifyAndSettle($mail_world['payment']->reference, 'callback');
+
+    expect($mail_world['payment']->fresh()?->status->value)->toBe('Successful')
+        ->and((int) $mail_world['invoice']->fresh()?->paid_kobo)->toBe(100_000)
+        ->and(Receipt::query()->count())->toBe(1)
+        ->and(EmailOutbox::query()->count())->toBe(0);
+
+    $notice_world = settlement_payment();
+    settlement_outcome($notice_world['payment'], 'success');
+    Event::listen('eloquent.creating: '.Notification::class, function (): void {
+        throw new RuntimeException('planted-notice-down');
+    });
+
+    try {
+        app(PaymentService::class)->verifyAndSettle($notice_world['payment']->reference, 'poll');
+    } finally {
+        Event::forget('eloquent.creating: '.Notification::class);
+    }
+
+    expect($notice_world['payment']->fresh()?->status->value)->toBe('Successful')
+        ->and((int) $notice_world['invoice']->fresh()?->paid_kobo)->toBe(100_000)
+        ->and(Notification::query()->where('user_id', $notice_world['user']->id)->count())->toBe(0);
+});
+
+it('keeps a planted secret and a planted card number out of payment records', function () {
+    $world = settlement_payment();
+    settlement_outcome($world['payment'], 'success');
+    $key = DemoGateway::cacheKey($world['payment']->reference);
+    $stored = Cache::get($key);
+    $stored = is_array($stored) ? $stored : [];
+    $stored['secret'] = 'super-secret-value';
+    $stored['card_number'] = '4111111111111111';
+    Cache::put($key, $stored, now()->addHour());
+    Cache::forget(PaymentService::verifyCacheKey($world['payment']->reference));
+    $lines = [];
+    Log::listen(function (MessageLogged $event) use (&$lines): void {
+        $lines[] = $event->message.' '.json_encode($event->context);
+    });
+    app(PaymentService::class)->verifyAndSettle($world['payment']->reference, 'callback');
+    $blob = (string) json_encode([
+        $lines,
+        PaymentEvent::query()->get(),
+        DB::table('audit_logs')->get(),
+        EmailOutbox::query()->get(),
+        DB::table('jobs')->get(),
+        DB::table('failed_jobs')->get(),
+    ]);
+
+    expect(str_contains($blob, 'super-secret-value'))->toBeFalse()
+        ->and(str_contains($blob, '4111111111111111'))->toBeFalse();
 });
 
 it('locks the payment row before the invoice row', function () {

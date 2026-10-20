@@ -69,6 +69,10 @@ class PaymentService
 
     public const string MESSAGE_INSTALMENT = 'Pay at least the minimum instalment, or the remaining balance.';
 
+    public const string MESSAGE_PENDING_LIMIT = 'This invoice already has the maximum number of payments in progress.';
+
+    public const string MESSAGE_HOURLY = 'You have started too many payments. Try again later.';
+
     public function __construct(
         private readonly Audit $audit,
         private readonly PaymentGatewayResolver $gateways,
@@ -102,6 +106,7 @@ class PaymentService
 
             $available = InvoiceService::outstandingKobo($invoice) - InvoiceService::reservedKobo($invoice);
             $this->assertAmount($amount_kobo, $available);
+            $this->assertStartLimits($invoice);
             $gateway = $this->gateways->resolve();
             $reference = $this->nextReference();
             $payment = new Payment;
@@ -176,6 +181,35 @@ class PaymentService
 
         if ($amount_kobo < $minimum && $amount_kobo !== $available) {
             throw ValidationException::withMessages(['amount' => self::MESSAGE_INSTALMENT]);
+        }
+    }
+
+    /**
+     * Cap open reservations on one invoice and starts by one student in an hour.
+     *
+     * The caller holds the invoice row. An expired Pending payment does not count.
+     */
+    private function assertStartLimits(Invoice $invoice): void
+    {
+        $pending_limit = max(1, (int) config('payments.max_pending_per_invoice'));
+        $pending = Payment::query()
+            ->where('invoice_id', $invoice->getKey())
+            ->where('status', PaymentStatus::Pending->value)
+            ->where('expires_at', '>', now())
+            ->count();
+
+        if ($pending >= $pending_limit) {
+            throw ValidationException::withMessages(['payment' => self::MESSAGE_PENDING_LIMIT]);
+        }
+
+        $hourly_limit = max(1, (int) config('payments.max_initiations_per_hour'));
+        $started = Payment::query()
+            ->where('student_id', $invoice->student_id)
+            ->where('created_at', '>=', now()->subHour())
+            ->count();
+
+        if ($started >= $hourly_limit) {
+            throw ValidationException::withMessages(['payment' => self::MESSAGE_HOURLY]);
         }
     }
 
@@ -555,11 +589,15 @@ class PaymentService
             return;
         }
 
-        $this->notifications->create($user, NotificationType::PaymentConfirmed->value, [
-            'title' => 'Payment confirmed',
-            'message' => 'Your payment was received. Receipt '.$receipt_number.'.',
-            'link' => '/student/fees',
-        ]);
+        try {
+            $this->notifications->create($user, NotificationType::PaymentConfirmed->value, [
+                'title' => 'Payment confirmed',
+                'message' => 'Your payment was received. Receipt '.$receipt_number.'.',
+                'link' => '/student/fees',
+            ]);
+        } catch (Throwable) {
+            Log::warning('The payment confirmation notice was not saved.');
+        }
 
         if ($user->email === '') {
             return;

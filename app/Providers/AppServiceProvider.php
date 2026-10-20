@@ -123,6 +123,12 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($per_minute)->by((string) $request->ip());
         });
+
+        RateLimiter::for('payments-return', function (Request $request): Limit {
+            $per_minute = max(1, (int) config('payments.return_rate_per_minute'));
+
+            return Limit::perMinute($per_minute)->by((string) $request->ip());
+        });
     }
 
     /**

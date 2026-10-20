@@ -185,8 +185,7 @@
 - [ ] TASK-096 Invoice generation: single and bulk by programme/level/session, with preview and confirm
   - Phase 3 carry-over: at most one non-cancelled invoice per student per session.
   - Phase 3 carry-over: allocate the invoice number from `counters` inside the creating transaction.
-  - TASK-081 waits on the invoice number allocated here. `StudentService::create` does not create an invoice until this numbering exists.
-  - Phase 7 carry-over: invoice generation must also run when a student is created or an applicant is converted, inside that same transaction. TASK-081 moved here. `StudentService::create` still does not create an invoice.
+  - Phase 7 carry-over: invoice generation runs when a student is created or an applicant is converted, inside that same transaction. `StudentService::create` issues the invoice after the matric counter.
 - [ ] TASK-097 Adjustments: scholarship, discount, waiver with reason and audit
 - [ ] TASK-098 Student fees page and invoice detail
 - [ ] TASK-099 `PaymentGateway` interface (`initialize`, `verify`, `parseNotification`) and **Demo Gateway** (checkout page and signed event)

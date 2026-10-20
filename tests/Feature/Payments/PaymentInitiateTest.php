@@ -110,7 +110,8 @@ it('accepts the whole remaining balance and rejects a smaller instalment', funct
     );
     $large = payment_start_invoice();
 
-    expect((int) $started->payment->amount_kobo)->toBe(5_000);
+    expect((int) config('payments.minimum_instalment_kobo'))->toBe(100_000)
+        ->and((int) $started->payment->amount_kobo)->toBe(5_000);
 
     expect(fn () => app(PaymentService::class)->initiate(
         $large['user'],
@@ -177,6 +178,37 @@ it('refuses another student and a super admin, and shows payments are unavailabl
 
     expect(session('errors')->first('payment'))->toBe(PaymentsUnavailableException::MESSAGE)
         ->and(Payment::query()->where('invoice_id', $world['invoice']->id)->count())->toBe(0);
+});
+
+it('stops a fourth pending payment on one invoice and an eleventh start in an hour', function () {
+    expect((int) config('payments.max_pending_per_invoice'))->toBe(3)
+        ->and((int) config('payments.max_initiations_per_hour'))->toBe(10);
+
+    $pending = payment_start_invoice(500_000);
+    $service = app(PaymentService::class);
+
+    foreach (range(1, 3) as $ignored) {
+        $service->initiate($pending['user'], (int) $pending['invoice']->id, '1000.00', payment_start_request());
+    }
+
+    expect(fn () => $service->initiate($pending['user'], (int) $pending['invoice']->id, '1000.00', payment_start_request()))
+        ->toThrow(ValidationException::class, PaymentService::MESSAGE_PENDING_LIMIT)
+        ->and(Payment::query()->where('invoice_id', $pending['invoice']->id)->where('status', 'Pending')->count())->toBe(3);
+
+    $hourly = payment_start_invoice();
+
+    foreach (range(1, 10) as $ignored) {
+        Payment::factory()->create([
+            'invoice_id' => $hourly['invoice']->id,
+            'student_id' => $hourly['invoice']->student_id,
+            'amount_kobo' => 100,
+            'status' => PaymentStatus::Failed,
+            'reference' => 'H2026'.str_pad((string) $ignored, 10, '0', STR_PAD_LEFT),
+        ]);
+    }
+
+    expect(fn () => $service->initiate($hourly['user'], (int) $hourly['invoice']->id, '1000.00', payment_start_request()))
+        ->toThrow(ValidationException::class, PaymentService::MESSAGE_HOURLY);
 });
 
 it('rejects a reversed payment that has no reversal fields', function () {
