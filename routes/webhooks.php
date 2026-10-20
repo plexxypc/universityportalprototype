@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\PaymentReturnController;
 use App\Http\Controllers\PingController;
 use Illuminate\Support\Facades\Route;
 
@@ -10,3 +11,5 @@ use Illuminate\Support\Facades\Route;
  * Real provider notifications will live under /payments/notify/{provider}.
  */
 Route::get('/payments/notify/ping', [PingController::class, 'webhook'])->name('webhooks.ping');
+
+Route::match(['GET', 'POST'], '/payments/return', PaymentReturnController::class)->name('payments.return');

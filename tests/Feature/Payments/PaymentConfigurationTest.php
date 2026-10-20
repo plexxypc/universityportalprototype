@@ -151,7 +151,8 @@ it('shows the demo banner and rejects a forged outcome', function () {
             'outcome' => 'success',
             'signature' => $signature,
         ])
-        ->assertRedirect();
+        ->assertStatus(303)
+        ->assertRedirectToRoute('payments.return', ['reference' => $world['payment']->reference]);
 
     $outcome = $demo->verify($world['payment']->reference);
 

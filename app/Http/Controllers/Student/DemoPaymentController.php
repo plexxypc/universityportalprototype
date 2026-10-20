@@ -69,9 +69,7 @@ class DemoPaymentController extends Controller
 
         $this->demo->remember($reference, (int) $payment->amount_kobo, $outcome);
 
-        return redirect()
-            ->route('student.payments.demo', ['reference' => $reference])
-            ->with('toast', 'The demo outcome was recorded.');
+        return redirect()->route('payments.return', ['reference' => $reference], 303);
     }
 
     /**

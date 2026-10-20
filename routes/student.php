@@ -13,6 +13,7 @@ use App\Http\Controllers\Student\FeesController;
 use App\Http\Controllers\Student\HomeController;
 use App\Http\Controllers\Student\MoreController;
 use App\Http\Controllers\Student\NotificationController;
+use App\Http\Controllers\Student\PaymentStatusController;
 use App\Http\Controllers\Student\ProfileController;
 use App\Http\Controllers\Student\SettingsController;
 use App\Http\Middleware\EnsureActive;
@@ -45,6 +46,12 @@ Route::middleware([
     Route::post('/student/payments/demo/{reference}', [DemoPaymentController::class, 'store'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.demo.store');
+    Route::get('/student/payments/{reference}', [PaymentStatusController::class, 'show'])
+        ->where('reference', '[A-Za-z0-9]+')
+        ->name('student.payments.show');
+    Route::post('/student/payments/{reference}/check', [PaymentStatusController::class, 'check'])
+        ->where('reference', '[A-Za-z0-9]+')
+        ->name('student.payments.check');
     Route::get('/student/course-registration/slip', [RegistrationSlipController::class, 'student'])
         ->name('student.course-registration.slip');
     Route::get('/student/documents/{document}', DocumentDownloadController::class)

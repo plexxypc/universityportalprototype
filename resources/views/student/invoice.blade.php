@@ -57,7 +57,7 @@
                 <ul class="flex flex-col gap-space-12">
                     @foreach ($invoice->payments as $payment)
                         <li class="flex max-w-full flex-wrap items-center justify-between gap-space-8">
-                            <span class="min-w-0 text-body text-text">{{ $payment->reference }}</span>
+                            <a class="min-w-0 text-body font-semibold text-primary-700 underline" href="{{ route('student.payments.show', ['reference' => $payment->reference]) }}">{{ $payment->reference }}</a>
                             <span class="flex flex-wrap items-center gap-space-8">
                                 <x-money :kobo="(int) $payment->amount_kobo" />
                                 <x-status-badge :status="$payment->status" />
