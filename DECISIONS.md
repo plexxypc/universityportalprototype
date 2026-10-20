@@ -358,3 +358,22 @@
 **Reason:** The existing confirmation email says the registration is confirmed. Sending it on submit would be false while approval is still required. The student still needs an in-app notice for submit and for rejection.
 
 **Consequences:** TASK-090 sends `registration_submitted` on submit when approval is required, and `registration_confirmed` plus the existing email when the row becomes Approved. TASK-091 sends `registration_rejected` on rejection.
+
+## ADR-032: Invoice numbers, payment lock order, and Interswitch Web Checkout
+
+**Status:** Accepted.
+
+**Decision:** Phase 10 collects fees through the Demo Gateway and one Interswitch Web Checkout adapter. Remita is not built in this phase. ADR-023 still names it as a later adapter.
+
+1. **Numbers.** Inside the creating transaction, counters allocate `INV-{YEAR}-{SEQ6}`, `RCT-{YEAR}-{SEQ6}`, and `P{YEAR}{SEQ10}`. The year is the Africa/Lagos calendar year. The payment reference is letters and digits only. Interswitch's published Web Checkout pages do not state a maximum length or a character set for `txn_ref`.
+2. **Lock order.** Initiate locks the invoice row only and reads other pending amounts without locking payment rows. Settlement, reversal, and re-verify lock the payment row, then the invoice row. Adjustments and cancel lock the invoice row only. Student creation takes the matric counter, then the invoice counter.
+3. **One open invoice.** At most one non-cancelled invoice per student per session. The service enforces it under a student-row lock. MySQL has no partial unique index for that rule.
+4. **Adjustments.** Super Admin alone may remove an adjustment. The reason is required and audited. Bursar and Registrar cannot remove one.
+5. **Minimum payment.** What satisfies `require_minimum_payment` stays undefined. The switch blocks registration and does not read invoices or payments.
+6. **Overpayment.** A provider success that would break `paid_kobo + adjustments_kobo <= total_kobo` leaves the payment Pending, writes one `overpayment_review` event, and does not credit. There is no student action that cancels a Pending payment. The reservation ends when that payment expires or the provider reports it failed or cancelled.
+7. **Provider configuration.** A bad `PAYMENT_PROVIDER`, a missing Interswitch value, or the Demo Gateway in production without `PAYMENT_ALLOW_DEMO=true` does not stop the process from booting. The gateway resolver fails closed at the moment of use.
+8. **Interswitch requery.** Settlement compares `ResponseCode` `"00"`, an equal amount, and `MerchantReference`. A currency field, when present, must be `566`. A missing currency on the documented requery sample is not a refusal. Pages used: Web Checkout, the Web Checkout quickstart, payment response codes, and webhooks, all on `docs.interswitchgroup.com`.
+
+**Reason:** The invoice total has to stay stable after issue, and two settlement paths have to lock rows in one order. The provider pages that were open on 20 October 2026 describe the redirect form, the requery call, and the webhook signature. They do not describe a hash on that form or a currency field on the requery sample.
+
+**Consequences:** TASK-096 issues invoices with the invoice number format. Payment references, receipts, and the Interswitch adapter follow in later tasks. `PAYMENT_PROVIDER=remita` has no adapter. Selecting it fails when a payment is started, not during boot.

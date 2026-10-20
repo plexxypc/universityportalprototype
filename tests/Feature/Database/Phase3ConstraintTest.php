@@ -232,7 +232,7 @@ it('rolls back every phase 3 migration and migrates again', function () {
             ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
             ->count();
 
-        expect($steps)->toBe(48);
+        expect($steps)->toBe(49);
 
         test()->artisan('migrate:rollback', ['--step' => $steps])->assertSuccessful();
 

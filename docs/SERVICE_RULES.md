@@ -49,7 +49,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 3 | The log mailer is refused before the first insert when credentials are sent now | TASK-076 | Test: `it refuses the log mailer before the first insert` |
 | 3 | Import failure report | TASK-077 | Import report page and downloadable failed-rows CSV; one audit row per batch with counts only. Tests: `it downloads failed rows for the owner only and stores one audit row of counts` |
 | 3 | CSV and Excel templates use the PRD 6.2 columns and CsvSafe | TASK-078 | Tests: `it builds csv and excel templates from the import columns through csv safe`, `it serves the templates and the google form guide to a registrar` |
-| 4 | Item lines sum to `total_kobo` | TASK-096 | Invoice generation: single and bulk by programme/level/session, with preview and confirm |
+| 4 | Item lines sum to `total_kobo` | TASK-096 | Invoice generation: single and bulk by programme/level/session, with preview and confirm. Test: `it copies fee structure amounts onto invoice items` |
 | 4 | Adjustments sum to `adjustments_kobo` | TASK-097 | Adjustments: scholarship, discount, waiver with reason and audit |
 | 4 | Successful payments sum to `paid_kobo` | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |
 | 4 | Invoice status is derived from those totals | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |
@@ -59,9 +59,9 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 4 | Currency is NGN. It is not a column | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |
 | 4 | A receipt is created only for a Successful payment, once, inside the settlement transaction | TASK-106 | Receipts: numbering, viewer and PDF |
 | 4 | Payment events are insert-only | TASK-103 | Notification endpoint (outside CSRF, rate-limited, reference only, triggers re-query) and `payments:poll-pending` scheduled job with back-off |
-| 4 | At most one non-cancelled invoice per student per session | TASK-096 | Invoice generation: single and bulk by programme/level/session, with preview and confirm |
+| 4 | At most one non-cancelled invoice per student per session | TASK-096 | Invoice generation: single and bulk by programme/level/session, with preview and confirm. Test: `it rejects a second non-cancelled invoice for the same session` |
 | 4 | A reversal reduces `paid_kobo` and does not delete the payment | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |
-| 4 | Invoice numbers, receipt numbers, and payment references are allocated from `counters` inside the creating transaction | TASK-096, TASK-100, TASK-106 | Invoice generation; payment reference on initiate; receipt numbering |
+| 4 | Invoice numbers, receipt numbers, and payment references are allocated from `counters` inside the creating transaction | TASK-096, TASK-100, TASK-106 | Invoice generation; payment reference on initiate; receipt numbering. Test: `it allocates the invoice number inside the creating transaction` |
 | 5 | Assessment components of one scheme total 100 | TASK-060 | Test: `it refuses component totals that are not 100` |
 | 5 | Grade bands cover 0–100 with no gaps and no overlap | TASK-060 | Test: `it refuses grade bands that leave a gap` |
 | 5 | A score is not above that component's maximum | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |

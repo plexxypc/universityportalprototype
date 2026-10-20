@@ -40,7 +40,9 @@ use Throwable;
  * Creates and updates student records on behalf of staff.
  *
  * The user and the student are written in one transaction. Matric numbers
- * come from counters. Credentials are issued later by CredentialService.
+ * come from counters. The current-session invoice is issued in that same
+ * transaction, after the matric counter. Credentials are issued later by
+ * CredentialService.
  */
 class StudentService
 {
@@ -148,6 +150,7 @@ class StudentService
         private readonly Audit $audit,
         private readonly AuthService $auth,
         private readonly CredentialService $credentials,
+        private readonly InvoiceService $invoices,
     ) {}
 
     /**
@@ -196,6 +199,8 @@ class StudentService
                 $audit['after'],
                 $this->audit->ipFromRequest($request),
             );
+
+            $this->invoices->issueDuringCreate($actor, $student, $request);
 
             return new CreatedStudent($student->load(['user', 'programme.department']), $delivery);
         });

@@ -73,6 +73,9 @@ class InvoiceFactory extends Factory
             'adjustments_kobo' => 0,
             'paid_kobo' => 0,
             'status' => InvoiceStatus::Cancelled,
+            'cancelled_reason' => 'Replaced',
+            'cancelled_by' => null,
+            'cancelled_at' => now(),
         ]);
     }
 }
