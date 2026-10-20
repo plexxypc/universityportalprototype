@@ -4,24 +4,29 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\InvoiceAdjustmentType;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentStatus;
+use App\Enums\Role;
 use App\Models\AcademicSession;
 use App\Models\Counter;
 use App\Models\FeeStructure;
 use App\Models\Invoice;
+use App\Models\InvoiceAdjustment;
 use App\Models\InvoiceItem;
 use App\Models\Payment;
 use App\Models\Programme;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\Money;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use InvalidArgumentException;
 
 /**
  * Builds invoices from fee structures and keeps the stored totals in step.
@@ -37,6 +42,10 @@ class InvoiceService
     public const string ACTION_GENERATED = 'invoice.generated';
 
     public const string ACTION_CANCELLED = 'invoice.cancelled';
+
+    public const string ACTION_ADJUSTMENT_ADDED = 'invoice.adjustment_added';
+
+    public const string ACTION_ADJUSTMENT_REMOVED = 'invoice.adjustment_removed';
 
     public const string MESSAGE_MANAGE = 'You cannot change invoices.';
 
@@ -59,6 +68,18 @@ class InvoiceService
     public const string MESSAGE_NO_FEE = 'This student has no fee structure for this session.';
 
     public const string MESSAGE_REASON_LENGTH = 'The reason must be 500 characters or fewer.';
+
+    public const string MESSAGE_AMOUNT = 'Enter an amount of at least ₦0.01.';
+
+    public const string MESSAGE_BALANCE = 'That amount is more than the unpaid balance.';
+
+    public const string MESSAGE_TYPE = 'Choose a scholarship, discount, or waiver.';
+
+    public const string MESSAGE_CLOSED = 'This invoice is cancelled.';
+
+    public const string MESSAGE_REMOVE = 'Only a super admin can remove an adjustment.';
+
+    public const string MESSAGE_ADJUSTMENT = 'That adjustment could not be found.';
 
     /**
      * Levels stored on fee structures.
@@ -262,6 +283,127 @@ class InvoiceService
             if (! $invoice instanceof Invoice) {
                 throw ValidationException::withMessages(['invoice' => self::MESSAGE_NO_FEE]);
             }
+
+            return $invoice;
+        });
+    }
+
+    /**
+     * Add a scholarship, discount, or waiver.
+     *
+     * The amount is naira text. It is stored as kobo. It cannot exceed the
+     * outstanding balance minus unexpired Pending payments. The invoice row
+     * is locked. Payment rows are not.
+     */
+    public function addAdjustment(
+        User $actor,
+        int $invoice_id,
+        string $type,
+        string $amount,
+        string $reason,
+        Request $request,
+    ): InvoiceAdjustment {
+        $this->authoriseManage($actor);
+        $adjustment_type = $this->adjustmentType($type);
+        $amount_kobo = $this->kobo($amount);
+        $reason = $this->reason($reason);
+
+        return DB::transaction(function () use ($actor, $invoice_id, $adjustment_type, $amount_kobo, $reason, $request): InvoiceAdjustment {
+            $this->authoriseManage($actor);
+            $invoice = $this->lockedInvoice($actor, $invoice_id);
+            $this->assertOpen($invoice);
+            $room = self::outstandingKobo($invoice) - self::reservedKobo($invoice);
+
+            if ($amount_kobo > $room) {
+                throw ValidationException::withMessages(['amount' => self::MESSAGE_BALANCE]);
+            }
+
+            $adjustment = new InvoiceAdjustment;
+            $adjustment->invoice_id = (int) $invoice->getKey();
+            $adjustment->type = $adjustment_type;
+            $adjustment->amount_kobo = $amount_kobo;
+            $adjustment->reason = $reason;
+            $adjustment->created_by = (int) $actor->getKey();
+            $adjustment->save();
+            $this->syncAdjustments($invoice);
+
+            $this->audit->record(
+                (int) $actor->getKey(),
+                self::ACTION_ADJUSTMENT_ADDED,
+                'invoices',
+                (int) $invoice->getKey(),
+                null,
+                [
+                    'invoice_id' => (int) $invoice->getKey(),
+                    'adjustment_id' => (int) $adjustment->getKey(),
+                    'type' => $adjustment_type->value,
+                    'amount_kobo' => $amount_kobo,
+                    'adjustments_kobo' => (int) $invoice->adjustments_kobo,
+                    'status' => $invoice->status->value,
+                    'reason' => $reason,
+                ],
+                $this->audit->ipFromRequest($request),
+            );
+
+            return $adjustment;
+        });
+    }
+
+    /**
+     * Remove one adjustment. Only a Super Admin may do this.
+     *
+     * The row is deleted. The audit entry keeps the amount and the reason
+     * for the removal. Bursar and Registrar are refused.
+     */
+    public function removeAdjustment(
+        User $actor,
+        int $invoice_id,
+        int $adjustment_id,
+        string $reason,
+        Request $request,
+    ): Invoice {
+        $this->authoriseSuperAdmin($actor);
+        $reason = $this->reason($reason);
+
+        return DB::transaction(function () use ($actor, $invoice_id, $adjustment_id, $reason, $request): Invoice {
+            $this->authoriseSuperAdmin($actor);
+            $invoice = $this->lockedInvoice($actor, $invoice_id);
+            $this->assertOpen($invoice);
+            $adjustment = InvoiceAdjustment::query()
+                ->whereKey($adjustment_id)
+                ->where('invoice_id', $invoice->getKey())
+                ->first();
+
+            if (! $adjustment instanceof InvoiceAdjustment) {
+                throw ValidationException::withMessages(['adjustment' => self::MESSAGE_ADJUSTMENT]);
+            }
+
+            $before = [
+                'invoice_id' => (int) $invoice->getKey(),
+                'adjustment_id' => (int) $adjustment->getKey(),
+                'type' => $adjustment->type->value,
+                'amount_kobo' => (int) $adjustment->amount_kobo,
+                'adjustments_kobo' => (int) $invoice->adjustments_kobo,
+                'status' => $invoice->status->value,
+            ];
+            $adjustment->delete();
+            $this->syncAdjustments($invoice);
+
+            $this->audit->record(
+                (int) $actor->getKey(),
+                self::ACTION_ADJUSTMENT_REMOVED,
+                'invoices',
+                (int) $invoice->getKey(),
+                $before,
+                [
+                    'invoice_id' => (int) $invoice->getKey(),
+                    'adjustment_id' => $adjustment_id,
+                    'adjustments_kobo' => (int) $invoice->adjustments_kobo,
+                    'status' => $invoice->status->value,
+                    'reason' => $reason,
+                ],
+                $this->audit->ipFromRequest($request),
+            );
 
             return $invoice;
         });
@@ -594,5 +736,88 @@ class InvoiceService
         if (! Gate::forUser($actor)->allows('fees.manage')) {
             throw new AuthorizationException(self::MESSAGE_MANAGE);
         }
+    }
+
+    /**
+     * Super Admin only. Bursar and Registrar are refused.
+     */
+    private function authoriseSuperAdmin(User $actor): void
+    {
+        if (! $actor->hasRole(Role::SuperAdmin)) {
+            throw new AuthorizationException(self::MESSAGE_REMOVE);
+        }
+    }
+
+    /**
+     * Scholarship, discount, or waiver. Anything else is refused.
+     */
+    private function adjustmentType(string $type): InvoiceAdjustmentType
+    {
+        $resolved = InvoiceAdjustmentType::tryFrom($type);
+
+        if (! $resolved instanceof InvoiceAdjustmentType) {
+            throw ValidationException::withMessages(['type' => self::MESSAGE_TYPE]);
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * Naira text as kobo. Zero and unreadable amounts are refused.
+     */
+    private function kobo(string $amount): int
+    {
+        try {
+            $amount_kobo = Money::parseNaira($amount);
+        } catch (InvalidArgumentException) {
+            throw ValidationException::withMessages(['amount' => self::MESSAGE_AMOUNT]);
+        }
+
+        if ($amount_kobo < 1) {
+            throw ValidationException::withMessages(['amount' => self::MESSAGE_AMOUNT]);
+        }
+
+        return $amount_kobo;
+    }
+
+    /**
+     * Lock this invoice. Payment rows are not locked.
+     */
+    private function lockedInvoice(User $actor, int $invoice_id): Invoice
+    {
+        $invoice = Invoice::query()->visibleTo($actor)->whereKey($invoice_id)->lockForUpdate()->first();
+
+        if (! $invoice instanceof Invoice) {
+            throw ValidationException::withMessages(['invoice' => self::MESSAGE_MISSING]);
+        }
+
+        return $invoice;
+    }
+
+    /**
+     * A cancelled invoice cannot take an adjustment.
+     */
+    private function assertOpen(Invoice $invoice): void
+    {
+        if ($invoice->status === InvoiceStatus::Cancelled) {
+            throw ValidationException::withMessages(['invoice' => self::MESSAGE_CLOSED]);
+        }
+    }
+
+    /**
+     * Store the sum of adjustment rows and the status those totals imply.
+     */
+    private function syncAdjustments(Invoice $invoice): void
+    {
+        $adjustments_kobo = (int) InvoiceAdjustment::query()
+            ->where('invoice_id', $invoice->getKey())
+            ->sum('amount_kobo');
+        $invoice->adjustments_kobo = $adjustments_kobo;
+        $invoice->status = self::statusFor(
+            (int) $invoice->total_kobo,
+            $adjustments_kobo,
+            (int) $invoice->paid_kobo,
+        );
+        $invoice->save();
     }
 }

@@ -50,7 +50,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 3 | Import failure report | TASK-077 | Import report page and downloadable failed-rows CSV; one audit row per batch with counts only. Tests: `it downloads failed rows for the owner only and stores one audit row of counts` |
 | 3 | CSV and Excel templates use the PRD 6.2 columns and CsvSafe | TASK-078 | Tests: `it builds csv and excel templates from the import columns through csv safe`, `it serves the templates and the google form guide to a registrar` |
 | 4 | Item lines sum to `total_kobo` | TASK-096 | Invoice generation: single and bulk by programme/level/session, with preview and confirm. Test: `it copies fee structure amounts onto invoice items` |
-| 4 | Adjustments sum to `adjustments_kobo` | TASK-097 | Adjustments: scholarship, discount, waiver with reason and audit |
+| 4 | Adjustments sum to `adjustments_kobo` | TASK-097 | Adjustments: scholarship, discount, waiver with reason and audit. Test: `it adds an adjustment within the unpaid balance and audits it` |
 | 4 | Successful payments sum to `paid_kobo` | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |
 | 4 | Invoice status is derived from those totals | TASK-101 | `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling |
 | 4 | A payment amount is at most the outstanding balance | TASK-100 | `PaymentService::initiate`: authorise, amount ≤ outstanding, pending payment with unique reference and expiry, store provider reference |
