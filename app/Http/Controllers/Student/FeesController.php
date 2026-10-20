@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Student;
 
 use App\Enums\InvoiceStatus;
+use App\Exceptions\PaymentsUnavailableException;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Services\InvoiceService;
+use App\Services\PaymentService;
 use App\Support\CurrentStudent;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The signed-in student's invoices.
@@ -63,6 +68,22 @@ class FeesController extends Controller
             'invoice' => $row,
             'outstanding_kobo' => InvoiceService::outstandingKobo($row),
         ]);
+    }
+
+    /**
+     * Start a payment for one of this student's invoices.
+     */
+    public function pay(Request $request, int $invoice, PaymentService $payments): RedirectResponse
+    {
+        $user = $this->owner();
+
+        try {
+            $started = $payments->initiate($user, $invoice, $request->string('amount')->toString(), $request);
+        } catch (PaymentsUnavailableException $exception) {
+            throw ValidationException::withMessages(['payment' => $exception->getMessage()]);
+        }
+
+        return redirect()->to($started->checkout_url);
     }
 
     /**

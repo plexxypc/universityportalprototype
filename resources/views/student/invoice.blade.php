@@ -71,14 +71,15 @@
 
     <div class="mt-space-16">
         <x-card title="Pay">
-            <div class="flex max-w-full flex-col gap-space-16">
-                <x-field name="amount" label="Amount">
+            <form method="POST" action="{{ route('student.fees.pay', $invoice) }}" class="flex max-w-full flex-col gap-space-16">
+                @csrf
+                <x-field name="amount" label="Amount" :error="$errors->first('amount') ?: $errors->first('payment')">
                     <x-input name="amount" type="text" inputmode="decimal" />
                 </x-field>
                 <div>
-                    <x-button type="button">Pay</x-button>
+                    <x-button type="submit">Pay</x-button>
                 </div>
-            </div>
+            </form>
         </x-card>
     </div>
 @endsection

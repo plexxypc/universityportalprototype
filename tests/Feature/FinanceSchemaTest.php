@@ -218,7 +218,7 @@ it('restricts every finance foreign key', function () {
         fn (object $row): array => [$row->constraint_name => $row->delete_rule],
     );
 
-    expect($delete_rules)->toHaveCount(14)
+    expect($delete_rules)->toHaveCount(15)
         ->and($delete_rules->every(fn (string $rule): bool => $rule === 'RESTRICT'))->toBeTrue();
 });
 
@@ -254,6 +254,9 @@ it('has the finance tables', function () {
             'expires_at',
             'last_checked_at',
             'paid_at',
+            'reversed_reason',
+            'reversed_by',
+            'reversed_at',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('payment_events', [
             'provider',

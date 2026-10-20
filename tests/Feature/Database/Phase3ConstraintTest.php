@@ -232,7 +232,7 @@ it('rolls back every phase 3 migration and migrates again', function () {
             ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
             ->count();
 
-        expect($steps)->toBe(49);
+        expect($steps)->toBe(50);
 
         test()->artisan('migrate:rollback', ['--step' => $steps])->assertSuccessful();
 
@@ -255,7 +255,7 @@ it('rolls back every phase 3 migration and migrates again', function () {
                 && Schema::hasColumn('users', 'status')
                 && (int) DB::table('migrations')
                     ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
-                    ->count() === 48;
+                    ->count() === 50;
         } catch (Throwable) {
             $ready = false;
         }

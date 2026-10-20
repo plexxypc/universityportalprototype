@@ -76,9 +76,9 @@ it('shows the student their invoices, outstanding balance, and a pay button that
         ->and(str_contains($html, 'PAY-OWN-1'))->toBeTrue()
         ->and(str_contains($html, '₦1,000.00'))->toBeTrue()
         ->and(str_contains($html, 'name="amount"'))->toBeTrue()
-        ->and(preg_match('/<button[^>]*type="button"[^>]*>\s*Pay\s*<\/button>/', $html))->toBe(1)
+        ->and(preg_match('/<button[^>]*type="submit"[^>]*>\s*Pay\s*<\/button>/', $html))->toBe(1)
+        ->and(str_contains($html, '/student/fees/'.$invoice->id.'/pay'))->toBeTrue()
         ->and(str_contains($html, 'wire:click'))->toBeFalse()
-        ->and(str_contains($html, '/student/payments'))->toBeFalse()
         ->and(InvoiceItem::query()->visibleTo($student->user)->count())->toBe(1)
         ->and(InvoiceAdjustment::query()->visibleTo($student->user)->count())->toBe(1);
 });

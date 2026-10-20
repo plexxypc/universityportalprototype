@@ -36,6 +36,9 @@ Route::middleware([
     Route::get('/student/fees/{invoice}', [FeesController::class, 'show'])
         ->whereNumber('invoice')
         ->name('student.fees.show');
+    Route::post('/student/fees/{invoice}/pay', [FeesController::class, 'pay'])
+        ->whereNumber('invoice')
+        ->name('student.fees.pay');
     Route::get('/student/payments/demo/{reference}', [DemoPaymentController::class, 'show'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.demo');
