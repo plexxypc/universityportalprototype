@@ -16,6 +16,7 @@ use App\Filament\Staff\Pages\GradingConfigurationPage;
 use App\Filament\Staff\Pages\ImportApplicantsPage;
 use App\Filament\Staff\Pages\ImportStudentsPage;
 use App\Filament\Staff\Pages\InstitutionSettingsPage;
+use App\Filament\Staff\Pages\InvoicesPage;
 use App\Filament\Staff\Pages\NotificationsPage;
 use App\Filament\Staff\Pages\ProgrammesPage;
 use App\Filament\Staff\Pages\RegistrationQueuePage;
@@ -287,6 +288,8 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         'student.documents.download',
         'student.course-registration',
         'student.course-registration.slip',
+        'student.fees',
+        'student.fees.show',
         'student.announcements',
         'student.settings',
         'student.notifications',
@@ -329,6 +332,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         GradingConfigurationPage::class,
         FeeCategoriesPage::class,
         FeeStructuresPage::class,
+        InvoicesPage::class,
     ];
 
     foreach ($staff_pages as $page) {

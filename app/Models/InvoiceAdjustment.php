@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\InvoiceAdjustmentType;
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\InvoiceAdjustmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,10 +21,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * amount_kobo is the reduction. reason and created_by are required.
  */
 #[Fillable(['invoice_id', 'type', 'amount_kobo', 'reason', 'created_by'])]
-class InvoiceAdjustment extends Model
+class InvoiceAdjustment extends Model implements VisibleToUser
 {
     /** @use HasFactory<InvoiceAdjustmentFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Cast the adjustment type.
@@ -52,5 +58,16 @@ class InvoiceAdjustment extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Adjustments follow the invoice, which follows the fees cell.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['fees', 'payments'],
+            kind: VisibilityKind::InvoiceLine,
+        );
     }
 }

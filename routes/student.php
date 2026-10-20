@@ -8,6 +8,7 @@ use App\Http\Controllers\RegistrationSlipController;
 use App\Http\Controllers\Student\AnnouncementController;
 use App\Http\Controllers\Student\CourseRegistrationController;
 use App\Http\Controllers\Student\DocumentController;
+use App\Http\Controllers\Student\FeesController;
 use App\Http\Controllers\Student\HomeController;
 use App\Http\Controllers\Student\MoreController;
 use App\Http\Controllers\Student\NotificationController;
@@ -30,6 +31,10 @@ Route::middleware([
     Route::get('/student/profile', ProfileController::class)->name('student.profile');
     Route::get('/student/documents', DocumentController::class)->name('student.documents');
     Route::get('/student/course-registration', CourseRegistrationController::class)->name('student.course-registration');
+    Route::get('/student/fees', [FeesController::class, 'index'])->name('student.fees');
+    Route::get('/student/fees/{invoice}', [FeesController::class, 'show'])
+        ->whereNumber('invoice')
+        ->name('student.fees.show');
     Route::get('/student/course-registration/slip', [RegistrationSlipController::class, 'student'])
         ->name('student.course-registration.slip');
     Route::get('/student/documents/{document}', DocumentDownloadController::class)

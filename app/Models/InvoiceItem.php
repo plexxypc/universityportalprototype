@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\ScopesVisibleTo;
+use App\Models\Concerns\VisibleToUser;
+use App\Support\Rbac\VisibilityKind;
+use App\Support\Rbac\VisibilityProfile;
 use Database\Factories\InvoiceItemFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,10 +20,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * description is the category label at the time the line was created.
  */
 #[Fillable(['invoice_id', 'fee_category_id', 'description', 'amount_kobo', 'sort'])]
-class InvoiceItem extends Model
+class InvoiceItem extends Model implements VisibleToUser
 {
     /** @use HasFactory<InvoiceItemFactory> */
     use HasFactory;
+
+    use ScopesVisibleTo;
 
     /**
      * Invoice this line belongs to.
@@ -39,5 +45,16 @@ class InvoiceItem extends Model
     public function feeCategory(): BelongsTo
     {
         return $this->belongsTo(FeeCategory::class);
+    }
+
+    /**
+     * Lines follow the invoice, which follows the fees cell.
+     */
+    protected static function visibilityProfile(): VisibilityProfile
+    {
+        return new VisibilityProfile(
+            rows: ['fees', 'payments'],
+            kind: VisibilityKind::InvoiceLine,
+        );
     }
 }

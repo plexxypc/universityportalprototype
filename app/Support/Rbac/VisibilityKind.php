@@ -15,6 +15,7 @@ enum VisibilityKind
     case Result;
     case Attendance;
     case Receipt;
+    case InvoiceLine;
     case Document;
     case Notification;
     case Faculty;
