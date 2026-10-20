@@ -47,8 +47,12 @@ final class DemoGateway implements PaymentGateway
         $provider_reference = is_string($stored['provider_reference'] ?? null)
             ? $stored['provider_reference']
             : null;
+        $reported = $stored['reference'] ?? null;
+        $outcome_reference = is_string($reported) && preg_match('/\A[A-Za-z0-9]{1,64}\z/', $reported) === 1
+            ? $reported
+            : $reference;
 
-        return new GatewayOutcome($reference, $amount_kobo, $currency, $result, $provider_reference);
+        return new GatewayOutcome($outcome_reference, $amount_kobo, $currency, $result, $provider_reference);
     }
 
     /**

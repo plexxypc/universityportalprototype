@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use RuntimeException;
 
 /**
  * One trigger for a payment: a callback, notification, poll, or manual check.
@@ -22,6 +23,16 @@ class PaymentEvent extends Model
 {
     /** @use HasFactory<PaymentEventFactory> */
     use HasFactory;
+
+    /**
+     * Refuse updates. A service may only insert a row.
+     */
+    protected static function booted(): void
+    {
+        static::updating(function (): void {
+            throw new RuntimeException('Payment events are insert-only.');
+        });
+    }
 
     /**
      * Cast the provider, the stored payload, and the source.

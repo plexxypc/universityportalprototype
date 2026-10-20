@@ -12,6 +12,7 @@ use App\Models\Invoice;
 use App\Models\Programme;
 use App\Models\User;
 use App\Services\InvoiceService;
+use App\Services\PaymentService;
 use App\Support\Money;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -100,6 +101,16 @@ class InvoicesPage extends Page implements HasTable
                 ->action(function (array $data): void {
                     $this->fillFilters($data);
                     $this->confirmInvoices();
+                }),
+            Action::make('resolveReview')
+                ->label('Resolve payment review')
+                ->visible(fn (): bool => $this->canManage())
+                ->schema([
+                    TextInput::make('reference')->label('Payment reference')->required(),
+                    TextInput::make('reason')->label('Reason')->required(),
+                ])
+                ->action(function (array $data): void {
+                    $this->resolvePaymentReview($data);
                 }),
         ];
     }
@@ -309,6 +320,33 @@ class InvoicesPage extends Page implements HasTable
         }
 
         Notification::make()->title('Adjustment removed')->success()->send();
+    }
+
+    /**
+     * Close an overpayment review. The event is insert-only.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function resolvePaymentReview(array $data): void
+    {
+        abort_unless($this->canManage(), 403);
+
+        try {
+            app(PaymentService::class)->resolveReview(
+                $this->actor(),
+                $this->text($data, 'reference'),
+                $this->text($data, 'reason'),
+                request(),
+            );
+        } catch (ValidationException $exception) {
+            Notification::make()->title($this->firstError($exception, PaymentService::MESSAGE_PAYMENT))->danger()->send();
+
+            return;
+        } catch (AuthorizationException) {
+            abort(403);
+        }
+
+        Notification::make()->title('Review resolved')->success()->send();
     }
 
     public function content(Schema $schema): Schema
