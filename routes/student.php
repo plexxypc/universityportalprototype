@@ -7,6 +7,7 @@ use App\Http\Controllers\PingController;
 use App\Http\Controllers\RegistrationSlipController;
 use App\Http\Controllers\Student\AnnouncementController;
 use App\Http\Controllers\Student\CourseRegistrationController;
+use App\Http\Controllers\Student\DemoPaymentController;
 use App\Http\Controllers\Student\DocumentController;
 use App\Http\Controllers\Student\FeesController;
 use App\Http\Controllers\Student\HomeController;
@@ -35,6 +36,12 @@ Route::middleware([
     Route::get('/student/fees/{invoice}', [FeesController::class, 'show'])
         ->whereNumber('invoice')
         ->name('student.fees.show');
+    Route::get('/student/payments/demo/{reference}', [DemoPaymentController::class, 'show'])
+        ->where('reference', '[A-Za-z0-9]+')
+        ->name('student.payments.demo');
+    Route::post('/student/payments/demo/{reference}', [DemoPaymentController::class, 'store'])
+        ->where('reference', '[A-Za-z0-9]+')
+        ->name('student.payments.demo.store');
     Route::get('/student/course-registration/slip', [RegistrationSlipController::class, 'student'])
         ->name('student.course-registration.slip');
     Route::get('/student/documents/{document}', DocumentDownloadController::class)

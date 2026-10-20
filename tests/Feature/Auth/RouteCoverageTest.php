@@ -290,6 +290,8 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         'student.course-registration.slip',
         'student.fees',
         'student.fees.show',
+        'student.payments.demo',
+        'student.payments.demo.store',
         'student.announcements',
         'student.settings',
         'student.notifications',

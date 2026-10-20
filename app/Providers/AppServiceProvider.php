@@ -47,6 +47,7 @@ use App\Policies\ReceiptPolicy;
 use App\Policies\ResultPolicy;
 use App\Policies\SemesterPolicy;
 use App\Policies\StudentPolicy;
+use App\Services\Payments\PaymentGatewayResolver;
 use App\Services\SettingsService;
 use App\Support\Console\StderrLine;
 use App\Support\DatabaseTls;
@@ -86,6 +87,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->make(DatabaseTls::class)->apply();
         $this->app->make(EnvironmentGuard::class)->enforce();
+        $this->app->make(PaymentGatewayResolver::class)->warnIfUnusable();
 
         Relation::enforceMorphMap([
             'Applicant' => Applicant::class,

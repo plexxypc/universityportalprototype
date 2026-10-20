@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Services\Payments\PaymentGatewayResolver;
 use Illuminate\Support\Facades\Cache;
 use PDO;
 use Pdo\Mysql;
@@ -38,6 +39,7 @@ final class HealthService
      *     mail: string,
      *     mail_driver: string,
      *     payment_provider: string,
+     *     payments: string,
      *     environment: string,
      *     version: string|null
      * }
@@ -62,13 +64,15 @@ final class HealthService
             }
         }
 
+        $payments = $this->paymentsStatus();
         $degraded = $database !== 'ok'
             || $heartbeat !== 'ok'
             || $queue === 'backlog'
             || $queue === 'failing'
             || $queue === 'stopped'
             || $mail === 'unconfigured'
-            || $mail === 'misconfigured';
+            || $mail === 'misconfigured'
+            || $payments === 'misconfigured';
 
         return [
             'status' => $degraded ? 'degraded' : 'ok',
@@ -78,6 +82,7 @@ final class HealthService
             'mail' => $mail,
             'mail_driver' => self::mailDriverLabel(),
             'payment_provider' => (string) config('portal.payment_provider'),
+            'payments' => $payments,
             'environment' => (string) app()->environment(),
             'version' => $this->version(),
         ];
@@ -94,6 +99,7 @@ final class HealthService
      *     mail: string,
      *     mail_driver: string,
      *     payment_provider: string,
+     *     payments: string,
      *     environment: string,
      *     version: string|null
      * }
@@ -108,9 +114,18 @@ final class HealthService
             'mail' => $this->mailStatus(false),
             'mail_driver' => self::mailDriverLabel(),
             'payment_provider' => (string) config('portal.payment_provider'),
+            'payments' => $this->paymentsStatus(),
             'environment' => (string) app()->environment(),
             'version' => $this->version(),
         ];
+    }
+
+    /**
+     * ok, or misconfigured when the resolver would refuse a payment.
+     */
+    private function paymentsStatus(): string
+    {
+        return app(PaymentGatewayResolver::class)->isConfigured() ? 'ok' : 'misconfigured';
     }
 
     /**
