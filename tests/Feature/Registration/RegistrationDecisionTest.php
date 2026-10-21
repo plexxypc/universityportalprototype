@@ -29,6 +29,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Log\Events\MessageLogged;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -147,6 +148,61 @@ function registration_decision_registrar(): User
     ]);
 
     return $user;
+}
+
+it('locks the student row before anything else is read when approving or rejecting', function () {
+    $shell = registration_decision_shell();
+    $programme = Programme::factory()->create();
+    $approve_case = registration_decision_submitted($shell, $programme);
+    $reject_case = registration_decision_submitted($shell, $programme);
+    $registrar = registration_decision_registrar();
+    $service = app(RegistrationService::class);
+    $inside = [];
+    $recording = true;
+    $baseline = DB::connection()->transactionLevel();
+
+    DB::listen(function (object $query) use (&$inside, &$recording, $baseline): void {
+        if (! $recording || DB::connection()->transactionLevel() <= $baseline || ! property_exists($query, 'sql')) {
+            return;
+        }
+
+        $sql = $query->sql;
+
+        if (is_string($sql)) {
+            $inside[] = strtolower($sql);
+        }
+    });
+
+    $service->approve(
+        $registrar,
+        (int) $approve_case['registration']->id,
+        registration_decision_version($approve_case['registration']),
+        registration_decision_request(),
+    );
+    registration_decision_student_lock_is_first($inside);
+
+    $inside = [];
+    $service->reject(
+        $registrar,
+        (int) $reject_case['registration']->id,
+        'Fee receipt missing',
+        registration_decision_version($reject_case['registration']),
+        registration_decision_request(),
+    );
+    registration_decision_student_lock_is_first($inside);
+    $recording = false;
+});
+
+/**
+ * The first statement inside the decision transaction locks the student.
+ *
+ * @param  list<string>  $sql
+ */
+function registration_decision_student_lock_is_first(array $sql): void
+{
+    expect($sql)->not->toBeEmpty()
+        ->and($sql[0])->toContain('from `students`')
+        ->and($sql[0])->toContain('for update');
 }
 
 it('approves a submitted registration once', function () {

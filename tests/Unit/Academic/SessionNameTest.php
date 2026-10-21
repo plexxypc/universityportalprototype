@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\AcademicSession;
 use App\Services\AcademicService;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -32,4 +33,16 @@ it('accepts only a session name whose second year is the next year', function ()
 
     expect(fn () => session_name_check('2026-2027'))
         ->toThrow(ValidationException::class, AcademicService::MESSAGE_NAME);
+});
+
+it('builds unique consecutive session names', function () {
+    $names = [];
+
+    foreach (range(1, 5) as $ignored) {
+        $name = AcademicSession::factory()->make()->name;
+        $names[] = session_name_check($name);
+    }
+
+    expect($names)->toHaveCount(5)
+        ->and(array_unique($names))->toHaveCount(5);
 });

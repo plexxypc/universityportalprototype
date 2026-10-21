@@ -225,6 +225,8 @@ it('rolls back every phase 3 migration and migrates again', function () {
         $connection->commit();
     }
 
+    $expected = phase_3_migration_steps();
+
     try {
         expect(Schema::hasTable('audit_logs'))->toBeTrue();
 
@@ -232,7 +234,7 @@ it('rolls back every phase 3 migration and migrates again', function () {
             ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
             ->count();
 
-        expect($steps)->toBe(51);
+        expect($steps)->toBe($expected);
 
         test()->artisan('migrate:rollback', ['--step' => $steps])->assertSuccessful();
 
@@ -255,7 +257,7 @@ it('rolls back every phase 3 migration and migrates again', function () {
                 && Schema::hasColumn('users', 'status')
                 && (int) DB::table('migrations')
                     ->where('migration', '>=', '2026_10_08_160000_add_identity_columns_to_users_table')
-                    ->count() === 51;
+                    ->count() === $expected;
         } catch (Throwable) {
             $ready = false;
         }
@@ -269,3 +271,26 @@ it('rolls back every phase 3 migration and migrates again', function () {
         }
     }
 });
+
+/**
+ * Phase 3 and every migration after it, counted from the files on disk.
+ */
+function phase_3_migration_steps(): int
+{
+    $files = glob(database_path('migrations/*.php'));
+    $steps = 0;
+
+    if (! is_array($files)) {
+        return 0;
+    }
+
+    foreach ($files as $file) {
+        $name = pathinfo($file, PATHINFO_FILENAME);
+
+        if ($name >= '2026_10_08_160000_add_identity_columns_to_users_table') {
+            $steps++;
+        }
+    }
+
+    return $steps;
+}
