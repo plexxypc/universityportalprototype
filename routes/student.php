@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\PingController;
+use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RegistrationSlipController;
 use App\Http\Controllers\Student\AnnouncementController;
 use App\Http\Controllers\Student\CourseRegistrationController;
@@ -41,6 +42,12 @@ Route::middleware([
     Route::post('/student/fees/{invoice}/pay', [FeesController::class, 'pay'])
         ->whereNumber('invoice')
         ->name('student.fees.pay');
+    Route::get('/student/fees/receipts/{receipt}', [ReceiptController::class, 'student'])
+        ->whereNumber('receipt')
+        ->name('student.fees.receipt');
+    Route::get('/student/fees/receipts/{receipt}/pdf', [ReceiptController::class, 'studentPdf'])
+        ->whereNumber('receipt')
+        ->name('student.fees.receipt.pdf');
     Route::get('/student/payments/demo/{reference}', [DemoPaymentController::class, 'show'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.demo');

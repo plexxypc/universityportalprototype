@@ -293,6 +293,8 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         'student.fees',
         'student.fees.show',
         'student.fees.pay',
+        'student.fees.receipt',
+        'student.fees.receipt.pdf',
         'student.payments.demo',
         'student.payments.demo.store',
         'student.payments.interswitch',
