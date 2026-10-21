@@ -362,7 +362,7 @@ final class EmailTemplateRenderer
 
         $base['greeting'] = 'Hello '.$this->text($data, 'name').',';
         $base['instruction'] = 'We received '.Money::format($amount).' for receipt '.$this->text($data, 'receipt_number').' on '.$this->formatDate($data['paid_at'] ?? null).'.';
-        $base['action_label'] = 'Sign in to view your receipt';
+        $base['action_label'] = 'View your fees';
 
         return $base;
     }
@@ -466,7 +466,8 @@ final class EmailTemplateRenderer
         $base = $this->baseUrl();
 
         return match ($template) {
-            EmailTemplate::Credentials, EmailTemplate::PaymentConfirmed => $base.'/login',
+            EmailTemplate::Credentials => $base.'/login',
+            EmailTemplate::PaymentConfirmed => $base.'/student/fees',
             EmailTemplate::PasswordReset => $base.'/reset-password/'.rawurlencode($this->secretText($data, 'token')),
             EmailTemplate::Admission => $base.'/',
             EmailTemplate::RegistrationConfirmed, EmailTemplate::ResultPublished, EmailTemplate::Announcement, EmailTemplate::TimetablePublished => $base.'/student',
