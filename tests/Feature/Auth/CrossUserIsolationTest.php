@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\Role;
 use App\Enums\UserStatus;
+use App\Models\AcademicSession;
 use App\Models\AttendanceRecord;
 use App\Models\Course;
 use App\Models\CourseRegistration;
@@ -292,10 +293,14 @@ it('shows an inactive account nothing', function () {
 it('does not add a query per invoice row', function () {
     $student = Student::factory()->create();
     $user = User::query()->findOrFail($student->user_id);
-    Invoice::factory()->count(5)->create([
-        'student_id' => $student->id,
-        'session_id' => $student->entry_session_id,
-    ]);
+    $sessions = AcademicSession::factory()->count(6)->create();
+
+    foreach ($sessions->take(5) as $session) {
+        Invoice::factory()->create([
+            'student_id' => $student->id,
+            'session_id' => $session->id,
+        ]);
+    }
 
     $user->roles();
     DB::flushQueryLog();
@@ -305,7 +310,7 @@ it('does not add a query per invoice row', function () {
 
     Invoice::factory()->create([
         'student_id' => $student->id,
-        'session_id' => $student->entry_session_id,
+        'session_id' => $sessions->last()->id,
     ]);
     DB::flushQueryLog();
     expect(Invoice::query()->visibleTo($user)->get())->toHaveCount(6)

@@ -34,6 +34,7 @@ it('returns the healthy shape and keeps the framework health route', function ()
         'mail' => 'log',
         'mail_driver' => config('mail.default'),
         'payment_provider' => config('portal.payment_provider'),
+        'payments' => 'ok',
         'environment' => 'testing',
         'version' => 'abc123',
     ]);
@@ -55,6 +56,7 @@ it('returns degraded when the database check fails', function () {
         'mail' => 'log',
         'mail_driver' => config('mail.default'),
         'payment_provider' => config('portal.payment_provider'),
+        'payments' => 'ok',
         'environment' => 'testing',
         'version' => null,
     ]);

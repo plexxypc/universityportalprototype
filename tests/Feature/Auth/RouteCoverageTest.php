@@ -16,6 +16,7 @@ use App\Filament\Staff\Pages\GradingConfigurationPage;
 use App\Filament\Staff\Pages\ImportApplicantsPage;
 use App\Filament\Staff\Pages\ImportStudentsPage;
 use App\Filament\Staff\Pages\InstitutionSettingsPage;
+use App\Filament\Staff\Pages\InvoicesPage;
 use App\Filament\Staff\Pages\NotificationsPage;
 use App\Filament\Staff\Pages\ProgrammesPage;
 use App\Filament\Staff\Pages\RegistrationQueuePage;
@@ -50,6 +51,8 @@ function route_coverage_named_public_routes(): array
         'staff.login' => 'The staff panel login redirects to the portal login.',
         'health' => 'Health probe. It does not start a session.',
         'webhooks.ping' => 'Provider notification ping. It sits outside the auth groups.',
+        'payments.return' => 'Provider return. It reads the reference only and sits outside the auth and CSRF groups.',
+        'payments.notify' => 'Provider notification. It names a reference, sits outside the auth and CSRF groups, and is rate-limited.',
         'default-livewire.update' => 'Persistent middleware from the page protects this Livewire update.',
         'livewire.upload-file' => 'Persistent middleware from the page protects this Livewire upload.',
         'livewire.preview-file' => 'Persistent middleware from the page protects this Livewire preview.',
@@ -287,6 +290,13 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         'student.documents.download',
         'student.course-registration',
         'student.course-registration.slip',
+        'student.fees',
+        'student.fees.show',
+        'student.fees.pay',
+        'student.payments.demo',
+        'student.payments.demo.store',
+        'student.payments.show',
+        'student.payments.check',
         'student.announcements',
         'student.settings',
         'student.notifications',
@@ -329,6 +339,7 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         GradingConfigurationPage::class,
         FeeCategoriesPage::class,
         FeeStructuresPage::class,
+        InvoicesPage::class,
     ];
 
     foreach ($staff_pages as $page) {

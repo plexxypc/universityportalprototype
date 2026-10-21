@@ -109,9 +109,15 @@ it('shows the signed-in student and empty cards', function () {
     preg_match_all('/<a\b[^>]*>[\s\S]*?<\/a>/', $html, $anchors);
     $course_links = 0;
 
+    $fee_links = 0;
+
     foreach ($anchors[0] as $anchor) {
-        expect(str_contains($anchor, '>Fees<'))->toBeFalse()
-            ->and(str_contains($anchor, '>Results<'))->toBeFalse();
+        expect(str_contains($anchor, '>Results<'))->toBeFalse();
+
+        if (str_contains($anchor, '>Fees<')) {
+            $fee_links++;
+            expect(str_contains($anchor, '/student/fees'))->toBeTrue();
+        }
 
         if (str_contains($anchor, '>Courses<')) {
             $course_links++;
@@ -119,7 +125,8 @@ it('shows the signed-in student and empty cards', function () {
         }
     }
 
-    expect($course_links)->toBeGreaterThan(0);
+    expect($course_links)->toBeGreaterThan(0)
+        ->and($fee_links)->toBeGreaterThan(0);
 });
 
 it('shows this student only and checks the fee integers', function () {

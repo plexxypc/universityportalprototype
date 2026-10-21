@@ -36,6 +36,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'expires_at',
     'last_checked_at',
     'paid_at',
+    'reversed_reason',
+    'reversed_by',
+    'reversed_at',
 ])]
 class Payment extends Model implements VisibleToUser
 {
@@ -57,6 +60,7 @@ class Payment extends Model implements VisibleToUser
             'expires_at' => 'datetime',
             'last_checked_at' => 'datetime',
             'paid_at' => 'datetime',
+            'reversed_at' => 'datetime',
         ];
     }
 

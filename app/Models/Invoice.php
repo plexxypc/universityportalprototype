@@ -30,6 +30,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'adjustments_kobo',
     'paid_kobo',
     'status',
+    'cancelled_reason',
+    'cancelled_by',
+    'cancelled_at',
 ])]
 class Invoice extends Model implements VisibleToUser
 {
@@ -47,6 +50,7 @@ class Invoice extends Model implements VisibleToUser
     {
         return [
             'status' => InvoiceStatus::class,
+            'cancelled_at' => 'datetime',
         ];
     }
 

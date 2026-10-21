@@ -358,3 +358,32 @@
 **Reason:** The existing confirmation email says the registration is confirmed. Sending it on submit would be false while approval is still required. The student still needs an in-app notice for submit and for rejection.
 
 **Consequences:** TASK-090 sends `registration_submitted` on submit when approval is required, and `registration_confirmed` plus the existing email when the row becomes Approved. TASK-091 sends `registration_rejected` on rejection.
+
+## ADR-032: Invoice numbers, payment lock order, and Interswitch Web Checkout
+
+**Status:** Accepted.
+
+**Decision:** Phase 10 collects fees through the Demo Gateway and one Interswitch Web Checkout adapter. Remita is not built in this phase. ADR-023 still names it as a later adapter.
+
+1. **Numbers.** Inside the creating transaction, counters allocate `INV-{YEAR}-{SEQ6}`, `RCT-{YEAR}-{SEQ6}`, and `P{YEAR}{SEQ10}`. The year is the Africa/Lagos calendar year. The payment reference is letters and digits only. Interswitch's published Web Checkout pages do not state a maximum length or a character set for `txn_ref`.
+2. **Lock order.** Initiate locks the invoice row only and reads other pending amounts without locking payment rows. Settlement, reversal, and re-verify lock the payment row, then the invoice row. Adjustments and cancel lock the invoice row only. Student creation takes the matric counter, then the invoice counter.
+3. **One open invoice.** At most one non-cancelled invoice per student per session. The service enforces it under a student-row lock. ADR-033 also enforces it in the database.
+4. **Adjustments.** Super Admin alone may remove an adjustment. The reason is required and audited. Bursar and Registrar cannot remove one.
+5. **Minimum payment.** What satisfies `require_minimum_payment` stays undefined. The switch blocks registration and does not read invoices or payments.
+6. **Overpayment.** A provider success that would break `paid_kobo + adjustments_kobo <= total_kobo` leaves the payment Pending, writes one `overpayment_review` event, and does not credit. There is no student action that cancels a Pending payment. The reservation ends when that payment expires or the provider reports it failed or cancelled.
+7. **Provider configuration.** A bad `PAYMENT_PROVIDER`, a missing Interswitch value, or the Demo Gateway in production without `PAYMENT_ALLOW_DEMO=true` does not stop the process from booting. The gateway resolver fails closed at the moment of use.
+8. **Interswitch requery.** Settlement compares `ResponseCode` `"00"`, an equal amount, and `MerchantReference`. A currency field, when present, must be `566`. A missing currency on the documented requery sample is not a refusal. Pages used: Web Checkout, the Web Checkout quickstart, payment response codes, and webhooks, all on `docs.interswitchgroup.com`.
+
+**Reason:** The invoice total has to stay stable after issue, and two settlement paths have to lock rows in one order. The provider pages that were open on 20 October 2026 describe the redirect form, the requery call, and the webhook signature. They do not describe a hash on that form or a currency field on the requery sample.
+
+**Consequences:** TASK-096 issues invoices with the invoice number format. Payment references, receipts, and the Interswitch adapter follow in later tasks. `PAYMENT_PROVIDER=remita` has no adapter. Selecting it fails when a payment is started, not during boot.
+
+## ADR-033: One open invoice is a generated column
+
+**Status:** Accepted (21 October 2026).
+
+**Decision:** `invoices.open_flag` is a stored generated column. It is 1 when `status` is not Cancelled, and NULL when it is. A unique index on `(student_id, session_id, open_flag)` allows many cancelled invoices and one open invoice. The index name is `invoices_student_session_open_unique`. A database that already has two open invoices for the same student and session fails the migration. The service still locks the student row first and treats a duplicate-key error on that index as already invoiced, rolling the savepoint back so the invoice counter is not kept.
+
+**Reason:** MySQL has no partial unique index. A plain read under REPEATABLE READ can miss an invoice committed by another transaction. The generated flag is the same pattern as `academic_sessions.current_flag`.
+
+**Consequences:** ADR-032 point 3 stays the service rule. This decision adds the database rule. Cancelled rows stay in the table.

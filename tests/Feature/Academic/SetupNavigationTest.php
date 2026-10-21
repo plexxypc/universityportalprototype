@@ -57,6 +57,7 @@ it('shows each setup screen only to roles that may use it', function () {
         'Grading' => [Role::SuperAdmin, Role::Registrar, Role::ExamOfficer],
         'Fee categories' => [Role::SuperAdmin, Role::Registrar, Role::Bursar],
         'Fee structures' => [Role::SuperAdmin, Role::Registrar, Role::Bursar],
+        'Invoices' => [Role::SuperAdmin, Role::Registrar, Role::Bursar],
     ];
 
     $roles = [

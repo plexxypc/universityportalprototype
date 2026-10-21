@@ -245,6 +245,7 @@ final class Visibility
                 self::studentIdQuery($user),
             ),
             VisibilityKind::Receipt => self::applyReceiptOwner($branch, $user),
+            VisibilityKind::InvoiceLine => self::applyInvoiceLineOwner($branch, $user),
             default => self::matchNone($branch),
         };
     }
@@ -495,6 +496,29 @@ final class Visibility
                 ->from('payments')
                 ->whereColumn('payments.id', $table.'.payment_id')
                 ->whereIn('payments.student_id', $students);
+        });
+    }
+
+    /**
+     * Invoice lines and adjustments for the account's own student.
+     */
+    private static function applyInvoiceLineOwner(Builder $branch, User $user): void
+    {
+        self::applyInvoiceLineStudents($branch, self::studentIdQuery($user));
+    }
+
+    /**
+     * Lines whose invoice student is in the subquery.
+     */
+    private static function applyInvoiceLineStudents(Builder $branch, Closure $students): void
+    {
+        $table = $branch->getModel()->getTable();
+
+        $branch->whereExists(function ($sub) use ($students, $table): void {
+            $sub->selectRaw('1')
+                ->from('invoices')
+                ->whereColumn('invoices.id', $table.'.invoice_id')
+                ->whereIn('invoices.student_id', $students);
         });
     }
 

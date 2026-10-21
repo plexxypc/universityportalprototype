@@ -7,7 +7,7 @@ namespace App\Support;
 /**
  * Student navigation shared by the sidebar and the bottom bar.
  *
- * Fees and Results stay visible and disabled until those pages exist.
+ * Results stays visible and disabled until that page exists.
  */
 final class StudentNavigation
 {
@@ -23,7 +23,7 @@ final class StudentNavigation
         return [
             ['id' => 'home', 'label' => 'Home', 'icon' => 'home', 'route' => 'student.home', 'enabled' => true],
             ['id' => 'courses', 'label' => 'Courses', 'icon' => 'book', 'route' => 'student.course-registration', 'enabled' => true],
-            ['id' => 'fees', 'label' => 'Fees', 'icon' => 'card', 'route' => null, 'enabled' => false],
+            ['id' => 'fees', 'label' => 'Fees', 'icon' => 'card', 'route' => 'student.fees', 'enabled' => true],
             ['id' => 'results', 'label' => 'Results', 'icon' => 'file', 'route' => null, 'enabled' => false],
             ['id' => 'more', 'label' => 'More', 'icon' => 'more', 'route' => 'student.more', 'enabled' => true],
         ];

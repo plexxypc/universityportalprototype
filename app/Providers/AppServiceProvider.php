@@ -19,6 +19,8 @@ use App\Models\Document;
 use App\Models\Faculty;
 use App\Models\InstitutionSetting;
 use App\Models\Invoice;
+use App\Models\InvoiceAdjustment;
+use App\Models\InvoiceItem;
 use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\Programme;
@@ -35,6 +37,8 @@ use App\Policies\DepartmentPolicy;
 use App\Policies\DocumentPolicy;
 use App\Policies\FacultyPolicy;
 use App\Policies\InstitutionSettingPolicy;
+use App\Policies\InvoiceAdjustmentPolicy;
+use App\Policies\InvoiceItemPolicy;
 use App\Policies\InvoicePolicy;
 use App\Policies\NotificationPolicy;
 use App\Policies\PaymentPolicy;
@@ -43,6 +47,7 @@ use App\Policies\ReceiptPolicy;
 use App\Policies\ResultPolicy;
 use App\Policies\SemesterPolicy;
 use App\Policies\StudentPolicy;
+use App\Services\Payments\PaymentGatewayResolver;
 use App\Services\SettingsService;
 use App\Support\Console\StderrLine;
 use App\Support\DatabaseTls;
@@ -52,12 +57,15 @@ use App\Support\Mail\BrevoTransport;
 use App\Support\Mail\UniqueOutboxDispatch;
 use App\Support\Rbac\Permissions;
 use Filament\Auth\Http\Controllers\LogoutController as FilamentLogoutController;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Http\Request;
 use Illuminate\Queue\Events\Looping;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
@@ -82,6 +90,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->make(DatabaseTls::class)->apply();
         $this->app->make(EnvironmentGuard::class)->enforce();
+        $this->app->make(PaymentGatewayResolver::class)->warnIfUnusable();
+        $this->registerPaymentNotificationLimit();
 
         Relation::enforceMorphMap([
             'Applicant' => Applicant::class,
@@ -101,6 +111,24 @@ class AppServiceProvider extends ServiceProvider
             EnsurePasswordChanged::class,
             EnsurePortalArea::class,
         ]);
+    }
+
+    /**
+     * Limit provider notifications by the socket address.
+     */
+    private function registerPaymentNotificationLimit(): void
+    {
+        RateLimiter::for('payments-notify', function (Request $request): Limit {
+            $per_minute = max(1, (int) config('payments.notification_rate_per_minute'));
+
+            return Limit::perMinute($per_minute)->by((string) $request->ip());
+        });
+
+        RateLimiter::for('payments-return', function (Request $request): Limit {
+            $per_minute = max(1, (int) config('payments.return_rate_per_minute'));
+
+            return Limit::perMinute($per_minute)->by((string) $request->ip());
+        });
     }
 
     /**
@@ -163,6 +191,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Student::class, StudentPolicy::class);
         Gate::policy(CourseRegistration::class, CourseRegistrationPolicy::class);
         Gate::policy(Invoice::class, InvoicePolicy::class);
+        Gate::policy(InvoiceItem::class, InvoiceItemPolicy::class);
+        Gate::policy(InvoiceAdjustment::class, InvoiceAdjustmentPolicy::class);
         Gate::policy(Payment::class, PaymentPolicy::class);
         Gate::policy(Receipt::class, ReceiptPolicy::class);
         Gate::policy(Result::class, ResultPolicy::class);

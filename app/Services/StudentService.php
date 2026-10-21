@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Support\Audit;
 use App\Support\CurrentStudent;
+use App\Support\Deadlock;
 use App\Support\MatricPattern;
 use App\Support\NigerianStates;
 use App\Support\PersonalAudit;
@@ -40,7 +41,9 @@ use Throwable;
  * Creates and updates student records on behalf of staff.
  *
  * The user and the student are written in one transaction. Matric numbers
- * come from counters. Credentials are issued later by CredentialService.
+ * come from counters. The current-session invoice is issued in that same
+ * transaction, after the matric counter. Credentials are issued later by
+ * CredentialService.
  */
 class StudentService
 {
@@ -148,6 +151,7 @@ class StudentService
         private readonly Audit $audit,
         private readonly AuthService $auth,
         private readonly CredentialService $credentials,
+        private readonly InvoiceService $invoices,
     ) {}
 
     /**
@@ -164,40 +168,44 @@ class StudentService
     {
         $this->authoriseCreate($actor);
 
-        $created = DB::transaction(function () use ($actor, $input, $request, $queue_credentials, $import_batch_id): CreatedStudent {
-            $this->authoriseCreate($actor);
-            $parsed = $this->parsed($input, true);
-            $session = $this->entrySession($parsed['entry_session_id']);
-            $programme = $this->programme($parsed['programme_id']);
-            $this->assertLevel($programme, $parsed['level']);
-            $this->assertEmailAvailable($parsed['email'], null);
+        $created = Deadlock::attempt(function () use ($actor, $input, $request, $queue_credentials, $import_batch_id): CreatedStudent {
+            return DB::transaction(function () use ($actor, $input, $request, $queue_credentials, $import_batch_id): CreatedStudent {
+                $this->authoriseCreate($actor);
+                $parsed = $this->parsed($input, true);
+                $session = $this->entrySession($parsed['entry_session_id']);
+                $programme = $this->programme($parsed['programme_id']);
+                $this->assertLevel($programme, $parsed['level']);
+                $this->assertEmailAvailable($parsed['email'], null);
 
-            $user = $this->newUser($parsed);
-            $matric = $this->requestedMatric($input) ?? $this->allocateMatric($programme, $session);
-            $student = $this->newStudent($user, $programme, $session, $parsed, $matric, $import_batch_id);
+                $user = $this->newUser($parsed);
+                $matric = $this->requestedMatric($input) ?? $this->allocateMatric($programme, $session);
+                $student = $this->newStudent($user, $programme, $session, $parsed, $matric, $import_batch_id);
 
-            if ($queue_credentials) {
-                $delivery = $this->credentials->issue($actor, $user, $matric, $request);
-            } else {
-                $user->must_change_password = true;
-                $user->temp_password_expires_at = now()->addDays(CredentialService::EXPIRY_DAYS);
-                $user->save();
-                $delivery = new CredentialDelivery(CredentialDelivery::NOT_SENT);
-            }
+                if ($queue_credentials) {
+                    $delivery = $this->credentials->issue($actor, $user, $matric, $request);
+                } else {
+                    $user->must_change_password = true;
+                    $user->temp_password_expires_at = now()->addDays(CredentialService::EXPIRY_DAYS);
+                    $user->save();
+                    $delivery = new CredentialDelivery(CredentialDelivery::NOT_SENT);
+                }
 
-            $audit = $this->creationAudit($parsed, $programme, $session, $matric);
+                $audit = $this->creationAudit($parsed, $programme, $session, $matric);
 
-            $this->audit->record(
-                $actor->id,
-                self::ACTION_CREATED,
-                'students',
-                (int) $student->getKey(),
-                $audit['before'],
-                $audit['after'],
-                $this->audit->ipFromRequest($request),
-            );
+                $this->audit->record(
+                    $actor->id,
+                    self::ACTION_CREATED,
+                    'students',
+                    (int) $student->getKey(),
+                    $audit['before'],
+                    $audit['after'],
+                    $this->audit->ipFromRequest($request),
+                );
 
-            return new CreatedStudent($student->load(['user', 'programme.department']), $delivery);
+                $this->invoices->issueDuringCreate($actor, $student, $request);
+
+                return new CreatedStudent($student->load(['user', 'programme.department']), $delivery);
+            });
         });
 
         $row = EmailOutbox::query()

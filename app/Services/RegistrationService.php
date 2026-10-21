@@ -787,8 +787,14 @@ final class RegistrationService
         bool $approving,
         ?string $reason,
     ): CourseRegistration {
-        return DB::transaction(function () use ($actor, $registration_id, $version, $request, $approving, $reason): CourseRegistration {
-            $registration = $this->lockedVisible($actor, $registration_id);
+        $student_id = CourseRegistration::query()->whereKey($registration_id)->value('student_id');
+
+        return DB::transaction(function () use ($actor, $registration_id, $version, $request, $approving, $reason, $student_id): CourseRegistration {
+            $registration = $this->lockedVisible(
+                $actor,
+                $registration_id,
+                is_numeric($student_id) ? (int) $student_id : null,
+            );
 
             if ($this->isOwnRegistration($actor, $registration)) {
                 throw new AuthorizationException;
@@ -882,12 +888,10 @@ final class RegistrationService
     /**
      * The registration this account may decide, or a 404 when it is missing or hidden.
      */
-    private function lockedVisible(User $actor, int $registration_id): CourseRegistration
+    private function lockedVisible(User $actor, int $registration_id, ?int $student_id): CourseRegistration
     {
-        $student_id = CourseRegistration::query()->whereKey($registration_id)->value('student_id');
-
-        if (is_numeric($student_id)) {
-            $this->lockStudent((int) $student_id);
+        if ($student_id !== null) {
+            $this->lockStudent($student_id);
         }
 
         $registration = CourseRegistration::query()

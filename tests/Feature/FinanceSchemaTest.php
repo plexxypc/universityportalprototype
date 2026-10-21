@@ -44,6 +44,26 @@ it('rejects a second invoice with the same number', function () {
     ]))->toThrow(QueryException::class);
 });
 
+it('rejects a second open invoice for the same student and session', function () {
+    $invoice = Invoice::factory()->create();
+
+    expect(fn () => Invoice::factory()->create([
+        'student_id' => $invoice->student_id,
+        'session_id' => $invoice->session_id,
+    ]))->toThrow(QueryException::class);
+});
+
+it('allows another invoice for the same student and session after cancellation', function () {
+    $invoice = Invoice::factory()->cancelled()->create();
+
+    Invoice::factory()->create([
+        'student_id' => $invoice->student_id,
+        'session_id' => $invoice->session_id,
+    ]);
+
+    expect(Invoice::query()->where('student_id', $invoice->student_id)->where('session_id', $invoice->session_id)->count())->toBe(2);
+});
+
 it('rejects a duplicate payment event for the same provider', function () {
     $event = PaymentEvent::factory()->create();
 
@@ -218,7 +238,7 @@ it('restricts every finance foreign key', function () {
         fn (object $row): array => [$row->constraint_name => $row->delete_rule],
     );
 
-    expect($delete_rules)->toHaveCount(13)
+    expect($delete_rules)->toHaveCount(15)
         ->and($delete_rules->every(fn (string $rule): bool => $rule === 'RESTRICT'))->toBeTrue();
 });
 
@@ -239,6 +259,9 @@ it('has the finance tables', function () {
             'adjustments_kobo',
             'paid_kobo',
             'status',
+            'cancelled_reason',
+            'cancelled_by',
+            'cancelled_at',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('payments', [
             'reference',
@@ -251,6 +274,9 @@ it('has the finance tables', function () {
             'expires_at',
             'last_checked_at',
             'paid_at',
+            'reversed_reason',
+            'reversed_by',
+            'reversed_at',
         ]))->toBeTrue()
         ->and(Schema::hasColumns('payment_events', [
             'provider',
