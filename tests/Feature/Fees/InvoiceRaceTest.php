@@ -53,6 +53,9 @@ function invoice_race_env(): array
     $env['DB_PASSWORD'] = $env['DB_PASSWORD'] ?? 'portal';
     $env['DB_URL'] = '';
     $env['APP_ENV'] = 'testing';
+    $env['APP_DEBUG'] = 'false';
+    $env['APP_KEY'] = $env['APP_KEY'] ?? 'base64:YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=';
+    $env['APP_URL'] = $env['APP_URL'] ?? 'http://127.0.0.1:8000';
     $env['MAIL_MAILER'] = 'array';
     $env['QUEUE_CONNECTION'] = 'sync';
 
@@ -92,6 +95,20 @@ function invoice_race_cleanup(): void
     DB::table('faculties')->delete();
     DB::table('academic_sessions')->delete();
     DB::table('users')->delete();
+}
+
+/**
+ * @return list<int>
+ */
+function invoice_race_rounds(): array
+{
+    $rounds = (int) getenv('INVOICE_RACE_ROUNDS');
+
+    if ($rounds < 1) {
+        $rounds = 3;
+    }
+
+    return range(1, $rounds);
 }
 
 function invoice_race_restore(bool $wrapped): void
@@ -230,7 +247,7 @@ function invoice_race_world(): array
     $registrar = User::factory()->create();
     RoleAssignment::factory()->create(['user_id' => $registrar->id, 'role' => Role::Registrar]);
     $programme = Programme::factory()->create();
-    $session = AcademicSession::factory()->current()->create();
+    $session = AcademicSession::factory()->current()->create(['name' => '2026/2027']);
     $category = FeeCategory::factory()->create(['name' => 'Tuition', 'code' => 'tuition-'.fake()->unique()->numerify('###')]);
     FeeStructure::factory()->create([
         'fee_category_id' => $category->id,
@@ -270,7 +287,7 @@ it('issues one invoice when student creation races invoice generation', function
     $wrapped = invoice_race_release();
 
     try {
-        foreach ([1, 2, 3] as $round) {
+        foreach (invoice_race_rounds() as $round) {
             $world = invoice_race_world();
 
             foreach (range(1, 4) as $ignored) {
@@ -323,7 +340,7 @@ it('keeps one invoice per student when two bulk confirms race', function () {
     $wrapped = invoice_race_release();
 
     try {
-        foreach ([1, 2, 3] as $round) {
+        foreach (invoice_race_rounds() as $round) {
             $world = invoice_race_world();
 
             foreach (range(1, 6) as $ignored) {

@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
  * One side of an invoice race.
  *
  * Arguments: ready file, go file, result file, mode, payload file.
- * The child writes ok and a short code. It does not write exception text.
+ * The child writes ok, or the fixed validation message when the service refuses.
  */
 $ready_file = $argv[1] ?? '';
 $go_file = $argv[2] ?? '';
@@ -118,8 +118,9 @@ try {
     }
 
     invoice_race_finish($result_file, false, 'failed');
-} catch (ValidationException) {
-    invoice_race_finish($result_file, true, 'refused');
+} catch (ValidationException $exception) {
+    $message = collect($exception->errors())->flatten()->first();
+    invoice_race_finish($result_file, true, is_string($message) && $message !== '' ? $message : 'refused');
 } catch (Throwable) {
     invoice_race_finish($result_file, false, 'failed');
 }

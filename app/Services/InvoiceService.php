@@ -19,21 +19,25 @@ use App\Models\Programme;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\Audit;
+use App\Support\Deadlock;
 use App\Support\Money;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * Builds invoices from fee structures and keeps the stored totals in step.
  *
  * Amounts are copied onto invoice items. A later price change does not
- * rewrite an issued invoice. Lock order for this service is the invoice
- * row only. Payment settlement locks the payment row first.
+ * rewrite an issued invoice. Issue locks the student row first, then the
+ * open invoice, then the invoice counter. Cancel and adjustments lock the
+ * invoice row only. Payment settlement locks the payment row first.
  */
 class InvoiceService
 {
@@ -80,6 +84,8 @@ class InvoiceService
     public const string MESSAGE_REMOVE = 'Only a super admin can remove an adjustment.';
 
     public const string MESSAGE_ADJUSTMENT = 'That adjustment could not be found.';
+
+    public const string MESSAGE_OPEN = 'This student already has an invoice for this session.';
 
     /**
      * Levels stored on fee structures.
@@ -136,71 +142,63 @@ class InvoiceService
         $this->authoriseManage($actor);
         $this->assertFilters($programme_id, $level, $session_id);
 
-        return DB::transaction(function () use ($actor, $programme_id, $level, $session_id, $after_student_id, $request): InvoiceChunk {
-            $this->authoriseManage($actor);
-            $ids = Student::query()
-                ->visibleTo($actor)
-                ->where('programme_id', $programme_id)
-                ->where('level', $level)
-                ->where('id', '>', $after_student_id)
-                ->orderBy('id')
-                ->limit(self::CHUNK_SIZE)
-                ->pluck('id')
-                ->map(fn (mixed $id): int => (int) $id)
-                ->all();
+        $ids = Student::query()
+            ->visibleTo($actor)
+            ->where('programme_id', $programme_id)
+            ->where('level', $level)
+            ->where('id', '>', $after_student_id)
+            ->orderBy('id')
+            ->limit(self::CHUNK_SIZE)
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->all();
 
-            if ($ids === []) {
-                return new InvoiceChunk(0, 0, 0, $after_student_id, true);
-            }
+        if ($ids === []) {
+            return new InvoiceChunk(0, 0, 0, $after_student_id, true);
+        }
 
-            $locked = Student::query()
-                ->whereIn('id', $ids)
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get();
+        return Deadlock::attempt(function () use ($actor, $programme_id, $level, $session_id, $ids, $request): InvoiceChunk {
+            return DB::transaction(function () use ($actor, $programme_id, $level, $session_id, $ids, $request): InvoiceChunk {
+                $locked = Student::query()
+                    ->whereIn('id', $ids)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
 
-            $created = 0;
-            $already_invoiced = 0;
-            $no_fee_structure = 0;
-            $last_student_id = $after_student_id;
+                $created = 0;
+                $already_invoiced = 0;
+                $no_fee_structure = 0;
 
-            $last_student_id = max($ids);
+                foreach ($locked as $student) {
+                    if ((int) $student->programme_id !== $programme_id || (int) $student->level !== $level) {
+                        continue;
+                    }
 
-            foreach ($locked as $student) {
-                if ((int) $student->programme_id !== $programme_id || (int) $student->level !== $level) {
-                    continue;
-                }
+                    $invoice = $this->writeInvoice($actor, $student, $session_id, $request);
 
-                $bucket = $this->bucket($student, $session_id);
+                    if ($invoice instanceof Invoice) {
+                        $created++;
 
-                if ($bucket === 'already_invoiced') {
-                    $already_invoiced++;
+                        continue;
+                    }
 
-                    continue;
-                }
+                    if ($this->lockedOpenInvoice($student, $session_id) instanceof Invoice) {
+                        $already_invoiced++;
 
-                if ($bucket === 'no_fee_structure') {
-                    $no_fee_structure++;
+                        continue;
+                    }
 
-                    continue;
-                }
-
-                $invoice = $this->writeInvoice($actor, $student, $session_id, $request);
-
-                if ($invoice instanceof Invoice) {
-                    $created++;
-                } else {
                     $no_fee_structure++;
                 }
-            }
 
-            return new InvoiceChunk(
-                $created,
-                $already_invoiced,
-                $no_fee_structure,
-                $last_student_id,
-                count($ids) < self::CHUNK_SIZE,
-            );
+                return new InvoiceChunk(
+                    $created,
+                    $already_invoiced,
+                    $no_fee_structure,
+                    max($ids),
+                    count($ids) < self::CHUNK_SIZE,
+                );
+            });
         });
     }
 
@@ -208,25 +206,22 @@ class InvoiceService
      * Issue the current-session invoice while a student row is being created.
      *
      * The caller already holds the transaction and has taken the matric
-     * counter. This method locks the student row, then the invoice counter.
+     * counter. The first statement here locks the student row. The open
+     * invoice is then a locking read, and only then the invoice counter.
      * No fee structure, or no current session, creates nothing.
      */
     public function issueDuringCreate(User $actor, Student $student, Request $request): ?Invoice
     {
-        $session = AcademicSession::query()->where('is_current', true)->first();
-
-        if (! $session instanceof AcademicSession) {
-            return null;
-        }
-
-        $write = function () use ($actor, $student, $session, $request): ?Invoice {
+        $write = function () use ($actor, $student, $request): ?Invoice {
             $locked = Student::query()->whereKey($student->getKey())->lockForUpdate()->first();
 
             if (! $locked instanceof Student) {
                 return null;
             }
 
-            if ($this->bucket($locked, (int) $session->getKey()) !== 'will_create') {
+            $session = AcademicSession::query()->where('is_current', true)->first();
+
+            if (! $session instanceof AcademicSession) {
                 return null;
             }
 
@@ -268,9 +263,14 @@ class InvoiceService
     {
         $this->authoriseManage($actor);
         $reason = $this->reason($reason);
+        $student_id = Invoice::query()->whereKey($invoice_id)->value('student_id');
+        $student_id = is_numeric($student_id) ? (int) $student_id : 0;
 
-        return DB::transaction(function () use ($actor, $invoice_id, $reason, $request): Invoice {
-            $this->authoriseManage($actor);
+        return DB::transaction(function () use ($actor, $invoice_id, $reason, $request, $student_id): Invoice {
+            if ($student_id > 0) {
+                Student::query()->whereKey($student_id)->lockForUpdate()->first();
+            }
+
             $cancelled = $this->cancelLocked($actor, $invoice_id, $reason, $request);
             $student = Student::query()->whereKey($cancelled->student_id)->lockForUpdate()->first();
 
@@ -280,11 +280,15 @@ class InvoiceService
 
             $invoice = $this->writeInvoice($actor, $student, (int) $cancelled->session_id, $request);
 
-            if (! $invoice instanceof Invoice) {
+            if ($invoice instanceof Invoice) {
+                return $invoice;
+            }
+
+            if ($this->lines($student, (int) $cancelled->session_id) === []) {
                 throw ValidationException::withMessages(['invoice' => self::MESSAGE_NO_FEE]);
             }
 
-            return $invoice;
+            throw ValidationException::withMessages(['invoice' => self::MESSAGE_OPEN]);
         });
     }
 
@@ -511,13 +515,7 @@ class InvoiceService
      */
     private function writeInvoice(User $actor, Student $student, int $session_id, Request $request): ?Invoice
     {
-        $existing = Invoice::query()
-            ->where('student_id', $student->getKey())
-            ->where('session_id', $session_id)
-            ->where('status', '!=', InvoiceStatus::Cancelled->value)
-            ->first();
-
-        if ($existing instanceof Invoice) {
+        if ($this->lockedOpenInvoice($student, $session_id) instanceof Invoice) {
             return null;
         }
 
@@ -527,55 +525,130 @@ class InvoiceService
             return null;
         }
 
-        $total_kobo = 0;
+        return $this->insertInvoice($actor, $student, $session_id, $request, $lines);
+    }
 
-        foreach ($lines as $line) {
-            $total_kobo += $line['amount_kobo'];
+    /**
+     * The open invoice for this student and session, locked.
+     *
+     * The caller already holds the student row. This is a locking read, so
+     * it sees a row committed after this transaction's snapshot.
+     */
+    private function lockedOpenInvoice(Student $student, int $session_id): ?Invoice
+    {
+        $existing = Invoice::query()
+            ->where('student_id', $student->getKey())
+            ->where('session_id', $session_id)
+            ->where('open_flag', 1)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
+
+        return $existing instanceof Invoice ? $existing : null;
+    }
+
+    /**
+     * Insert one invoice. A duplicate open invoice rolls this savepoint back.
+     *
+     * The counter increment is inside the savepoint, so a duplicate does not
+     * keep a number. The caller holds the student row and the transaction.
+     *
+     * @param  list<array{fee_category_id: int, description: string, amount_kobo: int}>  $lines
+     */
+    private function insertInvoice(User $actor, Student $student, int $session_id, Request $request, array $lines): ?Invoice
+    {
+        DB::statement('SAVEPOINT invoice_issue');
+
+        try {
+            $total_kobo = 0;
+
+            foreach ($lines as $line) {
+                $total_kobo += $line['amount_kobo'];
+            }
+
+            $invoice = new Invoice;
+            $invoice->number = $this->nextNumber();
+            $invoice->student_id = (int) $student->getKey();
+            $invoice->session_id = $session_id;
+            $invoice->total_kobo = $total_kobo;
+            $invoice->adjustments_kobo = 0;
+            $invoice->paid_kobo = 0;
+            $invoice->status = self::statusFor($total_kobo, 0, 0);
+            $invoice->save();
+
+            $sort = 0;
+
+            foreach ($lines as $line) {
+                $item = new InvoiceItem;
+                $item->invoice_id = (int) $invoice->getKey();
+                $item->fee_category_id = $line['fee_category_id'];
+                $item->description = $line['description'];
+                $item->amount_kobo = $line['amount_kobo'];
+                $item->sort = $sort;
+                $item->save();
+                $sort++;
+            }
+
+            $this->audit->record(
+                (int) $actor->getKey(),
+                self::ACTION_GENERATED,
+                'invoices',
+                (int) $invoice->getKey(),
+                null,
+                [
+                    'invoice_id' => (int) $invoice->getKey(),
+                    'student_id' => (int) $student->getKey(),
+                    'session_id' => $session_id,
+                    'number' => $invoice->number,
+                    'status' => $invoice->status->value,
+                    'total_kobo' => $total_kobo,
+                    'adjustments_kobo' => 0,
+                    'paid_kobo' => 0,
+                ],
+                $this->audit->ipFromRequest($request),
+            );
+            DB::statement('RELEASE SAVEPOINT invoice_issue');
+
+            return $invoice;
+        } catch (QueryException $exception) {
+            if (! Deadlock::is($exception)) {
+                $this->rollbackInvoiceSavepoint();
+            }
+
+            if ($this->isOpenInvoiceDuplicate($exception)) {
+                return null;
+            }
+
+            throw $exception;
+        } catch (Throwable $exception) {
+            $this->rollbackInvoiceSavepoint();
+
+            throw $exception;
         }
+    }
 
-        $invoice = new Invoice;
-        $invoice->number = $this->nextNumber();
-        $invoice->student_id = (int) $student->getKey();
-        $invoice->session_id = $session_id;
-        $invoice->total_kobo = $total_kobo;
-        $invoice->adjustments_kobo = 0;
-        $invoice->paid_kobo = 0;
-        $invoice->status = self::statusFor($total_kobo, 0, 0);
-        $invoice->save();
-
-        $sort = 0;
-
-        foreach ($lines as $line) {
-            $item = new InvoiceItem;
-            $item->invoice_id = (int) $invoice->getKey();
-            $item->fee_category_id = $line['fee_category_id'];
-            $item->description = $line['description'];
-            $item->amount_kobo = $line['amount_kobo'];
-            $item->sort = $sort;
-            $item->save();
-            $sort++;
+    /**
+     * Undo the invoice insert. A deadlock has already removed the savepoint.
+     */
+    private function rollbackInvoiceSavepoint(): void
+    {
+        try {
+            DB::statement('ROLLBACK TO SAVEPOINT invoice_issue');
+            DB::statement('RELEASE SAVEPOINT invoice_issue');
+        } catch (QueryException) {
+            // A deadlock already rolled this transaction back.
         }
+    }
 
-        $this->audit->record(
-            (int) $actor->getKey(),
-            self::ACTION_GENERATED,
-            'invoices',
-            (int) $invoice->getKey(),
-            null,
-            [
-                'invoice_id' => (int) $invoice->getKey(),
-                'student_id' => (int) $student->getKey(),
-                'session_id' => $session_id,
-                'number' => $invoice->number,
-                'status' => $invoice->status->value,
-                'total_kobo' => $total_kobo,
-                'adjustments_kobo' => 0,
-                'paid_kobo' => 0,
-            ],
-            $this->audit->ipFromRequest($request),
-        );
+    /**
+     * True when MySQL rejected a second open invoice for one student and session.
+     */
+    private function isOpenInvoiceDuplicate(QueryException $exception): bool
+    {
+        $state = $exception->errorInfo[0] ?? null;
 
-        return $invoice;
+        return $state === '23000'
+            && str_contains($exception->getMessage(), 'invoices_student_session_open_unique');
     }
 
     /**
