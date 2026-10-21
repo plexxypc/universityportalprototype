@@ -16,6 +16,7 @@ use App\Models\PaymentEvent;
 use App\Models\Receipt;
 use App\Models\User;
 use App\Services\Payments\GatewayOutcome;
+use App\Services\Payments\InterswitchGateway;
 use App\Services\Payments\PaymentGatewayResolver;
 use App\Services\Payments\StartedPayment;
 use App\Support\Audit;
@@ -111,8 +112,12 @@ class PaymentService
             $reference = $this->nextReference();
             $payment = new Payment;
             $payment->reference = $reference;
-            $payment->gateway = PaymentGatewayName::Demo;
-            $payment->provider_reference = 'demo-'.$reference;
+            $payment->gateway = $gateway instanceof InterswitchGateway
+                ? PaymentGatewayName::Interswitch
+                : PaymentGatewayName::Demo;
+            $payment->provider_reference = $payment->gateway === PaymentGatewayName::Demo
+                ? 'demo-'.$reference
+                : null;
             $payment->invoice_id = (int) $invoice->getKey();
             $payment->student_id = (int) $invoice->student_id;
             $payment->amount_kobo = $amount_kobo;
@@ -442,6 +447,10 @@ class PaymentService
      */
     private function applyOutcome(Payment $payment, Invoice $invoice, GatewayOutcome $outcome, string $source): void
     {
+        if ($payment->provider_reference === null && is_string($outcome->provider_reference) && $outcome->provider_reference !== '') {
+            $payment->provider_reference = $outcome->provider_reference;
+        }
+
         if ($payment->status === PaymentStatus::Successful || $payment->status === PaymentStatus::Reversed) {
             return;
         }

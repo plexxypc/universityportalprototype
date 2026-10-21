@@ -11,6 +11,7 @@ use App\Http\Controllers\Student\DemoPaymentController;
 use App\Http\Controllers\Student\DocumentController;
 use App\Http\Controllers\Student\FeesController;
 use App\Http\Controllers\Student\HomeController;
+use App\Http\Controllers\Student\InterswitchCheckoutController;
 use App\Http\Controllers\Student\MoreController;
 use App\Http\Controllers\Student\NotificationController;
 use App\Http\Controllers\Student\PaymentStatusController;
@@ -46,6 +47,9 @@ Route::middleware([
     Route::post('/student/payments/demo/{reference}', [DemoPaymentController::class, 'store'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.demo.store');
+    Route::get('/student/payments/interswitch/{reference}', [InterswitchCheckoutController::class, 'show'])
+        ->where('reference', '[A-Za-z0-9]+')
+        ->name('student.payments.interswitch');
     Route::get('/student/payments/{reference}', [PaymentStatusController::class, 'show'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.show');

@@ -45,14 +45,16 @@ class PaymentReturnController extends Controller
      */
     private function reference(Request $request): ?string
     {
-        $query = $request->query('reference');
-        $body = $request->request->get('reference');
-        $value = is_string($query) && $query !== '' ? $query : $body;
+        foreach (['reference', 'txnref'] as $key) {
+            $query = $request->query($key);
+            $body = $request->request->get($key);
+            $value = is_string($query) && $query !== '' ? $query : $body;
 
-        if (! is_string($value) || preg_match('/\A[A-Za-z0-9]{1,64}\z/', $value) !== 1) {
-            return null;
+            if (is_string($value) && preg_match('/\A[A-Za-z0-9]{1,64}\z/', $value) === 1) {
+                return $value;
+            }
         }
 
-        return $value;
+        return null;
     }
 }

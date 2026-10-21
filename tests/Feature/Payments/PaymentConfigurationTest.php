@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Payments\DemoGateway;
+use App\Services\Payments\InterswitchGateway;
 use App\Services\Payments\PaymentGatewayResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
@@ -45,7 +46,7 @@ function payment_config_owner(): array
     ];
 }
 
-it('boots and fails closed for remita, sandbox, and an unknown provider', function (string $provider) {
+it('boots and fails closed for an unknown provider', function (string $provider) {
     PaymentGatewayResolver::forgetWarning();
     $messages = payment_config_messages();
     config(['payments.provider' => $provider]);
@@ -56,7 +57,55 @@ it('boots and fails closed for remita, sandbox, and an unknown provider', functi
 
     $this->get('/login')->assertOk();
     $this->get('/health')->assertStatus(503)->assertJsonPath('payments', 'misconfigured');
-})->with(['remita', 'sandbox', 'not-a-provider']);
+})->with(['sandbox', 'not-a-provider']);
+
+it('refuses to boot remita and a non-local interswitch configuration that is missing a value', function () {
+    config(['payments.provider' => 'remita']);
+
+    expect(fn () => app(PaymentGatewayResolver::class)->enforceBoot())
+        ->toThrow(RuntimeException::class, 'Payments are not configured.');
+
+    $this->app['env'] = 'local';
+
+    expect(fn () => app(PaymentGatewayResolver::class)->enforceBoot())
+        ->toThrow(RuntimeException::class, 'Payments are not configured.');
+
+    $this->app['env'] = 'testing';
+    $secret = 'super-secret-value';
+    config([
+        'payments.provider' => 'interswitch',
+        'payments.interswitch.mode' => 'TEST',
+        'payments.interswitch.merchant_code' => '',
+        'payments.interswitch.pay_item_id' => 'PITEM',
+        'payments.interswitch.secret' => $secret,
+    ]);
+    $message = '';
+
+    try {
+        app(PaymentGatewayResolver::class)->enforceBoot();
+    } catch (RuntimeException $exception) {
+        $message = $exception->getMessage();
+    }
+
+    expect($message)->toBe('Payments are not configured.')
+        ->and(str_contains($message, $secret))->toBeFalse();
+
+    $this->app['env'] = 'local';
+    app(PaymentGatewayResolver::class)->enforceBoot();
+
+    expect(fn () => app(PaymentGatewayResolver::class)->resolve())->toThrow(PaymentsUnavailableException::class);
+
+    $this->app['env'] = 'testing';
+    config([
+        'payments.provider' => 'interswitch',
+        'payments.interswitch.mode' => 'TEST',
+        'payments.interswitch.merchant_code' => 'MTEST',
+        'payments.interswitch.pay_item_id' => 'PITEM',
+    ]);
+    app(PaymentGatewayResolver::class)->enforceBoot();
+
+    expect(app(PaymentGatewayResolver::class)->resolve())->toBeInstanceOf(InterswitchGateway::class);
+});
 
 it('fails closed when an Interswitch value is missing and does not log that value', function () {
     PaymentGatewayResolver::forgetWarning();
@@ -99,7 +148,7 @@ it('allows the demo gateway in production when permission is set', function () {
         ->and(app(PaymentGatewayResolver::class)->isConfigured())->toBeTrue();
 });
 
-it('warns once and does not throw while booting', function () {
+it('warns once and refuses to boot remita', function () {
     PaymentGatewayResolver::forgetWarning();
     $messages = payment_config_messages();
     config(['payments.provider' => 'remita']);
@@ -108,6 +157,9 @@ it('warns once and does not throw while booting', function () {
     $resolver->warnIfUnusable();
 
     expect($messages->getArrayCopy())->toBe(['Payments are not configured.']);
+
+    expect(fn () => app(PaymentGatewayResolver::class)->enforceBoot())
+        ->toThrow(RuntimeException::class, 'Payments are not configured.');
 });
 
 /**

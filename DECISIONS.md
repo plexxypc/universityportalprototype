@@ -371,12 +371,12 @@
 4. **Adjustments.** Super Admin alone may remove an adjustment. The reason is required and audited. Bursar and Registrar cannot remove one.
 5. **Minimum payment.** What satisfies `require_minimum_payment` stays undefined. The switch blocks registration and does not read invoices or payments.
 6. **Overpayment.** A provider success that would break `paid_kobo + adjustments_kobo <= total_kobo` leaves the payment Pending, writes one `overpayment_review` event, and does not credit. There is no student action that cancels a Pending payment. The reservation ends when that payment expires or the provider reports it failed or cancelled.
-7. **Provider configuration.** A bad `PAYMENT_PROVIDER`, a missing Interswitch value, or the Demo Gateway in production without `PAYMENT_ALLOW_DEMO=true` does not stop the process from booting. The gateway resolver fails closed at the moment of use.
+7. **Provider configuration.** A bad `PAYMENT_PROVIDER`, a missing Interswitch value, or the Demo Gateway in production without `PAYMENT_ALLOW_DEMO=true` does not stop the process from booting. The gateway resolver fails closed at the moment of use. ADR-034 changes that for `remita`, and for Interswitch outside `local` when a required value is missing: those refuse to boot.
 8. **Interswitch requery.** Settlement compares `ResponseCode` `"00"`, an equal amount, and `MerchantReference`. A currency field, when present, must be `566`. A missing currency on the documented requery sample is not a refusal. Pages used: Web Checkout, the Web Checkout quickstart, payment response codes, and webhooks, all on `docs.interswitchgroup.com`.
 
 **Reason:** The invoice total has to stay stable after issue, and two settlement paths have to lock rows in one order. The provider pages that were open on 20 October 2026 describe the redirect form, the requery call, and the webhook signature. They do not describe a hash on that form or a currency field on the requery sample.
 
-**Consequences:** TASK-096 issues invoices with the invoice number format. Payment references, receipts, and the Interswitch adapter follow in later tasks. `PAYMENT_PROVIDER=remita` has no adapter. Selecting it fails when a payment is started, not during boot.
+**Consequences:** TASK-096 issues invoices with the invoice number format. Payment references, receipts, and the Interswitch adapter follow in later tasks. `PAYMENT_PROVIDER=remita` has no adapter. ADR-034 makes that selection refuse to boot.
 
 ## ADR-033: One open invoice is a generated column
 
@@ -387,3 +387,14 @@
 **Reason:** MySQL has no partial unique index. A plain read under REPEATABLE READ can miss an invoice committed by another transaction. The generated flag is the same pattern as `academic_sessions.current_flag`.
 
 **Consequences:** ADR-032 point 3 stays the service rule. This decision adds the database rule. Cancelled rows stay in the table.
+
+## ADR-034: Remita and incomplete Interswitch refuse to boot
+
+**Status:** Accepted (21 October 2026).
+
+**Decision:** `PAYMENT_PROVIDER=remita` refuses to boot in every environment. The message is `Payments are not configured.` `PAYMENT_PROVIDER=interswitch` refuses to boot outside `local` when `INTERSWITCH_MODE` is not `TEST` or `LIVE`, or when the merchant code or pay item id is empty. The same fixed message is used. Local Interswitch with a missing value still boots and fails when a payment is started. The Demo Gateway in production without `PAYMENT_ALLOW_DEMO=true` still fails at use, not at boot. The client id and the client secret are not required for boot: the documented redirect form and requery do not send them.
+
+**Reason:** ADR-032 point 7 kept a missing provider from stopping boot. The later instruction for this step is that Remita fails closed and that a non-local Interswitch configuration fails closed at boot when a required value is missing. Demo and testing stay on `PAYMENT_PROVIDER=demo`, so the test suite still boots.
+
+**Consequences:** ADR-032 point 7 remains the rule for an unknown provider and for the Demo Gateway. This decision replaces it for Remita and for incomplete Interswitch outside `local`.
+

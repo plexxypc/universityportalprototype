@@ -60,7 +60,7 @@ final class DemoGateway implements PaymentGateway
      *
      * Amount, status, and every other field are ignored.
      */
-    public function parseNotification(string $body): ?string
+    public function parseNotification(string $body, ?string $signature = null): ?string
     {
         if (strlen($body) > (int) config('payments.notification_max_bytes')) {
             return null;

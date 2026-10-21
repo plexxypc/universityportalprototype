@@ -90,6 +90,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->make(DatabaseTls::class)->apply();
         $this->app->make(EnvironmentGuard::class)->enforce();
+        $this->app->make(PaymentGatewayResolver::class)->enforceBoot();
         $this->app->make(PaymentGatewayResolver::class)->warnIfUnusable();
         $this->registerPaymentNotificationLimit();
 

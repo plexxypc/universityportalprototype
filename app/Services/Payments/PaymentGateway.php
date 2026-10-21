@@ -27,6 +27,8 @@ interface PaymentGateway
 
     /**
      * Read our reference from a notification body.
+     *
+     * signature is the provider signature header. Demo ignores it.
      */
-    public function parseNotification(string $body): ?string;
+    public function parseNotification(string $body, ?string $signature = null): ?string;
 }

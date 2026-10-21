@@ -6,8 +6,9 @@ return [
 
     /*
     | The active adapter. demo, remita, interswitch, or anything else.
-    | A value this process cannot use fails when a payment is started.
-    | It does not stop the process from booting.
+    | remita refuses to boot. interswitch refuses to boot outside local
+    | when mode, merchant code, or pay item id is missing (ADR-034).
+    | The demo gateway in production still fails when a payment is started.
     */
     'provider' => env('PAYMENT_PROVIDER', 'demo'),
 
@@ -42,10 +43,12 @@ return [
     'return_rate_per_minute' => (int) env('PAYMENT_RETURN_RATE_PER_MINUTE', 30),
 
     'interswitch' => [
+        'mode' => env('INTERSWITCH_MODE'),
         'merchant_code' => env('INTERSWITCH_MERCHANT_CODE'),
         'pay_item_id' => env('INTERSWITCH_PAY_ITEM_ID'),
         'client_id' => env('INTERSWITCH_CLIENT_ID'),
         'secret' => env('INTERSWITCH_SECRET'),
+        'webhook_secret' => env('INTERSWITCH_WEBHOOK_SECRET'),
     ],
 
 ];
