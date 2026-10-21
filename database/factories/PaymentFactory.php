@@ -19,6 +19,7 @@ class PaymentFactory extends Factory
      * Define the model's default state.
      *
      * reference is supplied here. The counters table generates it later.
+     * It is letters and digits only, which is what verification accepts.
      * provider_reference stays null until a gateway returns one.
      * student_id is the invoice's student.
      *
@@ -27,7 +28,7 @@ class PaymentFactory extends Factory
     public function definition(): array
     {
         return [
-            'reference' => fake()->unique()->bothify('PAY-################'),
+            'reference' => fake()->unique()->numerify('P###############'),
             'gateway' => PaymentGateway::Demo,
             'provider_reference' => null,
             'invoice_id' => Invoice::factory(),
