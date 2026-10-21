@@ -120,11 +120,20 @@ function interswitch_payment(string $reference, int $amount_kobo): array
 /**
  * The documented requery sample with one response code from the response-codes page.
  */
-function interswitch_sample(string $response_code, string $reference, ?string $currency = null): string
-{
+function interswitch_sample(
+    string $response_code,
+    string $reference,
+    ?string $currency = null,
+    ?int $amount_kobo = null,
+    ?string $merchant_reference = null,
+): string {
     $payload = json_decode(INTERSWITCH_REQUERY_SAMPLE, true, 512, JSON_THROW_ON_ERROR);
     $payload['ResponseCode'] = $response_code;
-    $payload['MerchantReference'] = $reference;
+    $payload['MerchantReference'] = $merchant_reference ?? $reference;
+
+    if ($amount_kobo !== null) {
+        $payload['Amount'] = $amount_kobo;
+    }
 
     if ($currency !== null) {
         $payload['currencyCode'] = $currency;
@@ -133,7 +142,22 @@ function interswitch_sample(string $response_code, string $reference, ?string $c
     return json_encode($payload, JSON_THROW_ON_ERROR);
 }
 
-it('settles the documented requery sample and ignores the redirect body', function () {
+/**
+ * Requery one reference against a faked body and return the fresh payment.
+ */
+function interswitch_requery(string $reference, string $body, int $amount_kobo): Payment
+{
+    Http::preventStrayRequests();
+    Http::fake([
+        'https://sandbox.interswitchng.com/*' => Http::response($body, 200),
+    ]);
+    $world = interswitch_payment($reference, $amount_kobo);
+    app(PaymentService::class)->verifyAndSettle($reference, PaymentEventSource::Poll->value);
+
+    return $world['payment']->fresh() ?? $world['payment'];
+}
+
+it('accepts response code 00 when the amount matches exactly and currency is absent', function () {
     interswitch_ready();
     Http::preventStrayRequests();
     Http::fake([
@@ -214,47 +238,142 @@ it('keeps a provider error body out of logs, events, exceptions, and failed jobs
         ->and(count(Http::recorded()))->toBe(1);
 });
 
-it('does not credit response codes 10 or 11, a decline, or the unresolved codes', function (string $response_code, string $expected) {
+it('maps response code 09 to pending without a review', function () {
     interswitch_ready();
-    Http::preventStrayRequests();
-    $reference = 'P2026'.$response_code;
-    $reference = preg_replace('/[^A-Za-z0-9]/', '', $reference) ?? $reference;
-    Http::fake([
-        'https://sandbox.interswitchng.com/*' => Http::response(interswitch_sample($response_code, $reference), 200),
-    ]);
-    $world = interswitch_payment($reference, 66666600);
+    $payment = interswitch_requery('P20260000000009', interswitch_sample('09', 'P20260000000009'), 66666600);
 
-    app(PaymentService::class)->verifyAndSettle($reference, PaymentEventSource::Poll->value);
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeFalse()
+        ->and((int) $payment->invoice->fresh()?->paid_kobo)->toBe(0);
+});
 
-    expect($world['payment']->fresh()?->status->value)->toBe($expected)
-        ->and((int) $world['invoice']->fresh()?->paid_kobo)->toBe(0);
-})->with([
-    ['10', 'Pending'],
-    ['11', 'Pending'],
-    ['09', 'Pending'],
-    ['51', 'Failed'],
-    ['Z6', 'Pending'],
-    ['Z25', 'Pending'],
-]);
-
-it('does not credit a currency other than 566', function () {
+it('maps response code Z25 to pending without a review', function () {
     interswitch_ready();
-    Http::preventStrayRequests();
+    $payment = interswitch_requery('P20260000000Z25', interswitch_sample('Z25', 'P20260000000Z25'), 66666600);
+
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeFalse();
+});
+
+it('maps documented declined code 51 to failed', function () {
+    interswitch_ready();
+    $payment = interswitch_requery('P20260000000051', interswitch_sample('51', 'P20260000000051'), 66666600);
+
+    expect($payment->status)->toBe(PaymentStatus::Failed)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeFalse()
+        ->and((int) $payment->invoice->fresh()?->paid_kobo)->toBe(0);
+});
+
+it('maps response code 10 to pending with a review', function () {
+    interswitch_ready();
+    $payment = interswitch_requery('P20260000000010', interswitch_sample('10', 'P20260000000010'), 66666600);
+
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeTrue()
+        ->and((int) $payment->invoice->fresh()?->paid_kobo)->toBe(0);
+});
+
+it('maps response code 11 to pending with a review', function () {
+    interswitch_ready();
+    $payment = interswitch_requery('P20260000000011', interswitch_sample('11', 'P20260000000011'), 66666600);
+
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeTrue();
+});
+
+it('maps response code Z6 to pending without a review', function () {
+    interswitch_ready();
+    $payment = interswitch_requery('P202600000000Z6', interswitch_sample('Z6', 'P202600000000Z6'), 66666600);
+
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeFalse();
+});
+
+it('maps an unlisted response code to pending with a review', function () {
+    interswitch_ready();
+    $payment = interswitch_requery('P202600000000Q1', interswitch_sample('Q1', 'P202600000000Q1'), 66666600);
+
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeTrue()
+        ->and((int) $payment->invoice->fresh()?->paid_kobo)->toBe(0);
+});
+
+it('holds an amount mismatch for review', function () {
+    interswitch_ready();
+    $reference = 'P20260000000AMT';
+    $payment = interswitch_requery($reference, interswitch_sample('00', $reference, null, 100_000), 66666600);
+
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeTrue()
+        ->and((int) $payment->invoice->fresh()?->paid_kobo)->toBe(0);
+});
+
+it('holds a MerchantReference mismatch for review', function () {
+    interswitch_ready();
+    $reference = 'P20260000000REF';
+    $payment = interswitch_requery(
+        $reference,
+        interswitch_sample('00', $reference, null, 66666600, 'OTHERREFERENCE1'),
+        66666600,
+    );
+
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeTrue()
+        ->and((int) $payment->invoice->fresh()?->paid_kobo)->toBe(0);
+});
+
+it('refuses a currency that is present and is not 566', function () {
+    interswitch_ready();
     $reference = 'P20260000000566';
     $secret = 'planted-currency-secret-9f3c';
-    Http::fake([
-        'https://sandbox.interswitchng.com/*' => Http::response(interswitch_sample('00', $reference, $secret), 200),
-    ]);
-    $world = interswitch_payment($reference, 66666600);
-
-    app(PaymentService::class)->verifyAndSettle($reference, PaymentEventSource::Poll->value);
+    $payment = interswitch_requery($reference, interswitch_sample('00', $reference, $secret), 66666600);
     $stored = json_encode([
-        $world['payment']->fresh()?->toArray(),
+        $payment->toArray(),
         PaymentEvent::query()->get()->toArray(),
     ]);
 
-    expect($world['payment']->fresh()?->status)->toBe(PaymentStatus::Pending)
+    expect($payment->status)->toBe(PaymentStatus::Pending)
+        ->and(app(PaymentService::class)->underReview($payment))->toBeTrue()
         ->and(str_contains((string) $stored, $secret))->toBeFalse();
+});
+
+it('counts code 10, code 11, an unlisted code, and a mismatch in the same review list as an overpayment', function () {
+    interswitch_ready();
+    Http::preventStrayRequests();
+    $bodies = [
+        'P20260000000010' => interswitch_sample('10', 'P20260000000010'),
+        'P20260000000011' => interswitch_sample('11', 'P20260000000011'),
+        'P202600000000Q1' => interswitch_sample('Q1', 'P202600000000Q1'),
+        'P20260000000MISS' => interswitch_sample('00', 'P20260000000MISS', null, 100_000),
+        'P20260000000OVER' => interswitch_sample('00', 'P20260000000OVER', null, 200_000),
+    ];
+    Http::fake(function (Request $request) use ($bodies) {
+        $query = [];
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+        $reference = (string) ($query['transactionreference'] ?? '');
+        $payload = json_decode($bodies[$reference] ?? '{}', true, 512, JSON_THROW_ON_ERROR);
+        unset($payload['PaymentReference']);
+
+        return Http::response(json_encode($payload, JSON_THROW_ON_ERROR), 200);
+    });
+    interswitch_payment('P20260000000010', 66666600);
+    interswitch_payment('P20260000000011', 66666600);
+    interswitch_payment('P202600000000Q1', 66666600);
+    interswitch_payment('P20260000000MISS', 66666600);
+    $overpayment = interswitch_payment('P20260000000OVER', 200_000);
+    $overpayment['invoice']->total_kobo = 100_000;
+    $overpayment['invoice']->save();
+    $service = app(PaymentService::class);
+
+    foreach (array_keys($bodies) as $reference) {
+        $service->verifyAndSettle($reference, PaymentEventSource::Poll->value);
+    }
+
+    $note = view('filament.staff.invoices-note')->render();
+
+    expect($service->openReviewCount())->toBe(5)
+        ->and($note)->toContain('Payments under review: 5')
+        ->and($service->underReview($overpayment['payment']->fresh() ?? $overpayment['payment']))->toBeTrue();
 });
 
 it('uses the live requery host when the mode is LIVE', function () {
@@ -273,7 +392,7 @@ it('uses the live requery host when the mode is LIVE', function () {
     });
 });
 
-it('posts the documented checkout form without a third-party script', function () {
+it('posts only the documented checkout fields', function () {
     interswitch_ready();
     config(['payments.interswitch.secret' => 'super-secret-value', 'payments.interswitch.client_id' => 'client-secret-value']);
     $world = interswitch_payment('P20260000000077', 100_000);
@@ -282,7 +401,19 @@ it('posts the documented checkout form without a third-party script', function (
     $html = (string) $page->getContent();
 
     $page->assertOk();
-    expect(str_contains($html, 'https://newwebpay-sandbox.interswitchng.com/collections/w/pay'))->toBeTrue()
+    preg_match('/<form id="interswitch-checkout"[^>]*>.*?<\/form>/s', $html, $form);
+    preg_match_all('/<input type="hidden" name="([^"]+)"/', $form[0] ?? '', $names);
+
+    expect($names[1])->toBe([
+        'merchant_code',
+        'pay_item_id',
+        'txn_ref',
+        'amount',
+        'currency',
+        'cust_email',
+        'site_redirect_url',
+    ])
+        ->and(str_contains($html, 'https://newwebpay-sandbox.interswitchng.com/collections/w/pay'))->toBeTrue()
         ->and(str_contains($html, 'method="post"'))->toBeTrue()
         ->and(str_contains($html, 'name="merchant_code"'))->toBeTrue()
         ->and(str_contains($html, 'value="MTEST"'))->toBeTrue()
@@ -295,7 +426,7 @@ it('posts the documented checkout form without a third-party script', function (
         ->and(str_contains($html, 'name="cust_email"'))->toBeTrue()
         ->and(str_contains($html, 'name="site_redirect_url"'))->toBeTrue()
         ->and(str_contains($html, '/payments/return'))->toBeTrue()
-        ->and(str_contains($html, 'name="payment_response_type"'))->toBeTrue()
+        ->and(str_contains($html, 'name="payment_response_type"'))->toBeFalse()
         ->and(str_contains($html, 'Make Payment'))->toBeTrue()
         ->and(str_contains($html, "document.getElementById('interswitch-checkout').submit()"))->toBeTrue()
         ->and(str_contains($html, 'inline-checkout.js'))->toBeFalse()
@@ -313,41 +444,142 @@ it('posts the documented checkout form without a third-party script', function (
         ->and($missing->status())->toBe(404);
 });
 
-it('reads a signed webhook reference and ignores an unsigned body', function () {
+it('calls the requery over HTTPS with TLS verification and a short timeout', function () {
     interswitch_ready();
     Http::preventStrayRequests();
     Http::fake([
         'https://sandbox.interswitchng.com/*' => Http::response(INTERSWITCH_REQUERY_SAMPLE, 200),
     ]);
-    $world = interswitch_payment('2Xdf35faAyX2Sk5Dalu405rUD', 12000);
+    interswitch_payment('933437251484', 66666600);
+    $options = app(InterswitchGateway::class)->clientOptions();
+
+    app(InterswitchGateway::class)->verify('933437251484');
+
+    expect($options['verify'])->toBeTrue()
+        ->and($options['timeout'])->toBeGreaterThanOrEqual(1)
+        ->and($options['timeout'])->toBeLessThanOrEqual(10)
+        ->and($options['connect_timeout'])->toBe($options['timeout'])
+        ->and($options['allow_redirects'])->toBeFalse()
+        ->and($options['http_errors'])->toBeFalse();
+
+    Http::assertSent(function (Request $request): bool {
+        return $request->method() === 'GET' && str_starts_with($request->url(), 'https://');
+    });
+
+    $plain = collect(Http::recorded())->contains(
+        fn (array $pair): bool => str_starts_with($pair[0]->url(), 'http://'),
+    );
+
+    expect($plain)->toBeFalse();
+});
+
+it('ignores a webhook with no signature', function () {
+    interswitch_ready();
+    Http::preventStrayRequests();
+    Http::fake(['https://sandbox.interswitchng.com/*' => Http::response(INTERSWITCH_REQUERY_SAMPLE, 200)]);
+    interswitch_payment('2Xdf35faAyX2Sk5Dalu405rUD', 12000);
     $secret = 'planted-webhook-secret-9f3c';
-    $signed = hash_hmac('sha512', INTERSWITCH_WEBHOOK_SAMPLE, 'webhook-test-secret');
     $logged = '';
     Log::listen(function (MessageLogged $event) use (&$logged): void {
         $logged .= $event->message.json_encode($event->context);
     });
 
-    $rejected = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
+    $response = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+    ], '{"data":{"merchantReference":"2Xdf35faAyX2Sk5Dalu405rUD","responseDescription":"'.$secret.'"}}');
+
+    $stored = json_encode(PaymentEvent::query()->get()->toArray());
+
+    expect($response->getStatusCode())->toBe(200)
+        ->and($response->getContent())->toBe('')
+        ->and(str_contains($logged.$stored, $secret))->toBeFalse()
+        ->and(count(Http::recorded()))->toBe(0);
+});
+
+it('ignores a webhook with a bad signature', function () {
+    interswitch_ready();
+    Http::preventStrayRequests();
+    Http::fake(['https://sandbox.interswitchng.com/*' => Http::response(INTERSWITCH_REQUERY_SAMPLE, 200)]);
+    interswitch_payment('2Xdf35faAyX2Sk5Dalu405rUD', 12000);
+
+    $response = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
         'CONTENT_TYPE' => 'application/json',
         'HTTP_X_INTERSWITCH_SIGNATURE' => hash_hmac('sha512', INTERSWITCH_WEBHOOK_SAMPLE, 'wrong-secret'),
     ], INTERSWITCH_WEBHOOK_SAMPLE);
-    $unsigned = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
-        'CONTENT_TYPE' => 'application/json',
-    ], '{"data":{"merchantReference":"2Xdf35faAyX2Sk5Dalu405rUD","responseDescription":"'.$secret.'"}}');
-    $accepted = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
+
+    expect($response->getStatusCode())->toBe(200)
+        ->and($response->getContent())->toBe('')
+        ->and(count(Http::recorded()))->toBe(0);
+});
+
+it('requeries a known merchantReference from a valid signature', function () {
+    interswitch_ready();
+    Http::preventStrayRequests();
+    Http::fake(['https://sandbox.interswitchng.com/*' => Http::response(INTERSWITCH_REQUERY_SAMPLE, 200)]);
+    interswitch_payment('2Xdf35faAyX2Sk5Dalu405rUD', 12000);
+    $signed = hash_hmac('sha512', INTERSWITCH_WEBHOOK_SAMPLE, 'webhook-test-secret');
+
+    $response = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
         'CONTENT_TYPE' => 'application/json',
         'HTTP_X_INTERSWITCH_SIGNATURE' => $signed,
     ], INTERSWITCH_WEBHOOK_SAMPLE);
 
-    $stored = json_encode($world['payment']->fresh()?->toArray()).json_encode(PaymentEvent::query()->get()->toArray());
+    expect($response->getStatusCode())->toBe(200)
+        ->and($response->getContent())->toBe('');
 
-    expect($rejected->getStatusCode())->toBe(200)
-        ->and($rejected->getContent())->toBe('')
-        ->and($unsigned->getContent())->toBe('')
-        ->and($accepted->getStatusCode())->toBe(200)
-        ->and($accepted->getContent())->toBe('')
-        ->and((int) $world['invoice']->fresh()?->paid_kobo)->toBe(0)
-        ->and(str_contains($logged.$stored, $secret))->toBeFalse()
-        ->and(str_contains($logged.$stored, '561233'))->toBeFalse()
-        ->and(count(Http::recorded()))->toBe(1);
+    Http::assertSent(function (Request $request): bool {
+        return str_contains($request->url(), 'transactionreference=2Xdf35faAyX2Sk5Dalu405rUD');
+    });
+    expect(count(Http::recorded()))->toBe(1);
+});
+
+it('does not credit an unknown merchantReference from a valid signature', function () {
+    interswitch_ready();
+    Http::preventStrayRequests();
+    Http::fake(['https://sandbox.interswitchng.com/*' => Http::response(INTERSWITCH_REQUERY_SAMPLE, 200)]);
+    $signed = hash_hmac('sha512', INTERSWITCH_WEBHOOK_SAMPLE, 'webhook-test-secret');
+    $before = Payment::query()->count();
+
+    $response = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_INTERSWITCH_SIGNATURE' => $signed,
+    ], INTERSWITCH_WEBHOOK_SAMPLE);
+
+    expect($response->getStatusCode())->toBe(200)
+        ->and($response->getContent())->toBe('')
+        ->and(Payment::query()->count())->toBe($before)
+        ->and(count(Http::recorded()))->toBe(0);
+});
+
+it('ignores a webhook when the webhook secret is unset', function () {
+    interswitch_ready();
+    config(['payments.interswitch.webhook_secret' => '']);
+    Http::preventStrayRequests();
+    Http::fake(['https://sandbox.interswitchng.com/*' => Http::response(INTERSWITCH_REQUERY_SAMPLE, 200)]);
+    interswitch_payment('2Xdf35faAyX2Sk5Dalu405rUD', 12000);
+    $signed = hash_hmac('sha512', INTERSWITCH_WEBHOOK_SAMPLE, 'webhook-test-secret');
+
+    $response = $this->call('POST', '/payments/notify/interswitch', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_INTERSWITCH_SIGNATURE' => $signed,
+    ], INTERSWITCH_WEBHOOK_SAMPLE);
+
+    expect($response->getStatusCode())->toBe(200)
+        ->and($response->getContent())->toBe('')
+        ->and(count(Http::recorded()))->toBe(0);
+});
+
+it('compares the webhook signature in constant time', function () {
+    $source = (string) file_get_contents(app_path('Services/Payments/InterswitchGateway.php'));
+    $start = strpos($source, 'function signatureMatches');
+    $end = strpos($source, 'function clientOptions');
+    $method = substr($source, (int) $start, (int) $end - (int) $start);
+    $expected = hash_hmac('sha512', 'body', 'secret');
+
+    expect(str_contains($method, 'hash_equals('))->toBeTrue()
+        ->and(str_contains($method, ' === '))->toBeFalse()
+        ->and(str_contains($method, ' == '))->toBeFalse()
+        ->and(InterswitchGateway::signatureMatches($expected, $expected))->toBeTrue()
+        ->and(InterswitchGateway::signatureMatches($expected, str_repeat('ab', 64)))->toBeFalse()
+        ->and(InterswitchGateway::signatureMatches($expected, 'ab'))->toBeFalse();
 });

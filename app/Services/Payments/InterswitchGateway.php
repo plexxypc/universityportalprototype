@@ -32,11 +32,28 @@ final class InterswitchGateway implements PaymentGateway
     private const string LIVE_REQUERY = 'https://webpay.interswitchng.com/collections/api/v1/gettransaction.json';
 
     /**
-     * Response codes the payment-response-codes page marks Declined.
+     * Codes the response-codes page leaves pending, including the Z6 conflict and Z25.
      *
-     * 10 and 11 are documented as Successful and are not credited.
-     * Z6 is both Cancelled and Declined on that page, so it stays pending.
-     * Z25 is Declined on that page and stays pending because ADR-032 says so.
+     * @var list<string>
+     */
+    private const array PENDING = [
+        '09', '16', 'Z0', 'Z6', 'Z25', 'S0',
+        'Z61', 'Z62', 'Z63', 'Z64', 'Z65', 'Z66', 'Z67', 'Z68', 'Z69',
+        'Z70', 'Z71', 'Z72', 'Z73', 'Z74', 'Z76', 'Z77',
+        'Z80', 'Z81', 'Z82',
+        '10400', '10403', '10500',
+        'M0', 'T0', 'T1',
+    ];
+
+    /**
+     * Documented as Successful, and not credited. They stay for review.
+     *
+     * @var list<string>
+     */
+    private const array REVIEW = ['10', '11'];
+
+    /**
+     * Response codes the payment-response-codes page marks Declined.
      *
      * @var list<string>
      */
@@ -99,7 +116,6 @@ final class InterswitchGateway implements PaymentGateway
                 'currency' => '566',
                 'cust_email' => $email,
                 'site_redirect_url' => route('payments.return', absolute: true),
-                'payment_response_type' => 'POST',
             ],
         ];
     }
@@ -180,7 +196,7 @@ final class InterswitchGateway implements PaymentGateway
 
         $expected = hash_hmac('sha512', $body, $secret);
 
-        if (! hash_equals($expected, $given)) {
+        if (! self::signatureMatches($expected, $given)) {
             return null;
         }
 
@@ -193,6 +209,21 @@ final class InterswitchGateway implements PaymentGateway
         }
 
         return $reference;
+    }
+
+    /**
+     * Compare two HMAC hex strings without an early character match.
+     *
+     * Different lengths are unequal before hash_equals, which requires
+     * equal lengths. Equal lengths use hash_equals.
+     */
+    public static function signatureMatches(string $expected, string $given): bool
+    {
+        if (strlen($expected) !== strlen($given)) {
+            return false;
+        }
+
+        return hash_equals($expected, $given);
     }
 
     /**
@@ -256,25 +287,25 @@ final class InterswitchGateway implements PaymentGateway
         $provider_reference = $this->providerReference($payload['PaymentReference'] ?? null);
         $currency = $this->currency($payload);
 
+        if ($currency === 'rejected' && $this->resultFor(is_string($response_code) ? $response_code : '') === 'success') {
+            return new GatewayOutcome($reference, is_int($amount) ? $amount : 0, null, 'review', $provider_reference);
+        }
+
         if (! is_int($amount) || ! is_string($response_code)) {
             return new GatewayOutcome($reference, 0, null, 'pending', $provider_reference);
         }
 
         if ($currency === 'rejected') {
-            return new GatewayOutcome($reference, $amount, null, 'pending', $provider_reference);
+            return new GatewayOutcome($reference, $amount, null, $this->resultFor($response_code), $provider_reference);
         }
 
         $result = $this->resultFor($response_code);
 
-        if ($result !== 'success') {
-            return new GatewayOutcome($reference, $amount, $currency, $result, $provider_reference);
+        if ($result === 'success' && (! is_string($merchant_reference) || $merchant_reference !== $reference)) {
+            return new GatewayOutcome($reference, $amount, $currency, 'review', $provider_reference);
         }
 
-        if (! is_string($merchant_reference) || $merchant_reference !== $reference) {
-            return new GatewayOutcome($reference, $amount, $currency, 'pending', $provider_reference);
-        }
-
-        return new GatewayOutcome($reference, $amount, $currency, 'success', $provider_reference);
+        return new GatewayOutcome($reference, $amount, $currency, $result, $provider_reference);
     }
 
     /**
@@ -321,7 +352,11 @@ final class InterswitchGateway implements PaymentGateway
     }
 
     /**
-     * success, failed, or pending. Only 00 is success.
+     * success, failed, review, or pending. Only 00 is success.
+     *
+     * 10 and 11 are documented as Successful and are held for review.
+     * A code that is not on the response-codes page is held for review.
+     * Z6 and Z25 stay pending.
      */
     private function resultFor(string $response_code): string
     {
@@ -329,11 +364,19 @@ final class InterswitchGateway implements PaymentGateway
             return 'success';
         }
 
+        if (in_array($response_code, self::REVIEW, true)) {
+            return 'review';
+        }
+
         if (in_array($response_code, self::DECLINED, true)) {
             return 'failed';
         }
 
-        return 'pending';
+        if (in_array($response_code, self::PENDING, true)) {
+            return 'pending';
+        }
+
+        return 'review';
     }
 
     private function ready(): bool

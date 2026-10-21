@@ -462,37 +462,20 @@ class PaymentService
                 'currency' => $outcome->currency,
                 'result' => 'mismatch',
             ]);
+            $this->holdForReview($payment, $invoice, $source);
+
+            return;
+        }
+
+        if ($outcome->result === 'review') {
+            $this->holdForReview($payment, $invoice, $source);
 
             return;
         }
 
         if ($outcome->result === 'success') {
             if ((int) $payment->amount_kobo > InvoiceService::outstandingKobo($invoice)) {
-                $payment->status = PaymentStatus::Pending;
-
-                if ($this->hasEvent($payment, 'overpayment_review:'.$payment->reference)) {
-                    return;
-                }
-
-                $this->recordEvent($payment, $source, 'overpayment_review:'.$payment->reference, [
-                    'reference' => $payment->reference,
-                    'amount_kobo' => (int) $payment->amount_kobo,
-                    'result' => 'overpayment_review',
-                ]);
-                $this->audit->record(
-                    null,
-                    self::ACTION_OVERPAYMENT,
-                    'payments',
-                    (int) $payment->getKey(),
-                    null,
-                    [
-                        'payment_id' => (int) $payment->getKey(),
-                        'invoice_id' => (int) $invoice->getKey(),
-                        'amount_kobo' => (int) $payment->amount_kobo,
-                        'status' => PaymentStatus::Pending->value,
-                    ],
-                    null,
-                );
+                $this->holdForReview($payment, $invoice, $source);
 
                 return;
             }
@@ -523,6 +506,45 @@ class PaymentService
         if ($payment->expires_at->lte(now())) {
             $payment->status = PaymentStatus::Expired;
         }
+    }
+
+    /**
+     * Leave the payment Pending and put it on the finance review list.
+     *
+     * The event key is the same one an overpayment uses, so the count and
+     * the invoices note include both.
+     */
+    private function holdForReview(Payment $payment, Invoice $invoice, string $source): void
+    {
+        if ($payment->status !== PaymentStatus::Pending && $payment->status !== PaymentStatus::Expired) {
+            return;
+        }
+
+        $payment->status = PaymentStatus::Pending;
+
+        if ($this->hasEvent($payment, 'overpayment_review:'.$payment->reference)) {
+            return;
+        }
+
+        $this->recordEvent($payment, $source, 'overpayment_review:'.$payment->reference, [
+            'reference' => $payment->reference,
+            'amount_kobo' => (int) $payment->amount_kobo,
+            'result' => 'overpayment_review',
+        ]);
+        $this->audit->record(
+            null,
+            self::ACTION_OVERPAYMENT,
+            'payments',
+            (int) $payment->getKey(),
+            null,
+            [
+                'payment_id' => (int) $payment->getKey(),
+                'invoice_id' => (int) $invoice->getKey(),
+                'amount_kobo' => (int) $payment->amount_kobo,
+                'status' => PaymentStatus::Pending->value,
+            ],
+            null,
+        );
     }
 
     /**

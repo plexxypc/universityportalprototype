@@ -6,14 +6,12 @@ namespace App\Services\Payments;
 
 use App\Exceptions\PaymentsUnavailableException;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
 
 /**
  * The payment adapter for this process.
  *
- * Remita, and a non-local Interswitch configuration that is missing a
- * required value, refuse to boot (ADR-034). Any other unusable provider
- * fails when a payment is started. Boot writes one warning and no values.
+ * A bad provider does not stop boot (ADR-032 point 7). It fails when a
+ * payment is started. Boot writes one warning and no values.
  */
 final class PaymentGatewayResolver
 {
@@ -43,24 +41,6 @@ final class PaymentGatewayResolver
         }
 
         return app(DemoGateway::class);
-    }
-
-    /**
-     * Stop boot when this environment cannot take the selected provider.
-     *
-     * The message is fixed. It contains no setting and no secret.
-     */
-    public function enforceBoot(): void
-    {
-        $provider = $this->provider();
-
-        if ($provider === 'remita') {
-            throw new RuntimeException('Payments are not configured.');
-        }
-
-        if ($provider === 'interswitch' && ! app()->environment('local') && ! $this->interswitchReady()) {
-            throw new RuntimeException('Payments are not configured.');
-        }
     }
 
     /**

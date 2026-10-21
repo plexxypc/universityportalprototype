@@ -506,5 +506,5 @@ Register these callback addresses. Replace the origin with the sandbox site's `A
 
 The redirect is a browser POST. Do not treat `resp` or `desc` on that POST as proof of payment. The portal requerries. The webhook is accepted only when `X-Interswitch-Signature` matches HMAC-SHA512 of the raw body using `INTERSWITCH_WEBHOOK_SECRET`.
 
-Outside `local`, the process refuses to boot when `PAYMENT_PROVIDER=interswitch` and mode, merchant code, or pay item id is missing. `PAYMENT_PROVIDER=remita` refuses to boot. Keep `PAYMENT_PROVIDER=demo` on the demo deploy.
+A missing Interswitch value, `PAYMENT_PROVIDER=remita`, or an unknown provider does not stop the process from booting. Payments fail when a payment is started, and `/health` reports `misconfigured`. Keep `PAYMENT_PROVIDER=demo` on the demo deploy.
 

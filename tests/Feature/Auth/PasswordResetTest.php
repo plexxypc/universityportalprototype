@@ -512,56 +512,68 @@ it('clears secrets still queued for that user after a successful reset', functio
 });
 
 it('throttles reset requests on the database cache without a different response', function () {
-    password_reset_use_database_cache();
-    $student = password_reset_student('ada.throttle@example.com', 'CSC/2026/0052');
+    $this->freezeTime();
 
-    $first = null;
+    try {
+        password_reset_use_database_cache();
+        $student = password_reset_student('ada.throttle@example.com', 'CSC/2026/0052');
 
-    for ($attempt = 0; $attempt < 5; $attempt++) {
-        $first = password_reset_request($student->user->email, '203.0.113.50', '198.51.100.'.$attempt);
+        $first = null;
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $first = password_reset_request($student->user->email, '203.0.113.50', '198.51.100.'.$attempt);
+        }
+
+        $blocked = password_reset_request($student->user->email, '203.0.113.50', '198.51.100.99');
+
+        expect(EmailOutbox::query()->where('user_id', $student->user->id)->count())->toBe(5)
+            ->and($blocked->status())->toBe($first?->status())
+            ->and(password_reset_visible_html($blocked->getContent()))->toBe(password_reset_visible_html((string) $first?->getContent()));
+
+        password_reset_request($student->user->email, '203.0.113.51', '198.51.100.99');
+
+        expect(EmailOutbox::query()->where('user_id', $student->user->id)->count())->toBe(6);
+    } finally {
+        $this->travelBack();
     }
-
-    $blocked = password_reset_request($student->user->email, '203.0.113.50', '198.51.100.99');
-
-    expect(EmailOutbox::query()->where('user_id', $student->user->id)->count())->toBe(5)
-        ->and($blocked->status())->toBe($first?->status())
-        ->and(password_reset_visible_html($blocked->getContent()))->toBe(password_reset_visible_html((string) $first?->getContent()));
-
-    password_reset_request($student->user->email, '203.0.113.51', '198.51.100.99');
-
-    expect(EmailOutbox::query()->where('user_id', $student->user->id)->count())->toBe(6);
 });
 
 it('throttles reset submissions on the database cache with the same failure', function () {
-    password_reset_use_database_cache();
-    $student = password_reset_student('ada.submit@example.com', 'CSC/2026/0053');
+    $this->freezeTime();
 
-    password_reset_request($student->user->email, '203.0.113.60');
-    $token = password_reset_token_from_mail();
+    try {
+        password_reset_use_database_cache();
+        $student = password_reset_student('ada.submit@example.com', 'CSC/2026/0053');
 
-    for ($attempt = 0; $attempt < 5; $attempt++) {
-        password_reset_submit($token.'extra', $student->user->email, password_reset_new_password(), '203.0.113.61')
+        password_reset_request($student->user->email, '203.0.113.60');
+        $token = password_reset_token_from_mail();
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            password_reset_submit($token.'extra', $student->user->email, password_reset_new_password(), '203.0.113.61')
+                ->assertSessionHas('status', PasswordResetService::FAILURE_MESSAGE);
+        }
+
+        password_reset_submit($token, $student->user->email, 'short1', '203.0.113.61')
+            ->assertSessionHas('status', PasswordResetService::FAILURE_MESSAGE)
+            ->assertSessionDoesntHaveErrors('password');
+
+        expect(Hash::check('Portal-pass-1', (string) $student->user->fresh()->password))->toBeTrue();
+
+        $student_b = password_reset_student('ada.submitb@example.com', 'CSC/2026/0054');
+        password_reset_request($student_b->user->email, '203.0.113.62');
+        $second_token = password_reset_token_from_mail();
+
+        for ($attempt = 1; $attempt <= 10; $attempt++) {
+            password_reset_submit($second_token.'no', $student_b->user->email, password_reset_new_password(), '203.0.113.'.(70 + $attempt));
+        }
+
+        password_reset_submit($second_token, $student_b->user->email, password_reset_new_password(), '203.0.113.90')
             ->assertSessionHas('status', PasswordResetService::FAILURE_MESSAGE);
+
+        expect(Hash::check('Portal-pass-1', (string) $student_b->user->fresh()->password))->toBeTrue();
+    } finally {
+        $this->travelBack();
     }
-
-    password_reset_submit($token, $student->user->email, 'short1', '203.0.113.61')
-        ->assertSessionHas('status', PasswordResetService::FAILURE_MESSAGE)
-        ->assertSessionDoesntHaveErrors('password');
-
-    expect(Hash::check('Portal-pass-1', (string) $student->user->fresh()->password))->toBeTrue();
-
-    $student_b = password_reset_student('ada.submitb@example.com', 'CSC/2026/0054');
-    password_reset_request($student_b->user->email, '203.0.113.62');
-    $second_token = password_reset_token_from_mail();
-
-    for ($attempt = 1; $attempt <= 10; $attempt++) {
-        password_reset_submit($second_token.'no', $student_b->user->email, password_reset_new_password(), '203.0.113.'.(70 + $attempt));
-    }
-
-    password_reset_submit($second_token, $student_b->user->email, password_reset_new_password(), '203.0.113.90')
-        ->assertSessionHas('status', PasswordResetService::FAILURE_MESSAGE);
-
-    expect(Hash::check('Portal-pass-1', (string) $student_b->user->fresh()->password))->toBeTrue();
 });
 
 it('lets a locked-out user reset and then sign in', function () {

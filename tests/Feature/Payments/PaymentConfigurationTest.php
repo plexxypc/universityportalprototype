@@ -59,18 +59,21 @@ it('boots and fails closed for an unknown provider', function (string $provider)
     $this->get('/health')->assertStatus(503)->assertJsonPath('payments', 'misconfigured');
 })->with(['sandbox', 'not-a-provider']);
 
-it('refuses to boot remita and a non-local interswitch configuration that is missing a value', function () {
+it('does not stop boot for remita or for interswitch with a missing merchant code', function () {
+    PaymentGatewayResolver::forgetWarning();
+    $messages = payment_config_messages();
     config(['payments.provider' => 'remita']);
 
-    expect(fn () => app(PaymentGatewayResolver::class)->enforceBoot())
-        ->toThrow(RuntimeException::class, 'Payments are not configured.');
+    expect(fn () => app(PaymentGatewayResolver::class)->warnIfUnusable())->not->toThrow(Throwable::class)
+        ->and(fn () => app(PaymentGatewayResolver::class)->resolve())->toThrow(
+            PaymentsUnavailableException::class,
+            PaymentsUnavailableException::MESSAGE,
+        );
 
-    $this->app['env'] = 'local';
+    $this->get('/login')->assertOk();
+    $this->get('/health')->assertStatus(503)->assertJsonPath('payments', 'misconfigured');
 
-    expect(fn () => app(PaymentGatewayResolver::class)->enforceBoot())
-        ->toThrow(RuntimeException::class, 'Payments are not configured.');
-
-    $this->app['env'] = 'testing';
+    PaymentGatewayResolver::forgetWarning();
     $secret = 'super-secret-value';
     config([
         'payments.provider' => 'interswitch',
@@ -79,33 +82,45 @@ it('refuses to boot remita and a non-local interswitch configuration that is mis
         'payments.interswitch.pay_item_id' => 'PITEM',
         'payments.interswitch.secret' => $secret,
     ]);
-    $message = '';
 
-    try {
-        app(PaymentGatewayResolver::class)->enforceBoot();
-    } catch (RuntimeException $exception) {
-        $message = $exception->getMessage();
-    }
+    expect(fn () => app(PaymentGatewayResolver::class)->warnIfUnusable())->not->toThrow(Throwable::class)
+        ->and(fn () => app(PaymentGatewayResolver::class)->resolve())->toThrow(
+            PaymentsUnavailableException::class,
+            PaymentsUnavailableException::MESSAGE,
+        );
 
-    expect($message)->toBe('Payments are not configured.')
-        ->and(str_contains($message, $secret))->toBeFalse();
+    $this->get('/login')->assertOk();
+    $this->get('/health')->assertStatus(503)->assertJsonPath('payments', 'misconfigured');
 
-    $this->app['env'] = 'local';
-    app(PaymentGatewayResolver::class)->enforceBoot();
-
-    expect(fn () => app(PaymentGatewayResolver::class)->resolve())->toThrow(PaymentsUnavailableException::class);
-
-    $this->app['env'] = 'testing';
     config([
         'payments.provider' => 'interswitch',
         'payments.interswitch.mode' => 'TEST',
         'payments.interswitch.merchant_code' => 'MTEST',
         'payments.interswitch.pay_item_id' => 'PITEM',
     ]);
-    app(PaymentGatewayResolver::class)->enforceBoot();
 
-    expect(app(PaymentGatewayResolver::class)->resolve())->toBeInstanceOf(InterswitchGateway::class);
+    expect(app(PaymentGatewayResolver::class)->resolve())->toBeInstanceOf(InterswitchGateway::class)
+        ->and(implode(' ', $messages->getArrayCopy()))->not->toContain($secret);
 });
+
+it('says payments are unavailable on the payment screen', function (string $provider, array $config) {
+    $world = payment_config_owner();
+    config(['payments.provider' => $provider, ...$config]);
+
+    $this->actingAs($world['student']->user)
+        ->from('/student/fees/'.$world['payment']->invoice_id)
+        ->post('/student/fees/'.$world['payment']->invoice_id.'/pay', ['amount' => '1000.00'])
+        ->assertRedirect()
+        ->assertSessionHasErrors(['payment' => PaymentsUnavailableException::MESSAGE]);
+})->with([
+    'remita' => ['remita', []],
+    'interswitch missing merchant code' => ['interswitch', [
+        'payments.interswitch.mode' => 'TEST',
+        'payments.interswitch.merchant_code' => '',
+        'payments.interswitch.pay_item_id' => 'PITEM',
+    ]],
+    'unknown' => ['not-a-provider', []],
+]);
 
 it('fails closed when an Interswitch value is missing and does not log that value', function () {
     PaymentGatewayResolver::forgetWarning();
@@ -148,7 +163,7 @@ it('allows the demo gateway in production when permission is set', function () {
         ->and(app(PaymentGatewayResolver::class)->isConfigured())->toBeTrue();
 });
 
-it('warns once and refuses to boot remita', function () {
+it('warns once and does not throw while booting', function () {
     PaymentGatewayResolver::forgetWarning();
     $messages = payment_config_messages();
     config(['payments.provider' => 'remita']);
@@ -157,9 +172,6 @@ it('warns once and refuses to boot remita', function () {
     $resolver->warnIfUnusable();
 
     expect($messages->getArrayCopy())->toBe(['Payments are not configured.']);
-
-    expect(fn () => app(PaymentGatewayResolver::class)->enforceBoot())
-        ->toThrow(RuntimeException::class, 'Payments are not configured.');
 });
 
 /**
