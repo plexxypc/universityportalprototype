@@ -72,11 +72,12 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 4 | Invoice numbers, receipt numbers, and payment references are allocated from `counters` inside the creating transaction | TASK-096, TASK-100, TASK-101 | Invoice generation; payment reference on initiate; receipt number on settlement. Tests: `it allocates the invoice number inside the creating transaction`, `it starts a pending payment for the invoice student and leaves paid_kobo unchanged`, `it credits a matching success once and creates one receipt and one email` |
 | 5 | Assessment components of one scheme total 100 | TASK-060 | Test: `it refuses component totals that are not 100` |
 | 5 | Grade bands cover 0–100 with no gaps and no overlap | TASK-060 | Test: `it refuses grade bands that leave a gap` |
-| 5 | A score is not above that component's maximum | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |
+| 5 | A score is not above that component's maximum | TASK-111 | Test: `it refuses a score above the maximum, a foreign component, and a third decimal` |
 | 5 | Published results are locked | TASK-114 | Workflow: submit → approve → publish, with role checks and locking on publish |
 | 5 | Amendments are audited and re-published | TASK-115 | Amendment process for published results (audited, re-publish) |
-| 5 | A result score's component belongs to the result's scheme | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |
-| 5 | `scheme_version` matches the linked scheme row | TASK-111 | `ResultService`: draft results with component scores validated against configured maximums |
+| 5 | A result score's component belongs to the result's scheme | TASK-111 | Test: `it refuses a score above the maximum, a foreign component, and a third decimal` |
+| 5 | `scheme_version` matches the linked scheme row | TASK-111 | Test: `it stores a recomputed total and refuses a client total` |
+| 5 | A course that already has a result cannot be removed from that semester's registration | TASK-111 | Tests: `it refuses to drop a course that already has a result`, `it leaves a course with a result in place when registration is reopened` |
 | 5 | Editing the active scheme inserts a new version and repoints unpublished results. Published rows keep their scheme id | TASK-060 | Test: `it versions the scheme and remaps unpublished scores in one transaction` |
 | 5 | When unpublished results move, `result_scores` are remapped to the new version's components in that transaction | TASK-060 | Test: `it rolls back when a removed component still has an unpublished score` |
 | 5 | GPA uses the latest or best attempt and applies `resit_points_cap` | TASK-059 | Tests: `it uses the latest or the best attempt after the resit cap`, `it weights grade points by credit units`, `it rounds a CGPA half up before classification` |

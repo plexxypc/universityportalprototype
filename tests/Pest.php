@@ -5,6 +5,8 @@ use App\Models\RoleAssignment;
 use App\Models\User;
 use Tests\TestCase;
 
+require_once __DIR__.'/Support/registration_rules.php';
+
 $compiled_views = sys_get_temp_dir().DIRECTORY_SEPARATOR.'university-portal-views';
 
 if (! is_dir($compiled_views)) {

@@ -66,6 +66,8 @@ final class RegistrationService
 
     public const string MESSAGE_TRANSITION = 'That registration cannot change in that way.';
 
+    public const string MESSAGE_RESULT_HELD = 'A course that already has a result cannot be removed.';
+
     public const string ACTION_SAVED = 'registration.saved';
 
     public const string ACTION_SUBMITTED = 'registration.submitted';
@@ -1208,10 +1210,48 @@ final class RegistrationService
     }
 
     /**
+     * Replace the items. A course that already has a result row stays.
+     *
+     * Item rows are locked before result rows. That is the same order as
+     * result entry, so the two paths do not deadlock.
+     *
      * @param  list<array{course_id: int, credit_units: int}>  $items
      */
     private function replaceItems(CourseRegistration $registration, array $items): void
     {
+        $stored = CourseRegistrationItem::query()
+            ->where('course_registration_id', $registration->getKey())
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+        $results = Result::query()
+            ->where('student_id', $registration->student_id)
+            ->where('semester_id', $registration->semester_id)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get(['id', 'course_id']);
+        $kept = [];
+
+        foreach ($items as $item) {
+            $kept[] = (int) $item['course_id'];
+        }
+
+        foreach ($stored as $row) {
+            $course_id = (int) $row->course_id;
+
+            if (in_array($course_id, $kept, true)) {
+                continue;
+            }
+
+            foreach ($results as $result) {
+                if ((int) $result->course_id === $course_id) {
+                    throw ValidationException::withMessages([
+                        'course_id' => self::MESSAGE_RESULT_HELD,
+                    ]);
+                }
+            }
+        }
+
         CourseRegistrationItem::query()
             ->where('course_registration_id', $registration->getKey())
             ->delete();
