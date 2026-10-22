@@ -182,34 +182,36 @@
 
 ## Phase 10: Fees, invoices and payments [FIN, PAY]
 
-- [ ] TASK-096 Invoice generation: single and bulk by programme/level/session, with preview and confirm
+- [x] TASK-096 Invoice generation: single and bulk by programme/level/session, with preview and confirm
   - Phase 3 carry-over: at most one non-cancelled invoice per student per session.
   - Phase 3 carry-over: allocate the invoice number from `counters` inside the creating transaction.
   - Phase 7 carry-over: invoice generation runs when a student is created or an applicant is converted, inside that same transaction. `StudentService::create` issues the invoice after the matric counter.
-- [ ] TASK-097 Adjustments: scholarship, discount, waiver with reason and audit
-- [ ] TASK-098 Student fees page and invoice detail
-- [ ] TASK-099 `PaymentGateway` interface (`initialize`, `verify`, `parseNotification`) and **Demo Gateway** (checkout page and signed event)
-- [ ] TASK-100 `PaymentService::initiate`: authorise, amount ≤ outstanding, pending payment with unique reference and expiry, store provider reference
+- [x] TASK-097 Adjustments: scholarship, discount, waiver with reason and audit
+- [x] TASK-098 Student fees page and invoice detail
+- [x] TASK-099 `PaymentGateway` interface (`initialize`, `verify`, `parseNotification`) and **Demo Gateway** (checkout page and signed event)
+- [x] TASK-100 `PaymentService::initiate`: authorise, amount ≤ outstanding, pending payment with unique reference and expiry, store provider reference
   - Phase 3 carry-over: the payment's `student_id` is the invoice's student.
   - Phase 3 carry-over: allocate the payment reference from `counters` inside the creating transaction.
 - [ ] TASK-101 `verifyAndSettle`: re-query, compare status/amount/currency/reference, idempotent transactional settlement with `lockForUpdate`, invoice status update, expiry handling
   - Phase 3 carry-over: a pending payment does not change `paid_kobo`.
   - Phase 3 carry-over: a reversal reduces `paid_kobo` and does not delete the payment.
   - Phase 9 carry-over: what payment satisfies `require_minimum_payment` is still undefined (which invoice, which status, which amount). `RegistrationService::minimumPaymentSatisfied` returns false while the switch is on and does not read invoices or payments. Replace that method here.
-- [ ] TASK-102 Payment return/status page (verifying → success / pending / failed / cancelled / expired) with "Check status" button
-- [ ] TASK-103 Notification endpoint (outside CSRF, rate-limited, reference only, triggers re-query) and `payments:poll-pending` scheduled job with back-off
+  - `verifyAndSettle`, expiry, and reversal are in the repository. This task stays open because that minimum-payment method was not replaced (ADR-032 point 5).
+- [x] TASK-102 Payment return/status page (verifying → success / pending / failed / cancelled / expired) with "Check status" button
+- [x] TASK-103 Notification endpoint (outside CSRF, rate-limited, reference only, triggers re-query) and `payments:poll-pending` scheduled job with back-off
   - Phase 3 carry-over: payment events are inserted and never updated.
 - [ ] TASK-104 Adapter for the **institution's chosen provider**: Interswitch Web Checkout (redirect/inline, requery) **or** Remita (RRR invoice, status by RRR); verify against the provider's sandbox/demo
-- [ ] TASK-105 *(Optional)* Second provider adapter (the one not chosen first)
-- [ ] TASK-106 Receipts: numbering, viewer and PDF
+  - The Interswitch redirect and requery adapter is in the repository. No sandbox call has been made. That check is deferred to the end of the project (ADR-035).
+- [ ] TASK-105 *(Optional)* Second provider adapter (the one not chosen first). Intentionally not built (ADR-035).
+- [x] TASK-106 Receipts: numbering, viewer and PDF
   - Phase 3 carry-over: create a receipt only for a Successful payment, once, inside the settlement transaction.
   - Phase 3 carry-over: allocate the receipt number from `counters` inside the creating transaction.
-- [ ] TASK-107 Payment confirmation email and notification
-- [ ] TASK-108 Admin transactions list and detail; re-verify; receipt download
-- [ ] TASK-109 Reconciliation view and finance dashboard
-- [ ] TASK-110 Payment tests (success, failure, cancel, expired, still-pending then confirmed by poller, duplicate notification, forged callback, amount mismatch, partial payments, concurrent settle, Journeys 3 and 4)
+- [x] TASK-107 Payment confirmation email and notification
+- [x] TASK-108 Admin transactions list and detail; re-verify; receipt download
+- [x] TASK-109 Reconciliation view and finance dashboard
+- [x] TASK-110 Payment tests (success, failure, cancel, expired, still-pending then confirmed by poller, duplicate notification, forged callback, amount mismatch, partial payments, concurrent settle, Journeys 3 and 4)
 
-**GATE (Milestone A):** deploy to the demo host with Aiven MySQL; run Journeys 1–4 on the live URL with the Demo Gateway (and the provider sandbox if available); confirm emails appear in the outbox and in a real inbox; fix all blockers. Do not start Phase 11 until this passes.
+**GATE (Milestone A):** deploy to the demo host with Aiven MySQL; run Journeys 1–4 on the live URL with the Demo Gateway (and the provider sandbox if available); confirm emails appear in the outbox and in a real inbox; fix all blockers. The owner deferred this live gate to the end of the project (ADR-035). Until that check, the local Demo Gateway run of Journeys 3 and 4 stands in for it. Phase 11 may start. The live gate is still outstanding.
 
 ## Phase 11: Results and grading [RES-1..11]
 
