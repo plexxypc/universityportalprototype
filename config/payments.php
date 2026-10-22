@@ -41,6 +41,10 @@ return [
 
     'return_rate_per_minute' => (int) env('PAYMENT_RETURN_RATE_PER_MINUTE', 30),
 
+    'export_row_limit' => 5000,
+
+    'list_page_size' => 25,
+
     'interswitch' => [
         'mode' => env('INTERSWITCH_MODE'),
         'merchant_code' => env('INTERSWITCH_MERCHANT_CODE'),

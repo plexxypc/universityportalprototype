@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\DocumentDownloadController;
+use App\Http\Controllers\FinanceExportController;
 use App\Http\Controllers\ImportDownloadController;
 use App\Http\Controllers\PingController;
 use App\Http\Controllers\ReceiptController;
@@ -35,6 +36,8 @@ Route::middleware([
         ->whereNumber('receipt')
         ->name('staff.downloads.receipt.pdf');
     Route::get('/staff/downloads/imports/{batch}', [ImportDownloadController::class, 'failures'])->whereNumber('batch')->name('staff.downloads.import-failures');
+    Route::get('/staff/downloads/finance/transactions.csv', [FinanceExportController::class, 'transactions'])->name('staff.downloads.finance.transactions');
+    Route::get('/staff/downloads/finance/reconciliation.csv', [FinanceExportController::class, 'reconciliation'])->name('staff.downloads.finance.reconciliation');
     Route::get('/staff/downloads/import-template.csv', [ImportDownloadController::class, 'templateCsv'])->name('staff.downloads.import-template-csv');
     Route::get('/staff/downloads/import-template.xlsx', [ImportDownloadController::class, 'templateXlsx'])->name('staff.downloads.import-template-xlsx');
 });
