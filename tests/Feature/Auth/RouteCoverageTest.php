@@ -12,6 +12,7 @@ use App\Filament\Staff\Pages\EmailOutboxPage;
 use App\Filament\Staff\Pages\FacultiesPage;
 use App\Filament\Staff\Pages\FeeCategoriesPage;
 use App\Filament\Staff\Pages\FeeStructuresPage;
+use App\Filament\Staff\Pages\FinanceDashboardPage;
 use App\Filament\Staff\Pages\GradingConfigurationPage;
 use App\Filament\Staff\Pages\ImportApplicantsPage;
 use App\Filament\Staff\Pages\ImportStudentsPage;
@@ -19,10 +20,13 @@ use App\Filament\Staff\Pages\InstitutionSettingsPage;
 use App\Filament\Staff\Pages\InvoicesPage;
 use App\Filament\Staff\Pages\NotificationsPage;
 use App\Filament\Staff\Pages\ProgrammesPage;
+use App\Filament\Staff\Pages\ReconciliationPage;
 use App\Filament\Staff\Pages\RegistrationQueuePage;
 use App\Filament\Staff\Pages\SemestersPage;
 use App\Filament\Staff\Pages\StudentRecordPage;
 use App\Filament\Staff\Pages\StudentsPage;
+use App\Filament\Staff\Pages\TransactionPage;
+use App\Filament\Staff\Pages\TransactionsPage;
 use App\Http\Middleware\AuthenticateStaffPanel;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -343,6 +347,10 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         FeeCategoriesPage::class,
         FeeStructuresPage::class,
         InvoicesPage::class,
+        TransactionsPage::class,
+        TransactionPage::class,
+        ReconciliationPage::class,
+        FinanceDashboardPage::class,
     ];
 
     foreach ($staff_pages as $page) {
@@ -385,6 +393,19 @@ it('keeps phase 5 routes public with a reason or behind the right middleware', f
         ->and(route_coverage_has_class($download_middleware, EnsureActive::class))->toBeTrue()
         ->and(route_coverage_has_class($download_middleware, EnsurePasswordChanged::class))->toBeTrue()
         ->and(in_array(EnsurePortalArea::class.':staff', $download_middleware, true))->toBeTrue();
+
+    foreach (['staff.downloads.finance.transactions', 'staff.downloads.finance.reconciliation'] as $finance_export) {
+        $finance_route = Route::getRoutes()->getByName($finance_export);
+        $finance_middleware = $finance_route instanceof RegisteredRoute
+            ? array_map(strval(...), $finance_route->gatherMiddleware())
+            : [];
+
+        expect($finance_route)->toBeInstanceOf(RegisteredRoute::class)
+            ->and(route_coverage_has_auth($finance_middleware))->toBeTrue()
+            ->and(route_coverage_has_class($finance_middleware, EnsureActive::class))->toBeTrue()
+            ->and(route_coverage_has_class($finance_middleware, EnsurePasswordChanged::class))->toBeTrue()
+            ->and(in_array(EnsurePortalArea::class.':staff', $finance_middleware, true))->toBeTrue();
+    }
 
     $bootstrap = file_get_contents(base_path('bootstrap/app.php'));
 

@@ -398,3 +398,19 @@
 
 **Consequences:** Nothing in this decision overrides ADR-032 point 7.
 
+## ADR-035: No manual crediting, and live provider testing waits
+
+**Status:** Accepted (22 October 2026).
+
+**Decision:** A payment becomes Successful only inside `PaymentService::verifyAndSettle`, after a provider or Demo Gateway answer. No screen sets that status or increases `paid_kobo` by hand. Re-verify on a Successful, Reversed, Failed, or Cancelled payment does not call the provider. Reversal records the ledger change and does not refund the customer.
+
+The state machine is: Pending may become Successful, Failed, Cancelled, or Expired. Expired may still become Successful when a later answer matches (late success). Successful may become Reversed. Reversed, Failed, and Cancelled stay there. An overpayment, a held-back code (`10`, `11`, or a code that is not on the response-codes page), or a held-back mismatch stays Pending for review.
+
+`POST` and `GET /payments/return` are throttled, read the reference, and only trigger `verifyAndSettle`. A notification does the same after its signature check. Neither credits from the request body.
+
+Live provider testing, including the Interswitch sandbox, is deferred to the end of the project. The local Demo Gateway end-to-end run is the check that stands in for the Milestone A live gate until then.
+
+**Reason:** Staff must not be able to mark an invoice paid. The owner moved the live provider check to the end of the project so this phase can finish on the Demo Gateway.
+
+**Consequences:** ADR-032 point 2 is the lock order. ADR-032 point 6 is overpayment staying Pending. ADR-032 point 7 is the Demo Gateway production guard and the rule that a bad provider does not stop boot. ADR-034 withdraws the boot refusal and does not replace point 7. This decision adds the state machine, the return and notification trigger, the ban on manual crediting, and the deferred live test. TASK-104 stays open until that sandbox check is run. TASK-105 is not built.
+

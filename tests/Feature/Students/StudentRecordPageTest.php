@@ -76,11 +76,8 @@ it('does not query modules that are not built', function (): void {
     $branch = student_record_branch('QuietRecord');
     $registrar = student_record_user(Role::Registrar);
     $tables = [
-        'course_registrations',
         'course_registration_items',
-        'invoices',
         'invoice_lines',
-        'payments',
         'results',
         'attendance_records',
         'attendance_sessions',
