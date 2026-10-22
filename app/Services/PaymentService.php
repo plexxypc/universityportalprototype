@@ -50,7 +50,27 @@ class PaymentService
 
     public const string ACTION_REVIEW_RESOLVED = 'payment.review_resolved';
 
+    public const string ACTION_REVERIFIED = 'payment.reverified';
+
     public const string MESSAGE_REVERSE = 'You cannot reverse a payment.';
+
+    public const string MESSAGE_REVERIFY = 'You cannot check this payment.';
+
+    public const string REVERIFY_SETTLED = 'This payment is settled.';
+
+    public const string REVERIFY_PENDING = 'This payment is still pending.';
+
+    public const string REVERIFY_UNCHANGED = 'This payment did not change.';
+
+    public const string REVERIFY_MISMATCH = 'The provider answer does not match this payment.';
+
+    public const string REVERIFY_REVIEW = 'This payment is under review.';
+
+    public const string REVERIFY_FINISHED = 'This payment is already finished. Nothing was changed.';
+
+    public const string REVERIFY_RECENT = 'This payment was checked recently. Nothing was changed.';
+
+    public const string REVERSAL_NOTICE = 'This does not refund the customer. Refund them through Interswitch separately.';
 
     public const string MESSAGE_PAYMENT = 'That payment could not be found.';
 
@@ -287,9 +307,67 @@ class PaymentService
     }
 
     /**
+     * Ask the provider again. Staff cannot mark a payment Successful.
+     *
+     * A finished payment is left as it is. A recent check is not repeated.
+     * The audit row is written in the same transaction as the check.
+     */
+    public function reverify(User $actor, int $payment_id, Request $request): string
+    {
+        if (! Gate::forUser($actor)->allows('fees.manage')) {
+            throw new AuthorizationException(self::MESSAGE_REVERIFY);
+        }
+
+        $payment = Payment::query()->visibleTo($actor)->whereKey($payment_id)->first();
+
+        if (! $payment instanceof Payment) {
+            throw ValidationException::withMessages(['payment' => self::MESSAGE_PAYMENT]);
+        }
+
+        if ($this->reverifyFinished($payment)) {
+            $this->auditReverify($actor, $payment, 'no change', $request);
+
+            return self::REVERIFY_FINISHED;
+        }
+
+        if (Cache::has(self::verifyCacheKey($payment->reference))) {
+            return self::REVERIFY_RECENT;
+        }
+
+        $before = $payment->status;
+
+        return DB::transaction(function () use ($actor, $payment, $before, $request): string {
+            if (! Gate::forUser($actor)->allows('fees.manage')) {
+                throw new AuthorizationException(self::MESSAGE_REVERIFY);
+            }
+
+            $this->verifyAndSettle($payment->reference, PaymentEventSource::Manual->value);
+            $fresh = $payment->fresh() ?? $payment;
+            $message = $this->reverifyMessage($before, $fresh);
+            $this->audit->record(
+                (int) $actor->getKey(),
+                self::ACTION_REVERIFIED,
+                'payments',
+                (int) $payment->getKey(),
+                ['status' => $before->value],
+                [
+                    'payment_id' => (int) $payment->getKey(),
+                    'reference' => $payment->reference,
+                    'status' => $fresh->status->value,
+                    'result' => $message,
+                ],
+                $this->audit->ipFromRequest($request),
+            );
+
+            return $message;
+        });
+    }
+
+    /**
      * Mark a successful payment reversed and subtract its amount once.
      *
      * The payment row is locked before the invoice row. The row is kept.
+     * The ledger changes. The customer is not refunded here.
      */
     public function reverse(User $actor, int $payment_id, string $reason, Request $request): Payment
     {
@@ -651,6 +729,70 @@ class PaymentService
         } catch (Throwable) {
             Log::warning('The payment confirmation email was not queued.');
         }
+    }
+
+    /**
+     * Successful, reversed, failed, and cancelled are not checked again.
+     */
+    private function reverifyFinished(Payment $payment): bool
+    {
+        return in_array($payment->status, [
+            PaymentStatus::Successful,
+            PaymentStatus::Reversed,
+            PaymentStatus::Failed,
+            PaymentStatus::Cancelled,
+        ], true);
+    }
+
+    /**
+     * Plain words for one manual check.
+     */
+    private function reverifyMessage(PaymentStatus $before, Payment $payment): string
+    {
+        if ($payment->status === PaymentStatus::Successful && $before !== PaymentStatus::Successful) {
+            return self::REVERIFY_SETTLED;
+        }
+
+        if ($this->hasEvent($payment, 'mismatch:'.$payment->reference) && $payment->status === PaymentStatus::Pending) {
+            return self::REVERIFY_MISMATCH;
+        }
+
+        if ($this->underReview($payment)) {
+            return self::REVERIFY_REVIEW;
+        }
+
+        if ($payment->status === PaymentStatus::Pending) {
+            return self::REVERIFY_PENDING;
+        }
+
+        return self::REVERIFY_UNCHANGED;
+    }
+
+    /**
+     * Audit a check that does not call the provider.
+     */
+    private function auditReverify(User $actor, Payment $payment, string $result, Request $request): void
+    {
+        DB::transaction(function () use ($actor, $payment, $result, $request): void {
+            if (! Gate::forUser($actor)->allows('fees.manage')) {
+                throw new AuthorizationException(self::MESSAGE_REVERIFY);
+            }
+
+            $this->audit->record(
+                (int) $actor->getKey(),
+                self::ACTION_REVERIFIED,
+                'payments',
+                (int) $payment->getKey(),
+                ['status' => $payment->status->value],
+                [
+                    'payment_id' => (int) $payment->getKey(),
+                    'reference' => $payment->reference,
+                    'status' => $payment->status->value,
+                    'result' => $result,
+                ],
+                $this->audit->ipFromRequest($request),
+            );
+        });
     }
 
     /**

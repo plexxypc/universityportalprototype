@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Policies\StudentPolicy;
 use App\Services\CredentialService;
 use App\Services\DocumentService;
+use App\Services\FinanceReport;
 use App\Services\StudentService;
 use App\Support\NigerianStates;
 use Filament\Actions\Action;
@@ -101,7 +102,9 @@ class StudentRecordPage extends Page
             Tabs::make('Record')->tabs([
                 Tab::make('Profile')->schema($this->profileLines()),
                 Tab::make('Courses')->schema([Text::make(self::MODULE_LATER)]),
-                Tab::make('Fees and payments')->schema([Text::make(self::MODULE_LATER)]),
+                Tab::make('Fees and payments')->schema([
+                    View::make('filament.staff.student-finance'),
+                ]),
                 Tab::make('Results')->schema([Text::make(self::MODULE_LATER)]),
                 Tab::make('Attendance')->schema([Text::make(self::MODULE_LATER)]),
                 Tab::make('Documents')->schema([
@@ -112,6 +115,16 @@ class StudentRecordPage extends Page
                 ]),
             ]),
         ]);
+    }
+
+    /**
+     * Registration for everyone who can open the record. Finance figures for fees.view only.
+     *
+     * @return array<string, mixed>
+     */
+    public function financeSummary(): array
+    {
+        return app(FinanceReport::class)->studentSnapshot($this->actor(), $this->student());
     }
 
     private function editAction(): Action
