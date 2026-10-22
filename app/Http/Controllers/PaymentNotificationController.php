@@ -30,12 +30,16 @@ class PaymentNotificationController extends Controller
             return response('', 200);
         }
 
-        if ($provider !== 'demo') {
+        $configured = strtolower(trim((string) config('payments.provider')));
+
+        if ($provider !== $configured || ! in_array($configured, ['demo', 'interswitch'], true)) {
             return response('', 200);
         }
 
         try {
-            $reference = app(PaymentGatewayResolver::class)->resolve()->parseNotification($body);
+            $header = $request->headers->get('X-Interswitch-Signature');
+            $signature = is_string($header) ? $header : null;
+            $reference = app(PaymentGatewayResolver::class)->resolve()->parseNotification($body, $signature);
         } catch (PaymentsUnavailableException) {
             return response('', 200);
         }

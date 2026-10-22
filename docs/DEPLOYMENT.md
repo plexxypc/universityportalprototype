@@ -475,3 +475,36 @@ Steps, with no values:
 4. Sign in, open the email outbox, and send the test email to that signed-in admin only.
 5. Read `/health` yourself. Leave the platform probe on `/up`.
 6. If a reset link is used, confirm the container access log shows `/reset-password/[redacted]` and not the token.
+
+## Interswitch sandbox test (later)
+
+This section is for a sandbox test at the end of the project. Do not run it now. Do not put a real or shared sandbox secret in this file, in Git, or in a screenshot. Set the values only in the host dashboard.
+
+The adapter was built from four pages on `docs.interswitchgroup.com`: Web Checkout, the Web Checkout quickstart (`quickstart-accept-your-first-payment-in-5-minutes`), payment response codes, and webhooks. Those pages are the source for each value below.
+
+| Variable | Where the documentation describes it | Sandbox test value |
+|---|---|---|
+| `PAYMENT_PROVIDER` | This portal's switch. Set it to `interswitch` only for the sandbox test | `interswitch` |
+| `INTERSWITCH_MODE` | Quickstart step 1, parameter `Mode`. Use `TEST` for the sandbox hosts | `TEST` |
+| `INTERSWITCH_MERCHANT_CODE` | Quickstart step 1, "Merchant Code". Web Checkout form field `merchant_code`. Generate the institution's own value in Quickteller Business. Do not copy the shared example from the quickstart into this repository | From Quickteller Business |
+| `INTERSWITCH_PAY_ITEM_ID` | Quickstart step 1, "Pay Item ID". Web Checkout form field `pay_item_id` | From Quickteller Business |
+| `INTERSWITCH_CLIENT_ID` | Quickstart step 1, "Client ID". The redirect form and the requery sample do not send it. Leave it empty until a documented call on these pages needs it | Leave empty for the form and requery |
+| `INTERSWITCH_SECRET` | Quickstart step 1, "Secret". The redirect form and the requery sample do not send it. The webhooks page does not say this is the webhook signing secret | Leave empty unless a later page says where to send it |
+| `INTERSWITCH_WEBHOOK_SECRET` | Webhooks page, "Message Security". The secret is "the unique one generated for you in the configuration" under Quickteller Business, Developer Tools, Webhooks. It is not identified as the client secret | The webhook secret from that configuration screen |
+
+`INTERSWITCH_MODE=TEST` uses these HTTPS hosts from the same pages:
+
+- Checkout form action: `https://newwebpay-sandbox.interswitchng.com/collections/w/pay`
+- Requery: `https://sandbox.interswitchng.com/collections/api/v1/gettransaction.json` (the Web Checkout page). The quickstart shows the same path without `.json`. This portal calls the `.json` URL.
+
+`LIVE` uses `https://newwebpay.interswitchng.com/collections/w/pay` and `https://webpay.interswitchng.com/collections/api/v1/gettransaction.json`. Do not use `LIVE` for the sandbox test.
+
+Register these callback addresses. Replace the origin with the sandbox site's `APP_URL`. Both must be `https` on that site.
+
+- Redirect URL (`site_redirect_url` on the Web Checkout form, and the quickstart's `payment_response_type=POST`): `{APP_URL}/payments/return`
+- Webhook URL (Webhooks page: Developer Tools, Webhooks, the URL that receives `TRANSACTION.COMPLETED`): `{APP_URL}/payments/notify/interswitch`
+
+The redirect is a browser POST. Do not treat `resp` or `desc` on that POST as proof of payment. The portal requerries. The webhook is accepted only when `X-Interswitch-Signature` matches HMAC-SHA512 of the raw body using `INTERSWITCH_WEBHOOK_SECRET`.
+
+A missing Interswitch value, `PAYMENT_PROVIDER=remita`, or an unknown provider does not stop the process from booting. Payments fail when a payment is started, and `/health` reports `misconfigured`. Keep `PAYMENT_PROVIDER=demo` on the demo deploy.
+

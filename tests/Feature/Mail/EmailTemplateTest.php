@@ -378,6 +378,20 @@ it('cleans an announcement subject and refuses an empty one', function () {
         ->and(EmailOutbox::query()->count())->toBe(2);
 });
 
+it('links a payment confirmation to the signed-in fees page', function () {
+    config(['app.url' => 'https://portal.test']);
+
+    $rendered = email_template_render(EmailTemplate::PaymentConfirmed);
+    $fees = 'https://portal.test/student/fees';
+    $login = 'https://portal.test/login';
+
+    expect(str_contains($rendered->html, $fees))->toBeTrue()
+        ->and(str_contains($rendered->text, $fees))->toBeTrue()
+        ->and(str_contains($rendered->html, 'View your fees'))->toBeTrue()
+        ->and(str_contains($rendered->html, $login))->toBeFalse()
+        ->and(str_contains($rendered->text, $login))->toBeFalse();
+});
+
 it('hides the email preview outside the local environment', function () {
     expect(Route::has('design-preview.emails'))->toBeFalse();
 

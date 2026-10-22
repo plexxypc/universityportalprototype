@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Payments\DemoGateway;
+use App\Services\Payments\InterswitchGateway;
 use App\Services\Payments\PaymentGatewayResolver;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Log\Events\MessageLogged;
@@ -45,7 +46,7 @@ function payment_config_owner(): array
     ];
 }
 
-it('boots and fails closed for remita, sandbox, and an unknown provider', function (string $provider) {
+it('boots and fails closed for an unknown provider', function (string $provider) {
     PaymentGatewayResolver::forgetWarning();
     $messages = payment_config_messages();
     config(['payments.provider' => $provider]);
@@ -56,7 +57,70 @@ it('boots and fails closed for remita, sandbox, and an unknown provider', functi
 
     $this->get('/login')->assertOk();
     $this->get('/health')->assertStatus(503)->assertJsonPath('payments', 'misconfigured');
-})->with(['remita', 'sandbox', 'not-a-provider']);
+})->with(['sandbox', 'not-a-provider']);
+
+it('does not stop boot for remita or for interswitch with a missing merchant code', function () {
+    PaymentGatewayResolver::forgetWarning();
+    $messages = payment_config_messages();
+    config(['payments.provider' => 'remita']);
+
+    expect(fn () => app(PaymentGatewayResolver::class)->warnIfUnusable())->not->toThrow(Throwable::class)
+        ->and(fn () => app(PaymentGatewayResolver::class)->resolve())->toThrow(
+            PaymentsUnavailableException::class,
+            PaymentsUnavailableException::MESSAGE,
+        );
+
+    $this->get('/login')->assertOk();
+    $this->get('/health')->assertStatus(503)->assertJsonPath('payments', 'misconfigured');
+
+    PaymentGatewayResolver::forgetWarning();
+    $secret = 'super-secret-value';
+    config([
+        'payments.provider' => 'interswitch',
+        'payments.interswitch.mode' => 'TEST',
+        'payments.interswitch.merchant_code' => '',
+        'payments.interswitch.pay_item_id' => 'PITEM',
+        'payments.interswitch.secret' => $secret,
+    ]);
+
+    expect(fn () => app(PaymentGatewayResolver::class)->warnIfUnusable())->not->toThrow(Throwable::class)
+        ->and(fn () => app(PaymentGatewayResolver::class)->resolve())->toThrow(
+            PaymentsUnavailableException::class,
+            PaymentsUnavailableException::MESSAGE,
+        );
+
+    $this->get('/login')->assertOk();
+    $this->get('/health')->assertStatus(503)->assertJsonPath('payments', 'misconfigured');
+
+    config([
+        'payments.provider' => 'interswitch',
+        'payments.interswitch.mode' => 'TEST',
+        'payments.interswitch.merchant_code' => 'MTEST',
+        'payments.interswitch.pay_item_id' => 'PITEM',
+    ]);
+
+    expect(app(PaymentGatewayResolver::class)->resolve())->toBeInstanceOf(InterswitchGateway::class)
+        ->and(implode(' ', $messages->getArrayCopy()))->not->toContain($secret);
+});
+
+it('says payments are unavailable on the payment screen', function (string $provider, array $config) {
+    $world = payment_config_owner();
+    config(['payments.provider' => $provider, ...$config]);
+
+    $this->actingAs($world['student']->user)
+        ->from('/student/fees/'.$world['payment']->invoice_id)
+        ->post('/student/fees/'.$world['payment']->invoice_id.'/pay', ['amount' => '1000.00'])
+        ->assertRedirect()
+        ->assertSessionHasErrors(['payment' => PaymentsUnavailableException::MESSAGE]);
+})->with([
+    'remita' => ['remita', []],
+    'interswitch missing merchant code' => ['interswitch', [
+        'payments.interswitch.mode' => 'TEST',
+        'payments.interswitch.merchant_code' => '',
+        'payments.interswitch.pay_item_id' => 'PITEM',
+    ]],
+    'unknown' => ['not-a-provider', []],
+]);
 
 it('fails closed when an Interswitch value is missing and does not log that value', function () {
     PaymentGatewayResolver::forgetWarning();

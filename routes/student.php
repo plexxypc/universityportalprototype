@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\PingController;
+use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RegistrationSlipController;
 use App\Http\Controllers\Student\AnnouncementController;
 use App\Http\Controllers\Student\CourseRegistrationController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Student\DemoPaymentController;
 use App\Http\Controllers\Student\DocumentController;
 use App\Http\Controllers\Student\FeesController;
 use App\Http\Controllers\Student\HomeController;
+use App\Http\Controllers\Student\InterswitchCheckoutController;
 use App\Http\Controllers\Student\MoreController;
 use App\Http\Controllers\Student\NotificationController;
 use App\Http\Controllers\Student\PaymentStatusController;
@@ -40,12 +42,21 @@ Route::middleware([
     Route::post('/student/fees/{invoice}/pay', [FeesController::class, 'pay'])
         ->whereNumber('invoice')
         ->name('student.fees.pay');
+    Route::get('/student/fees/receipts/{receipt}', [ReceiptController::class, 'student'])
+        ->whereNumber('receipt')
+        ->name('student.fees.receipt');
+    Route::get('/student/fees/receipts/{receipt}/pdf', [ReceiptController::class, 'studentPdf'])
+        ->whereNumber('receipt')
+        ->name('student.fees.receipt.pdf');
     Route::get('/student/payments/demo/{reference}', [DemoPaymentController::class, 'show'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.demo');
     Route::post('/student/payments/demo/{reference}', [DemoPaymentController::class, 'store'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.demo.store');
+    Route::get('/student/payments/interswitch/{reference}', [InterswitchCheckoutController::class, 'show'])
+        ->where('reference', '[A-Za-z0-9]+')
+        ->name('student.payments.interswitch');
     Route::get('/student/payments/{reference}', [PaymentStatusController::class, 'show'])
         ->where('reference', '[A-Za-z0-9]+')
         ->name('student.payments.show');

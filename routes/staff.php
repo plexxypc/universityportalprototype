@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\DocumentDownloadController;
 use App\Http\Controllers\ImportDownloadController;
 use App\Http\Controllers\PingController;
+use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RegistrationSlipController;
 use App\Http\Middleware\EnsureActive;
 use App\Http\Middleware\EnsurePasswordChanged;
@@ -27,6 +28,12 @@ Route::middleware([
     Route::get('/staff/downloads/registrations/{registration}', [RegistrationSlipController::class, 'staff'])
         ->whereNumber('registration')
         ->name('staff.downloads.registration');
+    Route::get('/staff/downloads/receipts/{receipt}', [ReceiptController::class, 'staff'])
+        ->whereNumber('receipt')
+        ->name('staff.downloads.receipt');
+    Route::get('/staff/downloads/receipts/{receipt}/pdf', [ReceiptController::class, 'staffPdf'])
+        ->whereNumber('receipt')
+        ->name('staff.downloads.receipt.pdf');
     Route::get('/staff/downloads/imports/{batch}', [ImportDownloadController::class, 'failures'])->whereNumber('batch')->name('staff.downloads.import-failures');
     Route::get('/staff/downloads/import-template.csv', [ImportDownloadController::class, 'templateCsv'])->name('staff.downloads.import-template-csv');
     Route::get('/staff/downloads/import-template.xlsx', [ImportDownloadController::class, 'templateXlsx'])->name('staff.downloads.import-template-xlsx');
