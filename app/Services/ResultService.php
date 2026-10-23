@@ -7,9 +7,11 @@ namespace App\Services;
 use App\Enums\EmailTemplate;
 use App\Enums\NotificationType;
 use App\Enums\RegistrationStatus;
+use App\Enums\RepeatPolicy;
 use App\Enums\ResultStatus;
 use App\Enums\Role;
 use App\Enums\UserStatus;
+use App\Models\AcademicStandingThreshold;
 use App\Models\AssessmentComponent;
 use App\Models\AuditLog;
 use App\Models\CourseAssignment;
@@ -1266,6 +1268,354 @@ class ResultService
             'return_reason' => $result->return_reason,
             'scores' => $scores,
         ];
+    }
+
+    /**
+     * GPA, CGPA, units, class, and standing for one student.
+     *
+     * Published rows only. Credit units come from the approved registration
+     * item. A missing item is left out of the average. Standing is omitted
+     * for the student.
+     *
+     * @return array<string, mixed>
+     */
+    public function statement(User $actor, Student $student): array
+    {
+        $this->assertCanReadStatement($actor, $student);
+        $results = Result::query()
+            ->where('student_id', $student->getKey())
+            ->where('status', ResultStatus::Published->value)
+            ->whereNotNull('published_at')
+            ->with(['gradingScheme.classificationBands', 'gradingScheme.standing', 'semester.academicSession'])
+            ->get();
+        $units = $this->unitSnapshots((int) $student->getKey());
+        $lines = [];
+
+        foreach ($results as $result) {
+            if ($result->points === null || $result->total === null || ! $result->gradingScheme instanceof GradingScheme || ! $result->semester instanceof Semester) {
+                continue;
+            }
+
+            $key = (int) $result->course_id.':'.(int) $result->semester_id;
+            $credit_units = $units[$key] ?? null;
+            $pass_mark = Hundredths::fromDecimal((string) $result->gradingScheme->pass_mark);
+            $total = Hundredths::fromDecimal((string) $result->total);
+            $lines[] = [
+                'course_id' => (int) $result->course_id,
+                'semester_id' => (int) $result->semester_id,
+                'session_id' => (int) $result->semester->session_id,
+                'semester_no' => (int) $result->semester->semester_no,
+                'session_name' => (string) $result->semester->academicSession?->name,
+                'semester_name' => (string) $result->semester->name,
+                'order' => ((int) $result->semester->session_id * 10) + (int) $result->semester->semester_no,
+                'points' => Hundredths::fromDecimal((string) $result->points),
+                'units' => $credit_units ?? 0,
+                'included' => $credit_units !== null,
+                'passed' => $total >= $pass_mark,
+                'total' => (string) $result->total,
+                'grade' => (string) $result->grade,
+                'points_text' => (string) $result->points,
+            ];
+        }
+
+        $semesters = $this->semesterBlocks($lines);
+        $cumulative = $this->cumulative($lines);
+        $scheme = $this->statementScheme($results);
+        $cgpa = $cumulative['cgpa'];
+        $classification = null;
+
+        if ($scheme instanceof GradingScheme) {
+            try {
+                $classification = $this->grading->classification($cgpa, $this->classificationBands($scheme));
+            } catch (InvalidArgumentException) {
+                $classification = null;
+            }
+        }
+
+        $standing = null;
+
+        if (! $this->isOwnStudent($actor, $student) && $scheme instanceof GradingScheme) {
+            $threshold = $scheme->standing;
+            $warning = $threshold instanceof AcademicStandingThreshold && $threshold->warning_cgpa !== null
+                ? Hundredths::fromDecimal((string) $threshold->warning_cgpa)
+                : null;
+            $probation = $threshold instanceof AcademicStandingThreshold && $threshold->probation_cgpa !== null
+                ? Hundredths::fromDecimal((string) $threshold->probation_cgpa)
+                : null;
+            $standing = $this->grading->standing($cgpa, $warning, $probation);
+        }
+
+        return [
+            'semesters' => $semesters,
+            'cgpa' => $cgpa === null ? null : Hundredths::toDecimal($cgpa),
+            'classification' => $classification,
+            'standing' => $standing,
+            'units_attempted' => $cumulative['units_attempted'],
+            'units_earned' => $cumulative['units_earned'],
+        ];
+    }
+
+    /**
+     * Approved registration units for this student, keyed by course and semester.
+     *
+     * @return array<string, int>
+     */
+    private function unitSnapshots(int $student_id): array
+    {
+        $rows = DB::table('course_registration_items')
+            ->join('course_registrations', 'course_registrations.id', '=', 'course_registration_items.course_registration_id')
+            ->where('course_registrations.student_id', $student_id)
+            ->where('course_registrations.status', RegistrationStatus::Approved->value)
+            ->get([
+                'course_registration_items.course_id as course_id',
+                'course_registrations.semester_id as semester_id',
+                'course_registration_items.credit_units as credit_units',
+            ]);
+        $units = [];
+
+        foreach ($rows as $row) {
+            $units[(int) $row->course_id.':'.(int) $row->semester_id] = (int) $row->credit_units;
+        }
+
+        return $units;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lines
+     * @return list<array<string, mixed>>
+     */
+    private function semesterBlocks(array $lines): array
+    {
+        $groups = [];
+
+        foreach ($lines as $line) {
+            $groups[(int) $line['semester_id']][] = $line;
+        }
+
+        $blocks = [];
+
+        foreach ($groups as $semester_id => $group) {
+            $courses = [];
+            $average = [];
+            $attempted = 0;
+            $earned = 0;
+
+            foreach ($group as $line) {
+                $courses[] = [
+                    'course_id' => $line['course_id'],
+                    'total' => $line['total'],
+                    'grade' => $line['grade'],
+                    'points' => $line['points_text'],
+                    'units' => $line['included'] ? $line['units'] : null,
+                ];
+
+                if ($line['included'] !== true) {
+                    continue;
+                }
+
+                $average[] = [
+                    'points_hundredths' => $line['points'],
+                    'units' => $line['units'],
+                ];
+                $attempted += $line['units'];
+
+                if ($line['passed'] === true) {
+                    $earned += $line['units'];
+                }
+            }
+
+            $gpa = $this->grading->average($average);
+            $first = $group[0];
+            $blocks[] = [
+                'semester_id' => $semester_id,
+                'session_id' => $first['session_id'],
+                'semester_no' => $first['semester_no'],
+                'session_name' => $first['session_name'],
+                'semester_name' => $first['semester_name'],
+                'gpa' => $gpa === null ? null : Hundredths::toDecimal($gpa),
+                'units_attempted' => $attempted,
+                'units_earned' => $earned,
+                'courses' => $courses,
+            ];
+        }
+
+        usort($blocks, function (array $left, array $right): int {
+            if ($left['session_id'] === $right['session_id']) {
+                return $left['semester_no'] <=> $right['semester_no'];
+            }
+
+            return $left['session_id'] <=> $right['session_id'];
+        });
+
+        return $blocks;
+    }
+
+    /**
+     * CGPA from the attempt that counts, including a failed course.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     * @return array{cgpa: ?int, units_attempted: int, units_earned: int}
+     */
+    private function cumulative(array $lines): array
+    {
+        $by_course = [];
+
+        foreach ($lines as $line) {
+            if ($line['included'] !== true) {
+                continue;
+            }
+
+            $by_course[(int) $line['course_id']][] = $line;
+        }
+
+        $scheme = GradingScheme::query()->active()->first();
+        $policy = $scheme instanceof GradingScheme ? $scheme->repeat_policy : RepeatPolicy::Latest;
+        $cap = $scheme instanceof GradingScheme && $scheme->resit_points_cap !== null
+            ? Hundredths::fromDecimal((string) $scheme->resit_points_cap)
+            : null;
+        $average = [];
+        $attempted = 0;
+        $earned = 0;
+
+        foreach ($by_course as $attempts) {
+            usort($attempts, fn (array $left, array $right): int => $left['order'] <=> $right['order']);
+            $input = [];
+
+            foreach ($attempts as $attempt) {
+                $input[] = [
+                    'points_hundredths' => $attempt['points'],
+                    'semester_order' => $attempt['order'],
+                ];
+            }
+
+            $counted = $this->grading->countedPoints($input, $policy, $cap);
+            $chosen = $attempts[0];
+
+            foreach ($attempts as $attempt) {
+                if ($attempt['order'] === $counted['semester_order']) {
+                    $chosen = $attempt;
+                }
+            }
+
+            $average[] = [
+                'points_hundredths' => $counted['points_hundredths'],
+                'units' => $chosen['units'],
+            ];
+            $attempted += $chosen['units'];
+
+            if ($chosen['passed'] === true) {
+                $earned += $chosen['units'];
+            }
+        }
+
+        return [
+            'cgpa' => $this->grading->average($average),
+            'units_attempted' => $attempted,
+            'units_earned' => $earned,
+        ];
+    }
+
+    /**
+     * The active scheme, or the scheme on the latest result when none is active.
+     *
+     * @param  Collection<int, Result>  $results
+     */
+    private function statementScheme(Collection $results): ?GradingScheme
+    {
+        $active = GradingScheme::query()->active()->with(['classificationBands', 'standing'])->first();
+
+        if ($active instanceof GradingScheme) {
+            return $active;
+        }
+
+        $latest = null;
+
+        foreach ($results as $result) {
+            if (! $result->gradingScheme instanceof GradingScheme || ! $result->semester instanceof Semester) {
+                continue;
+            }
+
+            $order = ((int) $result->semester->session_id * 10) + (int) $result->semester->semester_no;
+
+            if ($latest === null || $order > $latest['order']) {
+                $latest = ['order' => $order, 'scheme' => $result->gradingScheme];
+            }
+        }
+
+        return $latest['scheme'] ?? null;
+    }
+
+    /**
+     * @return list<array{min_hundredths: int, max_hundredths: int, name: string}>
+     */
+    private function classificationBands(GradingScheme $scheme): array
+    {
+        $bands = [];
+
+        foreach ($scheme->classificationBands->sortBy('min_cgpa') as $band) {
+            $bands[] = [
+                'min_hundredths' => Hundredths::fromDecimal((string) $band->min_cgpa),
+                'max_hundredths' => Hundredths::fromDecimal((string) $band->max_cgpa),
+                'name' => (string) $band->name,
+            ];
+        }
+
+        return $bands;
+    }
+
+    /**
+     * The student may read their own statement. Staff read inside their scope.
+     */
+    private function assertCanReadStatement(User $actor, Student $student): void
+    {
+        if ($actor->status !== UserStatus::Active) {
+            throw new AuthorizationException;
+        }
+
+        if ($this->isOwnStudent($actor, $student)) {
+            return;
+        }
+
+        if (! Gate::forUser($actor)->allows('results.view')) {
+            throw new AuthorizationException;
+        }
+
+        if ($actor->hasRole(Role::SuperAdmin) || $actor->hasRole(Role::ExamOfficer) || $actor->hasRole(Role::Registrar)) {
+            return;
+        }
+
+        $student->loadMissing('programme.department');
+        $department_id = (int) $student->programme->department_id;
+
+        if ($actor->hasRole(Role::DepartmentOfficer)) {
+            if (! in_array($department_id, $actor->departmentIds(), true)) {
+                throw new NotFoundHttpException;
+            }
+
+            return;
+        }
+
+        if ($actor->hasRole(Role::FacultyAdmin)) {
+            $faculty_id = (int) $student->programme->department->faculty_id;
+
+            if (! in_array($faculty_id, $actor->facultyIds(), true)) {
+                throw new NotFoundHttpException;
+            }
+
+            return;
+        }
+
+        throw new AuthorizationException;
+    }
+
+    /**
+     * True when this account is the student's own login.
+     */
+    private function isOwnStudent(User $actor, Student $student): bool
+    {
+        $own = $actor->student;
+
+        return $own instanceof Student && (int) $own->getKey() === (int) $student->getKey();
     }
 
     /**
