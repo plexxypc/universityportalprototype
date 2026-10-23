@@ -250,7 +250,7 @@ it('versions the scheme and remaps unpublished scores in one transaction', funct
         'component_id' => $exam->id,
         'score' => '10.00',
     ]);
-    $published = Result::factory()->published()->create([
+    $published = Result::factory()->approved()->create([
         'grading_scheme_id' => $original->id,
         'scheme_version' => $original->version,
     ]);
@@ -259,6 +259,9 @@ it('versions the scheme and remaps unpublished scores in one transaction', funct
         'component_id' => $exam->id,
         'score' => '40.00',
     ]);
+    $published->status = ResultStatus::Published;
+    $published->published_at = now();
+    $published->save();
 
     $input = $service->defaultInput();
     $input['name'] = 'Nigerian 5-point revised';

@@ -51,7 +51,13 @@ function email_template_sentinel(EmailTemplate $template): array
             'receipt_number' => 'ReceiptSentinel',
             'paid_at' => '2026-10-10 09:15:00',
         ],
-        EmailTemplate::ResultPublished, EmailTemplate::TimetablePublished => [
+        EmailTemplate::ResultPublished => [
+            'name' => 'NameSentinel',
+            'session_name' => 'SessionSentinel',
+            'semester_name' => 'SemesterSentinel',
+            'change' => 'ChangeSentinel',
+        ],
+        EmailTemplate::TimetablePublished => [
             'name' => 'NameSentinel',
             'session_name' => 'SessionSentinel',
             'semester_name' => 'SemesterSentinel',

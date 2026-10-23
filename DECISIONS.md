@@ -414,3 +414,29 @@ Live provider testing, including the Interswitch sandbox, is deferred to the end
 
 **Consequences:** ADR-032 point 2 is the lock order. ADR-032 point 6 is overpayment staying Pending. ADR-032 point 7 is the Demo Gateway production guard and the rule that a bad provider does not stop boot. ADR-034 withdraws the boot refusal and does not replace point 7. This decision adds the state machine, the return and notification trigger, the ban on manual crediting, and the deferred live test. TASK-104 stays open until that sandbox check is run. TASK-105 is not built.
 
+## ADR-036: Result workflow, return notices, and lock order
+
+**Status:** Accepted (22 October 2026).
+
+**Decision:** Phase 11 adds one in-app notification type and one column. It amends ADR-031. It does not add an email template. `result_published` gains a `change` key.
+
+1. **Return notice.** `NotificationType` also allows `result_returned`. It is in-app only. There is no return email. Unlike a registration rejection, the reason is copied into the notice. The notice message is at most 240 characters. `results.return_reason` stores the full reason, from 1 to 500 characters, and the `result.returned` audit row stores it too. The column is cleared when the lecturer submits again.
+2. **Publish mail.** The existing `result_published` template keeps the sentence that names the session and the semester. A `change` value of `published` or `updated` is added to that sentence: `Your results for {semester} have been published.` or `have been updated.`
+3. **Publish transactions.** One course is one transaction: every row of that course commits, or none do. A department publish walks courses one at a time. Notices and emails are sent after those commits, once per student for that publish. A notice or email failure does not undo a publication. A later course that fails leaves the earlier courses published, and those students are still told.
+4. **Lock order.** A path that locks both registration rows and result rows locks the registration side first. No path locks results and then registrations.
+
+| Path | Lock order |
+|---|---|
+| Result draft, submit, approve, return, publish | Active grading scheme, if one exists; then `course_registrations` for that course and semester in id order; then `course_registration_items` in id order; then `results` in id order; then `result_scores` in id order |
+| Registration add, drop, and save | Student row, then the registration row, then that registration's items in id order, then that student's result rows for the semester in id order |
+| Invoice initiate | Invoice row only |
+| Settlement, reversal, re-verify | Payment row, then invoice row |
+| Adjustment and cancel | Invoice row only |
+| Student creation | Matric counter, then invoice counter |
+
+Submit, approve, publish, and amend run inside `Deadlock::attempt`. Amend locks the one published result and does not lock a registration.
+
+**Reason:** Two writers, one saving scores and one dropping a course, deadlock if they lock items and results in opposite orders. A department publish must not roll back a course that already committed. The return reason has to reach the lecturer, and it is longer than a notification message.
+
+**Consequences:** ADR-031 point 2 still keeps a registration rejection reason off the notice. This decision does the opposite for `result_returned`. ADR-018's chunk size stays the student-import chunk. Result publish chunks by course. ADR-032 point 2 is unchanged and is repeated in the table above so the orders can be read in one place.
+

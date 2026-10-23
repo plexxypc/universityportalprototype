@@ -374,8 +374,11 @@ final class EmailTemplateRenderer
      */
     private function result(array $data, array $base): array
     {
+        $session = $this->text($data, 'session_name');
+        $semester = $this->text($data, 'semester_name');
+        $change = $this->text($data, 'change');
         $base['greeting'] = 'Hello '.$this->text($data, 'name').',';
-        $base['instruction'] = 'Your result for '.$this->text($data, 'session_name').', '.$this->text($data, 'semester_name').' is published.';
+        $base['instruction'] = 'Your result for '.$session.', '.$semester.' is published. Your results for '.$semester.' have been '.$change.'.';
         $base['action_label'] = 'View your result';
 
         return $base;
@@ -579,6 +582,7 @@ final class EmailTemplateRenderer
                 'name' => 'Ada Lovelace',
                 'session_name' => '2026/2027',
                 'semester_name' => 'First semester',
+                'change' => 'published',
             ],
             EmailTemplate::Announcement => [
                 'title' => 'Library hours',

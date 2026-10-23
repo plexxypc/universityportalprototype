@@ -194,8 +194,10 @@ it('accepts a published pass and ignores a same-semester result', function () {
         ->firstWhere('course_id', $world['elective']->id);
     expect($below['prerequisites_met'] ?? null)->toBeFalse();
 
-    $previous_result->total = '40.00';
-    $previous_result->save();
+    Result::withoutEvents(function () use ($previous_result): void {
+        $previous_result->total = '40.00';
+        $previous_result->save();
+    });
 
     $passed = collect($service->assess($world['student'], $now)['courses'])
         ->firstWhere('course_id', $world['elective']->id);

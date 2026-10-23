@@ -9,12 +9,14 @@ use App\Models\Concerns\ScopesVisibleTo;
 use App\Models\Concerns\VisibleToUser;
 use App\Support\Rbac\VisibilityKind;
 use App\Support\Rbac\VisibilityProfile;
+use App\Support\Results\ResultWriteGuard;
 use Database\Factories\ResultFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use RuntimeException;
 
 /**
  * A student's result for one course in one semester.
@@ -35,6 +37,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'status',
     'entered_by',
     'approved_by',
+    'return_reason',
     'published_at',
 ])]
 class Result extends Model implements VisibleToUser
@@ -43,6 +46,41 @@ class Result extends Model implements VisibleToUser
     use HasFactory;
 
     use ScopesVisibleTo;
+
+    /**
+     * A published row stays as it was published, except during an amendment.
+     */
+    protected static function booted(): void
+    {
+        static::updating(function (Result $result): void {
+            self::guardPublished($result);
+        });
+        static::deleting(function (Result $result): void {
+            self::guardPublished($result);
+        });
+    }
+
+    /**
+     * Refuse a write whose stored status is already Published.
+     */
+    private static function guardPublished(Result $result): void
+    {
+        if (ResultWriteGuard::amending()) {
+            return;
+        }
+
+        $status = $result->getOriginal('status');
+
+        if ($status instanceof ResultStatus) {
+            $published = $status === ResultStatus::Published;
+        } else {
+            $published = $status === ResultStatus::Published->value;
+        }
+
+        if ($published) {
+            throw new RuntimeException(ResultWriteGuard::MESSAGE);
+        }
+    }
 
     /**
      * Cast the stored score, the status, and the publication instant.

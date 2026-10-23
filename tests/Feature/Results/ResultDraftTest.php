@@ -23,34 +23,10 @@ use App\Services\ResultService;
 use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\ResultFixture;
 
 uses(RefreshDatabase::class);
-
-/**
- * A request with a fixed audit address.
- */
-function result_draft_request(): Request
-{
-    return Request::create('/staff/results', 'POST', server: [
-        'REMOTE_ADDR' => '203.0.113.40',
-    ]);
-}
-
-/**
- * @param  array<int, string|null>  $scores
- * @return array{student_id: int, scores: array<int, string|null>, version: ?string}
- */
-function result_draft_row(int $student_id, array $scores, ?string $version): array
-{
-    return [
-        'student_id' => $student_id,
-        'scores' => $scores,
-        'version' => $version,
-    ];
-}
 
 it('stores a recomputed total and refuses a client total', function () {
     $fixture = ResultFixture::make();

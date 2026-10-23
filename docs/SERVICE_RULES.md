@@ -73,7 +73,7 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 5 | Assessment components of one scheme total 100 | TASK-060 | Test: `it refuses component totals that are not 100` |
 | 5 | Grade bands cover 0–100 with no gaps and no overlap | TASK-060 | Test: `it refuses grade bands that leave a gap` |
 | 5 | A score is not above that component's maximum | TASK-111 | Test: `it refuses a score above the maximum, a foreign component, and a third decimal` |
-| 5 | Published results are locked | TASK-114 | Workflow: submit → approve → publish, with role checks and locking on publish |
+| 5 | Published results are locked | TASK-114 | Test: `it refuses a direct change to a published result` |
 | 5 | Amendments are audited and re-published | TASK-115 | Amendment process for published results (audited, re-publish) |
 | 5 | A result score's component belongs to the result's scheme | TASK-111 | Test: `it refuses a score above the maximum, a foreign component, and a third decimal` |
 | 5 | `scheme_version` matches the linked scheme row | TASK-111 | Test: `it stores a recomputed total and refuses a client total` |

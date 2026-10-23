@@ -43,7 +43,7 @@ enum EmailTemplate: string
             self::Admission => ['name', 'programme'],
             self::RegistrationConfirmed => ['name', 'session_name', 'semester_name', 'total_units'],
             self::PaymentConfirmed => ['name', 'amount_kobo', 'receipt_number', 'paid_at'],
-            self::ResultPublished => ['name', 'session_name', 'semester_name'],
+            self::ResultPublished => ['name', 'session_name', 'semester_name', 'change'],
             self::Announcement => ['title', 'message'],
             self::TimetablePublished => ['name', 'session_name', 'semester_name'],
             self::Test => ['message'],
