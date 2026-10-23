@@ -11,6 +11,7 @@ use App\Enums\ResultStatus;
 use App\Enums\Role;
 use App\Enums\UserStatus;
 use App\Models\AssessmentComponent;
+use App\Models\AuditLog;
 use App\Models\CourseAssignment;
 use App\Models\CourseRegistration;
 use App\Models\CourseRegistrationItem;
@@ -23,6 +24,7 @@ use App\Models\User;
 use App\Support\Audit;
 use App\Support\Deadlock;
 use App\Support\Grading\Hundredths;
+use App\Support\Results\ResultWriteGuard;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -81,6 +83,8 @@ class ResultService
     public const string ACTION_APPROVED = 'result.approved';
 
     public const string ACTION_PUBLISHED = 'result.published';
+
+    public const string ACTION_AMENDED = 'result.amended';
 
     public const string NOTICE_PUBLISHED_TITLE = 'Result published';
 
@@ -943,8 +947,9 @@ class ResultService
 
     /**
      * @param  array<string, mixed>|null  $before
+     * @param  array<string, mixed>|null  $after
      */
-    private function record(User $actor, string $action, Result $result, ?array $before, ?Request $request): void
+    private function record(User $actor, string $action, Result $result, ?array $before, ?Request $request, ?array $after = null): void
     {
         $this->audit->record(
             (int) $actor->id,
@@ -952,7 +957,7 @@ class ResultService
             'results',
             (int) $result->getKey(),
             $before,
-            $this->snapshot($result),
+            $after ?? $this->snapshot($result),
             $this->audit->ipFromRequest($request ?? Request::create('/')),
         );
     }
@@ -1000,7 +1005,7 @@ class ResultService
      *
      * @param  list<int>  $student_ids
      */
-    private function notifyPublished(array $student_ids, int $semester_id): void
+    private function notifyPublished(array $student_ids, int $semester_id, string $change = 'published'): void
     {
         if ($student_ids === []) {
             return;
@@ -1028,7 +1033,7 @@ class ResultService
             try {
                 $this->notifications->create($user, NotificationType::ResultPublished->value, [
                     'title' => self::NOTICE_PUBLISHED_TITLE,
-                    'message' => 'Your results for '.$semester->name.' have been published.',
+                    'message' => 'Your results for '.$semester->name.' have been '.$change.'.',
                     'link' => self::NOTICE_LINK,
                 ]);
             } catch (Throwable) {
@@ -1051,7 +1056,7 @@ class ResultService
                         'name' => (string) $user->name,
                         'session_name' => (string) $semester->academicSession?->name,
                         'semester_name' => (string) $semester->name,
-                        'change' => 'published',
+                        'change' => $change,
                     ],
                     (int) $user->getKey(),
                     'results',
@@ -1060,6 +1065,174 @@ class ResultService
             } catch (Throwable) {
                 Log::warning(self::WARNING_NOTICE);
             }
+        }
+    }
+
+    /**
+     * Change a published result. The publication time stays.
+     *
+     * Scores are checked against this result's scheme. The reason is stored
+     * only in the audit row. One updated notice follows the commit.
+     *
+     * @param  array<int, string|null>  $scores
+     */
+    public function amend(User $actor, int $result_id, array $scores, string $reason, string $version, ?Request $request = null): void
+    {
+        $this->assertCanPublish($actor);
+        $reason = $this->cleanReason($reason);
+        $parsed = [];
+
+        foreach ($scores as $component_id => $score) {
+            $parsed[(int) $component_id] = $this->scoreHundredths($score);
+        }
+
+        $notice = Deadlock::attempt(function () use ($actor, $result_id, $parsed, $reason, $version, $request): array {
+            return DB::transaction(function () use ($actor, $result_id, $parsed, $reason, $version, $request): array {
+                $this->probe();
+                $result = Result::query()->whereKey($result_id)->lockForUpdate()->first();
+
+                if (! $result instanceof Result) {
+                    throw new NotFoundHttpException;
+                }
+
+                if ($result->status !== ResultStatus::Published) {
+                    throw ValidationException::withMessages(['status' => self::MESSAGE_TRANSITION]);
+                }
+
+                $this->assertVersion($result, $version);
+                $this->lockScores(new Collection([$result]));
+                $scheme = $this->schemeFor($result);
+                $this->assertSchemeVersion($result, $scheme);
+                $checked = $this->checkedScores($scheme, $parsed);
+                $computed = $this->computed($scheme, $checked);
+
+                if ($computed['total'] === null || $computed['grade'] === null || $computed['points'] === null) {
+                    throw ValidationException::withMessages([
+                        'student_id' => self::MESSAGE_MISSING.' '.(int) $result->student_id,
+                    ]);
+                }
+
+                $before = $this->snapshot($result);
+                $before['reason'] = null;
+                $published_at = $result->published_at;
+
+                ResultWriteGuard::run(function () use ($result, $checked, $computed, $published_at): void {
+                    $this->writeScores($result, $checked);
+                    $result->total = $computed['total'];
+                    $result->grade = $computed['grade'];
+                    $result->points = $computed['points'];
+                    $result->status = ResultStatus::Published;
+                    $result->published_at = $published_at;
+                    $result->save();
+                });
+
+                $after = $this->snapshot($result);
+                $after['reason'] = $reason;
+                $this->record($actor, self::ACTION_AMENDED, $result, $before, $request, $after);
+
+                return [
+                    'student_id' => (int) $result->student_id,
+                    'semester_id' => (int) $result->semester_id,
+                ];
+            });
+        });
+
+        $this->notifyPublished([$notice['student_id']], $notice['semester_id'], 'updated');
+    }
+
+    /**
+     * Recompute unpublished rows after they move onto a new scheme.
+     *
+     * An incomplete draft stays without a total. A score above a new maximum
+     * rolls the scheme save back. Published rows are not loaded.
+     */
+    public function recomputeUnpublished(GradingScheme $scheme): void
+    {
+        $results = Result::query()
+            ->where('grading_scheme_id', $scheme->getKey())
+            ->where('status', '!=', ResultStatus::Published->value)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+        $this->lockScores($results);
+
+        foreach ($results as $result) {
+            $result->scheme_version = (int) $scheme->version;
+            $scores = [];
+
+            foreach ($result->scores as $score) {
+                $scores[(int) $score->component_id] = Hundredths::fromDecimal((string) $score->score);
+            }
+
+            $computed = $this->computed($scheme, $this->checkedScores($scheme, $scores));
+            $result->total = $computed['total'];
+            $result->grade = $computed['grade'];
+            $result->points = $computed['points'];
+
+            if ($result->isDirty()) {
+                $result->save();
+            }
+        }
+    }
+
+    /**
+     * Audit rows for one result. Amendments include the old and new scores.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function history(User $actor, int $result_id): array
+    {
+        $this->assertCanReadHistory($actor);
+        $result = Result::query()->with('student.programme')->find($result_id);
+
+        if (! $result instanceof Result || ! $result->student instanceof Student) {
+            throw new NotFoundHttpException;
+        }
+
+        if (! $actor->hasRole(Role::SuperAdmin) && ! $actor->hasRole(Role::ExamOfficer)) {
+            $department_id = (int) $result->student->programme->department_id;
+
+            if (! in_array($department_id, $actor->departmentIds(), true)) {
+                throw new NotFoundHttpException;
+            }
+        }
+
+        $rows = [];
+
+        foreach (AuditLog::query()->where('entity', 'results')->where('entity_id', $result_id)->orderBy('id')->get() as $log) {
+            $row = [
+                'actor_id' => (int) $log->actor_id,
+                'action' => (string) $log->action,
+                'at' => $log->created_at?->format('Y-m-d H:i:s') ?? '',
+            ];
+
+            if ($log->action === self::ACTION_AMENDED) {
+                $before = is_array($log->before) ? $log->before : [];
+                $after = is_array($log->after) ? $log->after : [];
+                $row['before_scores'] = $before['scores'] ?? [];
+                $row['after_scores'] = $after['scores'] ?? [];
+                $row['reason'] = $after['reason'] ?? null;
+            }
+
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Exam officers, department officers, and super admins may read history.
+     */
+    private function assertCanReadHistory(User $actor): void
+    {
+        if ($actor->status !== UserStatus::Active) {
+            throw new AuthorizationException;
+        }
+
+        $gate = Gate::forUser($actor);
+
+        if (! $gate->allows('results.approve') && ! $gate->allows('results.publish')) {
+            throw new AuthorizationException;
         }
     }
 

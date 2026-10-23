@@ -40,7 +40,10 @@ class GradingConfigService
     /**
      * Remember the audit writer.
      */
-    public function __construct(private readonly Audit $audit) {}
+    public function __construct(
+        private readonly Audit $audit,
+        private readonly ResultService $results,
+    ) {}
 
     /**
      * The active scheme, cached until the next successful save.
@@ -190,6 +193,7 @@ class GradingConfigService
 
             if ($previous instanceof GradingScheme) {
                 $this->repointUnpublished($previous, $scheme);
+                $this->results->recomputeUnpublished($scheme);
             }
 
             $this->audit->record(

@@ -50,22 +50,6 @@ function result_workflow_deadlock(): QueryException
     return new QueryException('mysql', 'select 1', [], $previous);
 }
 
-/**
- * Save a passing draft for the fixture's only student.
- *
- * @return list<array{result_id: int, student_id: int, updated_at: string}>
- */
-function result_workflow_draft(ResultFixture $fixture, ?User $actor = null): array
-{
-    return app(ResultService::class)->saveDraft(
-        $actor ?? $fixture->lecturer,
-        (int) $fixture->course->id,
-        (int) $fixture->semester->id,
-        [result_draft_row((int) $fixture->student->id, $fixture->passingScores(), null)],
-        result_draft_request(),
-    );
-}
-
 it('submits a draft once and refuses a stored total that does not match', function () {
     $fixture = ResultFixture::make();
     $service = app(ResultService::class);

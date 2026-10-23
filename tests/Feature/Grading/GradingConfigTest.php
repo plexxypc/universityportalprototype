@@ -13,6 +13,7 @@ use App\Models\ResultScore;
 use App\Models\RoleAssignment;
 use App\Models\User;
 use App\Services\GradingConfigService;
+use App\Services\ResultService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -340,4 +341,97 @@ it('lets the registrar view the grading screen and refuses a save', function () 
     Livewire::actingAs($faculty_admin)
         ->test(GradingConfigurationPage::class)
         ->assertForbidden();
+});
+
+it('rolls back a scheme when a new maximum is below a stored score', function () {
+    $admin = grading_user(Role::SuperAdmin);
+    $service = app(GradingConfigService::class);
+    $original = $service->loadDefault($admin, grading_request());
+    $exam = $original->assessmentComponents()->where('name', 'Exam')->firstOrFail();
+    $draft = Result::factory()->create([
+        'grading_scheme_id' => $original->id,
+        'scheme_version' => $original->version,
+        'status' => ResultStatus::Draft,
+    ]);
+    $score = ResultScore::factory()->create([
+        'result_id' => $draft->id,
+        'component_id' => $exam->id,
+        'score' => '50.00',
+    ]);
+    $input = $service->defaultInput();
+
+    foreach ($input['components'] as $index => $component) {
+        if ($component['name'] === 'Exam') {
+            $input['components'][$index]['max_score'] = '40.00';
+        }
+
+        if ($component['name'] === 'Continuous Assessment') {
+            $input['components'][$index]['max_score'] = '60.00';
+        }
+    }
+
+    expect(fn () => $service->saveVersion($admin, $input, grading_request()))
+        ->toThrow(ValidationException::class, ResultService::MESSAGE_SCORE);
+
+    expect(GradingScheme::query()->count())->toBe(1)
+        ->and($original->refresh()->is_active)->toBeTrue()
+        ->and((string) $score->refresh()->score)->toBe('50.00')
+        ->and((int) $draft->refresh()->grading_scheme_id)->toBe((int) $original->id);
+});
+
+it('recomputes an unpublished letter and leaves a published result', function () {
+    $admin = grading_user(Role::SuperAdmin);
+    $service = app(GradingConfigService::class);
+    $original = $service->loadDefault($admin, grading_request());
+    $ca = $original->assessmentComponents()->where('name', 'Continuous Assessment')->firstOrFail();
+    $exam = $original->assessmentComponents()->where('name', 'Exam')->firstOrFail();
+    $draft = Result::factory()->create([
+        'grading_scheme_id' => $original->id,
+        'scheme_version' => $original->version,
+        'status' => ResultStatus::Draft,
+        'total' => '70.00',
+        'grade' => 'A',
+        'points' => '5.00',
+    ]);
+    ResultScore::factory()->create([
+        'result_id' => $draft->id,
+        'component_id' => $ca->id,
+        'score' => '20.00',
+    ]);
+    ResultScore::factory()->create([
+        'result_id' => $draft->id,
+        'component_id' => $exam->id,
+        'score' => '50.00',
+    ]);
+    $published = Result::factory()->approved()->create([
+        'grading_scheme_id' => $original->id,
+        'scheme_version' => $original->version,
+    ]);
+    ResultScore::factory()->create([
+        'result_id' => $published->id,
+        'component_id' => $exam->id,
+        'score' => '40.00',
+    ]);
+    $published->status = ResultStatus::Published;
+    $published->published_at = now();
+    $published->save();
+    $input = $service->defaultInput();
+
+    foreach ($input['bands'] as $index => $band) {
+        if ($band['letter'] === 'A') {
+            $input['bands'][$index]['min_score'] = '80.00';
+        }
+
+        if ($band['letter'] === 'B') {
+            $input['bands'][$index]['max_score'] = '79.99';
+        }
+    }
+
+    $service->saveVersion($admin, $input, grading_request());
+
+    expect($draft->refresh()->grade)->toBe('B')
+        ->and((string) $draft->points)->toBe('4.00')
+        ->and((string) $draft->total)->toBe('70.00')
+        ->and($published->refresh()->grade)->toBe('A')
+        ->and((int) $published->grading_scheme_id)->toBe((int) $original->id);
 });
