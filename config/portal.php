@@ -22,7 +22,7 @@ return [
         'min_units' => 15,
         'max_units' => 24,
         'approval_required' => true,
-        'withhold_results_for_debt' => true,
+        'withhold_results_for_debt' => false,
         'attendance_threshold' => 75,
     ],
 

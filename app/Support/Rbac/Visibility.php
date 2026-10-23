@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Rbac;
 
 use App\Enums\DocumentOwner;
+use App\Enums\InvoiceStatus;
 use App\Enums\PermissionAccess;
 use App\Enums\PermissionScope;
 use App\Enums\RegistrationStatus;
@@ -12,6 +13,7 @@ use App\Enums\ResultStatus;
 use App\Enums\Role;
 use App\Enums\UserStatus;
 use App\Models\User;
+use App\Services\SettingsService;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -204,6 +206,7 @@ final class Visibility
         }
 
         self::hideDraftResults($branch, $role, $profile->kind);
+        self::hideWithheldResults($branch, $user, $role, $profile->kind);
     }
 
     /**
@@ -441,7 +444,7 @@ final class Visibility
     }
 
     /**
-     * Results for a course the lecturer is assigned, in any semester.
+     * Results for a course and semester the lecturer is assigned.
      */
     private static function applyLecturerResults(Builder $branch, User $user): void
     {
@@ -452,7 +455,39 @@ final class Visibility
                 ->from('course_assignments')
                 ->join('staff', 'staff.id', '=', 'course_assignments.staff_id')
                 ->whereColumn('course_assignments.course_id', $table.'.course_id')
+                ->whereColumn('course_assignments.semester_id', $table.'.semester_id')
                 ->where('staff.user_id', $user->id);
+        });
+    }
+
+    /**
+     * A student does not see a published result while that session's fees are outstanding.
+     *
+     * Pending payments do not reduce paid_kobo, so they do not reveal the result.
+     * Staff queries never call this.
+     */
+    private static function hideWithheldResults(Builder $branch, User $user, Role $role, VisibilityKind $kind): void
+    {
+        if ($kind !== VisibilityKind::Result || $role !== Role::Student) {
+            return;
+        }
+
+        $settings = app(SettingsService::class)->effective();
+
+        if ($settings['withhold_results_for_debt'] !== true) {
+            return;
+        }
+
+        $table = $branch->getModel()->getTable();
+
+        $branch->whereNotExists(function ($sub) use ($user, $table): void {
+            $sub->selectRaw('1')
+                ->from('invoices')
+                ->join('semesters', 'semesters.session_id', '=', 'invoices.session_id')
+                ->whereColumn('semesters.id', $table.'.semester_id')
+                ->where('invoices.student_id', $user->student?->getKey() ?? 0)
+                ->where('invoices.status', '!=', InvoiceStatus::Cancelled->value)
+                ->whereRaw('(invoices.total_kobo - invoices.adjustments_kobo - invoices.paid_kobo) > 0');
         });
     }
 

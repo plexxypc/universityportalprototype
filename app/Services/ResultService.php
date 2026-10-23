@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\EmailTemplate;
+use App\Enums\InvoiceStatus;
 use App\Enums\NotificationType;
 use App\Enums\RegistrationStatus;
 use App\Enums\RepeatPolicy;
@@ -18,6 +19,7 @@ use App\Models\CourseAssignment;
 use App\Models\CourseRegistration;
 use App\Models\CourseRegistrationItem;
 use App\Models\GradingScheme;
+use App\Models\Invoice;
 use App\Models\Result;
 use App\Models\ResultScore;
 use App\Models\Semester;
@@ -74,6 +76,12 @@ class ResultService
 
     public const string MESSAGE_PUBLISH = 'Only approved results can be published.';
 
+    public const string MESSAGE_CGPA_WITHHELD = 'CGPA unavailable while results are withheld';
+
+    public const string MESSAGE_FEES = 'Pay the outstanding fees to see this session\'s results.';
+
+    public const string FEES_LINK = '/student/fees';
+
     public const string ACTION_ENTERED = 'result.entered';
 
     public const string ACTION_CHANGED = 'result.changed';
@@ -108,6 +116,7 @@ class ResultService
         private readonly Audit $audit,
         private readonly NotificationService $notifications,
         private readonly MailService $mail,
+        private readonly SettingsService $settings,
     ) {}
 
     /**
@@ -1345,14 +1354,96 @@ class ResultService
             $standing = $this->grading->standing($cgpa, $warning, $probation);
         }
 
-        return [
+        $statement = [
             'semesters' => $semesters,
             'cgpa' => $cgpa === null ? null : Hundredths::toDecimal($cgpa),
             'classification' => $classification,
             'standing' => $standing,
             'units_attempted' => $cumulative['units_attempted'],
             'units_earned' => $cumulative['units_earned'],
+            'cumulative_message' => null,
         ];
+
+        return $this->applyWithhold($actor, $student, $statement);
+    }
+
+    /**
+     * Hide one session from the student, and the cumulative figures when any session is hidden.
+     *
+     * Staff always receive the full statement.
+     *
+     * @param  array<string, mixed>  $statement
+     * @return array<string, mixed>
+     */
+    private function applyWithhold(User $actor, Student $student, array $statement): array
+    {
+        if (! $this->isOwnStudent($actor, $student)) {
+            return $statement;
+        }
+
+        $hidden = $this->withheldSessionIds($student);
+
+        if ($hidden === []) {
+            return $statement;
+        }
+
+        $semesters = $statement['semesters'];
+        $any = false;
+
+        foreach ($semesters as $index => $semester) {
+            if (! in_array($semester['session_id'], $hidden, true)) {
+                $semesters[$index]['withheld'] = false;
+
+                continue;
+            }
+
+            $any = true;
+            $semesters[$index]['courses'] = [];
+            $semesters[$index]['gpa'] = null;
+            $semesters[$index]['units_attempted'] = null;
+            $semesters[$index]['units_earned'] = null;
+            $semesters[$index]['withheld'] = true;
+            $semesters[$index]['message'] = self::MESSAGE_FEES;
+            $semesters[$index]['fees_link'] = self::FEES_LINK;
+        }
+
+        $statement['semesters'] = $semesters;
+
+        if (! $any) {
+            return $statement;
+        }
+
+        $statement['cgpa'] = null;
+        $statement['classification'] = null;
+        $statement['units_attempted'] = null;
+        $statement['units_earned'] = null;
+        $statement['cumulative_message'] = self::MESSAGE_CGPA_WITHHELD;
+
+        return $statement;
+    }
+
+    /**
+     * Sessions whose non-cancelled invoice still has an outstanding balance.
+     *
+     * @return list<int>
+     */
+    private function withheldSessionIds(Student $student): array
+    {
+        $settings = $this->settings->effective();
+
+        if ($settings['withhold_results_for_debt'] !== true) {
+            return [];
+        }
+
+        $ids = [];
+
+        foreach (Invoice::query()->where('student_id', $student->getKey())->where('status', '!=', InvoiceStatus::Cancelled->value)->get() as $invoice) {
+            if (InvoiceService::outstandingKobo($invoice) > 0) {
+                $ids[] = (int) $invoice->session_id;
+            }
+        }
+
+        return $ids;
     }
 
     /**

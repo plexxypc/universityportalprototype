@@ -151,6 +151,14 @@ it('falls back to portal config when institution settings are empty', function (
         ->and($effective['withhold_results_for_debt'])->toBeTrue();
 });
 
+it('does not withhold results when the settings table is empty', function () {
+    app(SettingsService::class)->forgetCache();
+
+    expect(InstitutionSetting::query()->exists())->toBeFalse()
+        ->and(config('portal.institution.withhold_results_for_debt'))->toBeFalse()
+        ->and(app(SettingsService::class)->effective()['withhold_results_for_debt'])->toBeFalse();
+});
+
 it('keeps the effective withhold setting on the first save', function () {
     config([
         'portal.institution.name' => 'Northwind Polytechnic',

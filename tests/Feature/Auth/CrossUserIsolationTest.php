@@ -105,7 +105,9 @@ it('shows draft results only to the assigned lecturer and the super admin', func
     expect(Gate::forUser($world->lecturer)->allows('view', $world->draftResult))->toBeTrue()
         ->and(Gate::forUser($world->lecturer)->allows('enter', $world->draftResult))->toBeTrue()
         ->and($lecturerIds)->toContain($world->draftResult->id)
-        ->and($lecturerIds)->toContain($world->otherSemesterDraft->id)
+        ->and($lecturerIds)->not->toContain($world->otherSemesterDraft->id)
+        ->and(Gate::forUser($world->lecturer)->allows('view', $world->otherSemesterDraft))->toBeFalse()
+        ->and(Gate::forUser($world->lecturer)->allows('enter', $world->otherSemesterDraft))->toBeFalse()
         ->and(Gate::forUser($world->lecturer)->allows('view', $world->otherDraft))->toBeFalse()
         ->and(Gate::forUser($world->lecturer)->allows('enter', $world->otherDraft))->toBeFalse()
         ->and($lecturerIds)->not->toContain($world->otherDraft->id)
@@ -113,7 +115,8 @@ it('shows draft results only to the assigned lecturer and the super admin', func
         ->and(Gate::forUser($world->superAdmin)->allows('view', $world->draftResult))->toBeTrue()
         ->and(Gate::forUser($world->superAdmin)->allows('view', $world->otherDraft))->toBeTrue()
         ->and($superIds)->toContain($world->draftResult->id)
-        ->and($superIds)->toContain($world->otherDraft->id);
+        ->and($superIds)->toContain($world->otherDraft->id)
+        ->and($superIds)->toContain($world->otherSemesterDraft->id);
 
     foreach ([
         [$world->facultyAdmin, $facultyIds],

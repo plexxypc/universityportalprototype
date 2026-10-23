@@ -82,6 +82,9 @@ These rules cannot be a database constraint. They come from the Phase 3 reports.
 | 5 | Editing the active scheme inserts a new version and repoints unpublished results. Published rows keep their scheme id | TASK-060 | Test: `it versions the scheme and remaps unpublished scores in one transaction` |
 | 5 | When unpublished results move, `result_scores` are remapped to the new version's components in that transaction | TASK-060 | Test: `it rolls back when a removed component still has an unpublished score` |
 | 5 | GPA uses the latest or best attempt and applies `resit_points_cap` | TASK-059, TASK-116 | Tests: `it uses the latest or the best attempt after the resit cap`, `it weights grade points by credit units`, `it rounds a CGPA half up before classification`, `it uses the later attempt after the resit cap for the CGPA` |
+| 5 | A lecturer sees a result only when assigned to that course and that semester | TASK-120 | Test: `it shows draft results only to the assigned lecturer and the super admin` |
+| 5 | Outstanding fees hide that session's published results, and any withheld session hides the CGPA, from the student | TASK-120 | Test: `it hides a withheld session and the CGPA from the student` |
+| 5 | An empty settings table does not withhold results | TASK-120 | Test: `it does not withhold results when the settings table is empty` |
 | 5 | Classification bands do not overlap or leave gaps | TASK-060 | Tests: `it refuses classification bands that leave a gap`, `it requires classification bands to end at the highest grade point` |
 | 5 | The pass mark agrees with the fail band | TASK-060 | Test: `it refuses a pass mark that does not sit one hundredth above the fail band` |
 | 5 | Stored total, grade, and points match the scores and the scheme | TASK-059 | `GradingService` pure functions. Test: `it adds continuous assessment and the exam before the lookup` |

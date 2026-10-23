@@ -187,7 +187,8 @@ class InstitutionSettingsPage extends Page
             Toggle::make('approval_required')
                 ->label('Registration approval required'),
             Toggle::make('withhold_results_for_debt')
-                ->label('Withhold results for outstanding fees'),
+                ->label('Withhold results for outstanding fees')
+                ->helperText('When this is on, a student does not see a session\'s published results while a fee for that session is still outstanding. A pending payment does not count. Staff still see the results.'),
             Toggle::make('require_minimum_payment')
                 ->label('Require a minimum payment before registration')
                 ->helperText(RegistrationService::MESSAGE_PAYMENT_UNAVAILABLE),
